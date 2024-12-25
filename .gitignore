@@ -1,0 +1,25 @@
+# Byte-compiled files
+*.pyc
+__pycache__/
+
+# Virtual environment
+venv/
+dope_tracks_venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# System files
+.DS_Store
+*.log
+
+# Environment variables
+.env
+
+# Databases
+spotify_cache.db
+
+# Ignore egg-info metadata
+*.egg-info/
+
+
