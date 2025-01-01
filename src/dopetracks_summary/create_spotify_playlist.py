@@ -1,31 +1,16 @@
 from dotenv import load_dotenv
 import os
-import spotipy
+import spotipy as sp
 import pandas as pd
 import logging
 from spotipy.oauth2 import SpotifyOAuth
+import dopetracks_summary.spotify_db_manager as sdm
 
 
-
-def authenticate_spotify(client_id, client_secret, redirect_uri, scope):
-    """
-    Authenticate with Spotify and return a Spotipy client instance.
-
-    Args:
-        client_id (str): Spotify Client ID.
-        client_secret (str): Spotify Client Secret.
-        redirect_uri (str): Redirect URI for OAuth.
-        scope (str): Scopes required for Spotify API access.
-
-    Returns:
-        spotipy.Spotify: Authenticated Spotipy client instance.
-    """
-    return spotipy.Spotify(auth_manager=SpotifyOAuth(
-        client_id=client_id,
-        client_secret=client_secret,
-        redirect_uri=redirect_uri,
-        scope=scope
-    ))
+CLIENT_ID=os.getenv('SPOTIFY_CLIENT_ID')
+CLIENT_SECRET=os.getenv('SPOTIFY_CLIENT_SECRET')
+REDIRECT_URI=os.getenv('SPOTIFY_REDIRECT_URI')
+SCOPE = "playlist-modify-public playlist-modify-private"
 
 
 def get_user_id(sp):
@@ -100,12 +85,6 @@ def find_or_create_playlist(sp, user_id, playlist_name, public=True):
     print(f"Creating new playlist: '{playlist_name}'")
     return create_playlist(sp, user_id, playlist_name, public)
 
-def parse_spotify_url(url):
-    pattern = r"open\.spotify\.com/(track|album|playlist|artist)/([\w\d]+)"
-    match = re.search(pattern, url)
-    if match:
-        return match.group(1), match.group(2)
-    return None, None
 
 def add_tracks_to_playlist(sp, playlist_id, track_ids):
     """
@@ -121,25 +100,9 @@ def add_tracks_to_playlist(sp, playlist_id, track_ids):
     print(f"Added {len(track_ids)} tracks to the playlist.")
 
 
-def create_spotify_playlist(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, SCOPE, PLAYLIST_NAME):
-    # Authenticate with Spotify
-    sp = authenticate_spotify(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, SCOPE)
-
-    # Get Spotify user ID
-    user_id = get_user_id(sp)
-
-    # Find or create playlist
-    playlist = find_or_create_playlist(sp, user_id, PLAYLIST_NAME, public=True)
-
-    # # Extract track IDs from a specific column in the dataset
-    # track_ids = get_track_ids(messages, column_name='spotify_links')  # Replace 'spotify_links' with your column name
-
-    # # Add tracks to the playlist
-    # add_tracks_to_playlist(sp, playlist_id, track_ids)
 
 
-if __name__ == "__main__":
-    # data = pull_data.pull_and_clean_messages()
+def main(PLAYLIST_NAME):
 
     logging.info(
     '''
@@ -147,20 +110,12 @@ if __name__ == "__main__":
     [2] Creating Spotify playlist...
     ----------------------------------------------------------
     ''')
-    # Input spotify API credentials + playlist name
-    CLIENT_ID=os.getenv('SPOTIFY_CLIENT_ID')
-    CLIENT_SECRET=os.getenv('SPOTIFY_CLIENT_SECRET')
-    REDIRECT_URI=os.getenv('SPOTIFY_REDIRECT_URI')
-    SCOPE = "playlist-modify-public playlist-modify-private"
-    PLAYLIST_NAME = 'Dopetracks Generated Playlist'
-
-
-    # Authenticate with Spotify
-    sp = authenticate_spotify(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, SCOPE)
-
-    # Get Spotify user ID
+    
+    sp = sdm.authenticate_spotify(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, SCOPE)
     user_id = get_user_id(sp)
-
-    # Find or create playlist
     playlist = find_or_create_playlist(sp, user_id, PLAYLIST_NAME, public=True)
 
+    add_tracks_to_playlist(sp, )
+
+if __name__ == "__main__":
+    main()

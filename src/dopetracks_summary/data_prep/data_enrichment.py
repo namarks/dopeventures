@@ -1,5 +1,6 @@
 import pandas as pd
 import typedstream
+import numpy as np
 import dopetracks_summary.dictionaries as dictionaries
 
 def detect_reaction(associated_message_type):
@@ -50,7 +51,6 @@ def enrich_messages_with_chat_info(messages, handles, chat_handle_join):
     Returns:
         pd.DataFrame: Updated messages DataFrame with chat member info and chat size.
     """
-    # messages = pd.merge(messages, handles[['handle_id', 'contact_info']], on='handle_id', how='left')
 
     chat_handle_contact_info =  pd.merge(chat_handle_join, handles[['handle_id', 'contact_info']], on='handle_id', how='left')
 
@@ -62,7 +62,9 @@ def enrich_messages_with_chat_info(messages, handles, chat_handle_join):
     messages = pd.merge(messages, handle_contact_list_per_chat, on='chat_id', how='left')
     messages['chat_members_handles'] = messages['chat_members_handles'].fillna('')
     messages['chat_members_contact_info'] = messages['chat_members_contact_info'].fillna('')
-    messages['chat_size'] = messages['chat_members_handles'].apply(lambda x: len(x) if isinstance(x, (list, set, pd.Series)) else 0)
+    messages['chat_size'] = messages['chat_members_handles'].apply(len)
+    messages['sender_handle_id'] = np.where(messages['is_from_me'] == 1, 1, messages['handle_id'])
+
     return messages
 
 
