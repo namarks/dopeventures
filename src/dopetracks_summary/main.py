@@ -1,34 +1,43 @@
-
 import os
-from dopetracks_summary import prepare_data
-from dopetracks_summary import cache_manager, create_spotify_playlist
+import logging
+from dopetracks_summary.data_prep import prepare_data_main
+from dopetracks_summary.data_prep import spotify_db_manager as sdm
 from dopetracks_summary import utility_functions as uf
-
-# Provide inputs for Spotify authentication and playlist creation
-CLIENT_ID=os.getenv('SPOTIFY_CLIENT_ID')
-CLIENT_SECRET=os.getenv('SPOTIFY_CLIENT_SECRET')
-REDIRECT_URI=os.getenv('SPOTIFY_REDIRECT_URI')
-SCOPE = "playlist-modify-public playlist-modify-private"
-PLAYLIST_NAME = 'Dopetracks Generated Playlist'
-
-
-# Generalized messages_db_path
-messages_db_path = messages_db_path = uf.get_messages_db_path()
+import dopetracks_summary.data_prep.spotify_db_manager as sdm
 
 def main():
-    # Step 1: Pull and clean data
-    data = prepare_data.pull_and_clean_messages(messages_db_path)
-    dopetracks_data = data['messages'][(data['messages']['chat_name'] == 'Dope tracks (🔥🎧)')]
 
-    # Step 2: Initialize SQLite cache
-    conn_cachce, cursor = cache_manager.initialize_cache()
+    logging.info(
+'''
+--------------------------------------------------------------------------------------------------------------------
+Initializing Run of Dopetracks Summary package
+--------------------------------------------------------------------------------------------------------------------
+'''
+    )
+
+    # Generalized messages_db_path
+    messages_db_path = uf.get_messages_db_path()
+    
+    # Step 1: Pull and clean data
+    data = prepare_data_main.pull_and_clean_messages(messages_db_path)
+
+    print(data['messages'].head())
+
+    # Step 2: Get Spotify URL metadata and cache URls
+    sdm.main(data['messages'], 'all_spotify_links')
 
     # Step 3: Create Spotify playlist and add tracks
-    create_spotify_playlist.create_spotify_playlist(
-        CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, SCOPE, PLAYLIST_NAME, dopetracks_data, cursor
-        )
-    # Close SQLite connection
-    conn_cachce.close()
+
+    # Name of playlist to generate
+    PLAYLIST_NAME = 'Dopetracks Generated Playlist'
+
+    
+    '''
+    TODO: update to accept multiple playlist names as input, each with their own lookup definition. 
+        i created this package to create a playlist with all songs sent in my friends music
+        group chat (Dopetracks) in 2024, but it'd be nice to also generate playlists for any chat or custom
+        filter of message. for example i could create a playlist of songs sent to me in _any_ iMessage chat
+    '''
 
 if __name__ == "__main__":
     main()

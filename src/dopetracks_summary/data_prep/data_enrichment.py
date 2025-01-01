@@ -1,6 +1,6 @@
 import pandas as pd
 import typedstream
-import src.dopetracks_summary.dictionaries as dictionaries
+import dopetracks_summary.dictionaries as dictionaries
 
 def detect_reaction(associated_message_type):
     ''' Detect and translate whether the iMessage was a reaction'''
@@ -50,7 +50,7 @@ def enrich_messages_with_chat_info(messages, handles, chat_handle_join):
     Returns:
         pd.DataFrame: Updated messages DataFrame with chat member info and chat size.
     """
-    messages = pd.merge(messages, handles[['handle_id', 'contact_info']], on='handle_id', how='left')
+    # messages = pd.merge(messages, handles[['handle_id', 'contact_info']], on='handle_id', how='left')
 
     chat_handle_contact_info =  pd.merge(chat_handle_join, handles[['handle_id', 'contact_info']], on='handle_id', how='left')
 
@@ -143,22 +143,28 @@ def append_links_columns(df, message_column):
     """
 
     # Flexible regex for links (handles http, https, and shortened URLs)
-    spotify_regex = r'(https?://open\.spotify\.com/[^\s]+|open\.spotify\.com/[^\s]+|https?://spotify\.link/[^\s]+)'
+    spotify_regex = r'((https?://open\.spotify\S+|https?://spotify.link\S+))'
     youtube_regex = r'(https?://(?:www\.)?youtube\.com/[^\s]+|https?://youtu\.be/[^\s]+|youtube\.com/[^\s]+|youtu\.be/[^\s]+)'
     general_url_regex = r'(https?://(?:bit\.ly|tinyurl\.com|t\.co|buff\.ly|short\.io|lnkd\.in)/[^\s]+|(?:bit\.ly|tinyurl\.com|t\.co|buff\.ly|short\.io|lnkd\.in)/[^\s]+|((https?|www)\://[^\s]+|[^\s]+\.[a-z]{2,}/[^\s]*))'
 
 
      # Extract links
-    spotify_links = df[message_column].str.extractall(spotify_regex)[0].dropna()
-    youtube_links = df[message_column].str.extractall(youtube_regex)[0].dropna()
-    general_links = df[message_column].str.extractall(general_url_regex)[0].dropna()
+    spotify_links = df[df['reaction_type'] == 'no-reaction'][message_column].str.extractall(spotify_regex)[0].dropna()
+    youtube_links = df[df['reaction_type'] == 'no-reaction'][message_column].str.extractall(youtube_regex)[0].dropna()
+    general_links = df[df['reaction_type'] == 'no-reaction'][message_column].str.extractall(general_url_regex)[0].dropna()
 
     
     # Categorize Spotify links
+    df['all_spotify_links'] = spotify_links.groupby(level=0).apply(list)
     df['spotify_song_links'] = spotify_links[spotify_links.str.contains('/track/')].groupby(level=0).apply(list)
     df['spotify_album_links'] = spotify_links[spotify_links.str.contains('/album/')].groupby(level=0).apply(list)
     df['spotify_playlist_links'] = spotify_links[spotify_links.str.contains('/playlist/')].groupby(level=0).apply(list)
-    df['spotify_other_links'] = spotify_links[~spotify_links.str.contains('/track/|/album/|/playlist/')].groupby(level=0).apply(list)
+    df['spotify_artist_links'] = spotify_links[spotify_links.str.contains('/artist/')].groupby(level=0).apply(list)
+    df['spotify_episode_links'] = spotify_links[spotify_links.str.contains('/episode/')].groupby(level=0).apply(list)
+    df['spotify_shows_links'] = spotify_links[spotify_links.str.contains('/show/')].groupby(level=0).apply(list)
+    
+    
+    df['spotify_other_links'] = spotify_links[~spotify_links.str.contains('/track/|/album/|/playlist/|/artist/|/episode/|/show/')].groupby(level=0).apply(list)
 
     # Add YouTube links
     df['youtube_links'] = youtube_links.groupby(level=0).apply(list)

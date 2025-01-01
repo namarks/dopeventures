@@ -4,7 +4,6 @@ import spotipy
 import pandas as pd
 import logging
 from spotipy.oauth2 import SpotifyOAuth
-from dopetracks_summary.cache_manager import load_from_cache, save_to_cache
 
 
 
@@ -101,55 +100,12 @@ def find_or_create_playlist(sp, user_id, playlist_name, public=True):
     print(f"Creating new playlist: '{playlist_name}'")
     return create_playlist(sp, user_id, playlist_name, public)
 
-# Function to resolve shortened Spotify URLs
-def resolve_shortened_url(url):
-    try:
-        response = requests.head(url, allow_redirects=True)
-        if response.status_code == 200:
-            return response.url
-        else:
-            return url
-    except requests.RequestException:
-        return url
-
-
-
-def get_track_ids(df: pd.DataFrame, column_name):
-    """
-    Extract track IDs from Spotify links in the dataset.
-
-    Args:
-        df (pd.DataFrame): Dataset containing Spotify links.
-        column_name (str): The column containing Spotify track links.
-
-    Returns:
-        list: List of track IDs.
-    """
-    track_ids = df[column_name].str.extract(r'/track/([a-zA-Z0-9]+)')[0].dropna().tolist()
-    return track_ids
-
-def get_playlist_id_by_name(sp, user_id, playlist_name):
-    """
-    Get the playlist ID for a given playlist name and user ID.
-
-    Args:
-        sp (spotipy.Spotify): Authenticated Spotipy client instance.
-        user_id (str): Spotify user ID of the playlist creator.
-        playlist_name (str): Name of the playlist to search for.
-
-    Returns:
-        str or None: The playlist ID if found, otherwise None.
-    """
-    # Get all playlists for the user
-    playlists = sp.user_playlists(user=user_id)
-    while playlists:
-        for playlist in playlists['items']:
-            if playlist['name'].lower() == playlist_name.lower():  # Case-insensitive match
-                return playlist['id']
-        # Handle pagination
-        playlists = sp.next(playlists) if playlists['next'] else None
-    return None  # Playlist not found
-
+def parse_spotify_url(url):
+    pattern = r"open\.spotify\.com/(track|album|playlist|artist)/([\w\d]+)"
+    match = re.search(pattern, url)
+    if match:
+        return match.group(1), match.group(2)
+    return None, None
 
 def add_tracks_to_playlist(sp, playlist_id, track_ids):
     """
@@ -164,50 +120,6 @@ def add_tracks_to_playlist(sp, playlist_id, track_ids):
         sp.playlist_add_items(playlist_id, track_ids[i:i+100])
     print(f"Added {len(track_ids)} tracks to the playlist.")
 
-def fetch_spotify_metadata_with_cache(spotify_client, url, cursor):
-    """
-    Fetch metadata for a Spotify URL using the Spotify API, with SQLite cache.
-
-    Args:
-        spotify_client (spotipy.Spotify): Authenticated Spotify client.
-        url (str): Spotify URL.
-        cursor (sqlite3.Cursor): SQLite cursor for cache.
-
-    Returns:
-        dict: Metadata for the Spotify entity.
-    """
-    cached_metadata = load_from_cache(cursor, url)
-    if cached_metadata:
-        logging.info(f"Using cached metadata for: {url}")
-        return cached_metadata
-
-    try:
-        path_parts = re.search(r'open\\.spotify\\.com/(track|album|playlist|artist|show|episode)/([\\w\\d]+)', url)
-        if not path_parts:
-            return None
-        entity_type, entity_id = path_parts.groups()
-
-        if entity_type == "track":
-            metadata = spotify_client.track(entity_id)
-        elif entity_type == "album":
-            metadata = spotify_client.album(entity_id)
-        elif entity_type == "playlist":
-            metadata = spotify_client.playlist(entity_id)
-        elif entity_type == "artist":
-            metadata = spotify_client.artist(entity_id)
-        elif entity_type == "show":
-            metadata = spotify_client.show(entity_id)
-        elif entity_type == "episode":
-            metadata = spotify_client.episode(entity_id)
-        else:
-            return None
-
-        save_to_cache(cursor, url, metadata)
-        logging.info(f"Fetched and cached metadata for: {url}")
-        return metadata
-    except Exception as e:
-        logging.error(f"Error fetching metadata for {url}: {e}")
-        return None
 
 def create_spotify_playlist(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, SCOPE, PLAYLIST_NAME):
     # Authenticate with Spotify

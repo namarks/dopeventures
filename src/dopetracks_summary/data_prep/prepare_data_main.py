@@ -4,6 +4,7 @@ import time
 import dopetracks_summary.data_prep.data_pull as dp
 import dopetracks_summary.data_prep.data_cleaning as dc 
 import dopetracks_summary.data_prep.data_enrichment as de
+import dopetracks_summary.data_prep.spotify_db_manager as sdm
 
 # Configure logging with timestamps
 logging.basicConfig(
@@ -14,16 +15,32 @@ logging.basicConfig(
 
 
 def pull_and_clean_messages(db_path: Optional[str] = None):
+    """
+    Main function to pull and clean iMessage data from the specified database.
+    Args:
+        db_path (Optional[str]): Path to the iMessage database file. If not provided, defaults to "/Users/nmarks/Library/Messages/chat.db".
+    Returns:
+        dict: A dictionary containing the following datasets:
+            - "messages": DataFrame containing cleaned and enriched message data.
+            - "handles": DataFrame containing handle data.
+            - "chat_message_join": DataFrame containing chat-message join data.
+            - "chat_handle_join": DataFrame containing chat-handle join data.
+            - "attachments": DataFrame containing attachment data.
+    Raises:
+        Exception: If an error occurs during the data pulling, cleaning, or enrichment process.
+    Logging:
+        Logs various stages of the data pulling, cleaning, and enrichment process, including time taken for each stage.
+    """
     """Main function to pull data."""
     if db_path is None:
         db_path = "/Users/nmarks/Library/Messages/chat.db"  # Default path
 
     logging.info(
-    '''
-    ----------------------------------------------------------
-    [1] Pulling and cleaning iMessage data
-    ----------------------------------------------------------
-    ''')
+'''
+----------------------------------------------------------
+[1] Pulling and cleaning iMessage data
+----------------------------------------------------------
+''')
     logging.info("Connecting to the database...")
     start_time = time.time()
     try:
@@ -47,7 +64,7 @@ def pull_and_clean_messages(db_path: Optional[str] = None):
         data_cleaned = time.time()
         logging.info(f"Data successfully cleaned! Time taken: {data_cleaned - data_pulled:.2f}s")
 
-        logging.info("Enrich data...")
+        logging.info("Enriching data...")
         messages = de.merge_chat_data(messages, chat_message_join) 
         messages = de.enrich_messages_with_chat_info(messages, handles, chat_handle_join)
         messages = de.add_reaction_type(messages)
@@ -75,6 +92,13 @@ def pull_and_clean_messages(db_path: Optional[str] = None):
             conn_messages.close()
             logging.info("Messages database connection (chat.db) closed.")
 
+        logging.info(
+f'''
+----------------------------------------------------------
+[1] COMPLETED Pulling and cleaning iMessage data
+    (Time taken: {data_enriched - start_time:.2f}s)"
+----------------------------------------------------------
+''')
 
 
 if __name__ == "__main__":
