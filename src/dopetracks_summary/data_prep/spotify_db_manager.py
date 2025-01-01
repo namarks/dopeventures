@@ -1,50 +1,41 @@
-import sqlite3
 import os
 import json
 import logging
 import time
 import re
+import sqlite3
+import traceback
 from urllib.parse import urlparse, urlunparse
+
 import requests
 import pandas as pd
-import dopetracks_summary.utility_functions as uf
 import tqdm
-import traceback
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-CLIENT_ID=os.getenv('SPOTIFY_CLIENT_ID')
-CLIENT_SECRET=os.getenv('SPOTIFY_CLIENT_SECRET')
-REDIRECT_URI=os.getenv('SPOTIFY_REDIRECT_URI')
+import dopetracks_summary.utility_functions as uf
+
+# Load environment variables for Spotify
+CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI")
 SCOPE = "playlist-modify-public playlist-modify-private"
 
 
-def initialize_spotify_cache(db_path=None):
-    if db_path is None:
-        cache_dir = os.path.expanduser("~/.spotify_cache")
-        os.makedirs(cache_dir, exist_ok=True)
-        db_path = os.path.join(cache_dir, "spotify_cache.db")
+def get_spotify_credentials() -> tuple[str, str, str]:
+    """
+    Fetch Spotify credentials from environment variables 
+    or raise an error if not found.
 
-    conn = sqlite3.connect(db_path)
-    return conn
+    Returns:
+        tuple[str, str, str]: (client_id, client_secret, redirect_uri)
+    """
+    if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
+        raise EnvironmentError("Spotify environment variables not set properly.")
+    return CLIENT_ID, CLIENT_SECRET, REDIRECT_URI
 
-def create_spotify_url_cache_table(conn):
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS spotify_url_cache (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            original_url TEXT NOT NULL,
-            normalized_url TEXT NOT NULL UNIQUE,
-            spotify_id TEXT NOT NULL,
-            metadata TEXT NOT NULL
-        )
-        """
-    )
-    conn.commit()
-    return cursor
 
-def authenticate_spotify(client_id, client_secret, redirect_uri, scope):
+def authenticate_spotify(client_id: str, client_secret: str, redirect_uri: str, scope: str) -> spotipy.Spotify:
     """
     Authenticate with Spotify and return a Spotipy client instance.
 
@@ -64,194 +55,341 @@ def authenticate_spotify(client_id, client_secret, redirect_uri, scope):
         scope=scope
     ))
 
-def drop_spotify_url_cache_table(conn):
-    try:
+
+def initialize_cache(db_path: str | None = None) -> str:
+    """
+    Initialize the Spotify cache by ensuring the directory,
+    creating the database file if needed, and ensuring the
+    'spotify_url_cache' table exists.
+    """
+    if db_path is None:
+        cache_dir = os.path.expanduser("~/.spotify_cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        db_path = os.path.join(cache_dir, "spotify_cache.db")
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
         cursor = conn.cursor()
-        cursor.execute("DROP TABLE IF EXISTS spotify_url_cache")
+
+        # Create a new table with the entity_type column
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS spotify_url_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                original_url TEXT,
+                normalized_url TEXT UNIQUE,
+                spotify_id TEXT,
+                entity_type TEXT,     
+                metadata TEXT
+            )
+            """
+        )
         conn.commit()
-        logging.info("spotify_url_cache table dropped successfully.")
+
+    return db_path
+
+
+
+def drop_spotify_url_cache_table(db_path: str) -> None:
+    """
+    Drop the 'spotify_url_cache' table if it exists.
+
+    Args:
+        db_path (str): The path to the SQLite database.
+    """
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("DROP TABLE IF EXISTS spotify_url_cache")
+            logging.info("spotify_url_cache table dropped successfully.")
     except Exception as e:
         logging.error(f"Error dropping spotify_url_cache table: {e}")
-        logging.error("Traceback: " + traceback.format_exc())
+        logging.error("Traceback:\n" + traceback.format_exc())
 
 
-def add_urls_metadata_to_cache_batched(spotify_client, input_urls):
+def normalize_and_extract_id(url: str) -> tuple[str | None, str | None, str | None]:
+    """
+    Given a Spotify URL (including possibly a shortened URL),
+    return a 3-tuple of (normalized_url, spotify_id, entity_type).
+
+    Args:
+        url (str): The original (possibly shortened) Spotify URL.
+
+    Returns:
+        tuple[str | None, str | None, str | None]:
+            - normalized_url: The normalized URL (with no query parameters),
+                              or None if resolution fails.
+            - spotify_id: The extracted Spotify ID, or None if not found.
+            - entity_type: One of 'track', 'album', 'artist', 'show', or 'episode',
+                           or None if not matched.
+    """
+    if "spotify.link" in url:
+        resolved_url = uf.resolve_short_url(url)
+        if not resolved_url:
+            logging.warning(f"Failed to resolve shortened URL: {url}")
+            return None, None, None
+        url = resolved_url
+
+    parsed_url = urlparse(url)
+    normalized_url = urlunparse(parsed_url._replace(query=""))
+
+    match = re.search(r"spotify\.com/(track|album|artist|show|episode)/([\w\d]+)", normalized_url)
+    entity_type = match.group(1) if match else None
+    spotify_id = match.group(2) if match else None
+
+    return normalized_url, spotify_id, entity_type
+
+
+
+def get_cache_data(db_path: str, normalized_url: str) -> pd.DataFrame:
+    """
+    Retrieve cached data from the 'spotify_url_cache' table for a given normalized URL.
+
+    Args:
+        db_path (str): The path to the SQLite database.
+        normalized_url (str): The normalized Spotify URL.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing matching rows (if any).
+    """
+    query = "SELECT * FROM spotify_url_cache WHERE normalized_url = ?"
+    with sqlite3.connect(db_path) as conn:
+        return pd.read_sql_query(query, conn, params=(normalized_url,))
+
+
+def update_cache(
+    db_path: str,
+    original_url: str,
+    normalized_url: str,
+    spotify_id: str,
+    entity_type: str,
+    metadata: dict
+) -> None:
+    """
+    Update or insert the cache with the given URL and metadata information.
+
+    If the normalized_url already exists, we merge the new original_url into 
+    the JSON list. Otherwise, we create a new record.
+
+    Args:
+        db_path (str): The path to the SQLite database.
+        original_url (str): The original (possibly shortened) URL.
+        normalized_url (str): The normalized Spotify URL.
+        spotify_id (str): The extracted Spotify ID from the URL.
+        entity_type (str): Type of spotify entity (track, album, artist, show, episode).
+        metadata (dict): Metadata (usually from Spotify API) to be cached.
+    """
+    existing_data = get_cache_data(db_path, normalized_url)
+    if len(existing_data) == 1:
+        original_urls = json.loads(existing_data["original_url"].iloc[0])
+        if original_url not in original_urls:
+            original_urls.append(original_url)
+    else:
+        original_urls = [original_url]
+
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO spotify_url_cache (original_url, normalized_url, spotify_id, entity_type, metadata)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                json.dumps(original_urls),
+                normalized_url,
+                spotify_id,
+                entity_type,
+                json.dumps(metadata),
+            ),
+        )
+        conn.commit()
+
+
+def fetch_metadata_in_batches(
+    spotify_client: spotipy.Spotify,
+    entity_type: str,
+    url_triplets: list[tuple[str, str, str]],
+) -> list[tuple[dict, str, str, str]]:
+    """
+    Given a Spotify client, an entity type (track, album, etc.),
+    and a list of (original_url, normalized_url, spotify_id) tuples,
+    fetch the metadata in batches.
+
+    Args:
+        spotify_client (spotipy.Spotify): Authenticated Spotify client.
+        entity_type (str): One of 'track', 'album', 'artist', 'show', or 'episode'.
+        url_triplets (list[tuple[str, str, str]]): Each tuple is (original_url, normalized_url, spotify_id).
+
+    Returns:
+        list[tuple[dict, str, str, str]]:
+            Each element is (metadata_item, original_url, normalized_url, spotify_id).
+    """
+    if not url_triplets:
+        return []
+
+    fetch_function_map = {
+        "track": spotify_client.tracks,
+        "album": spotify_client.albums,
+        "artist": spotify_client.artists,
+        "show": spotify_client.shows,
+        "episode": spotify_client.episodes,
+    }
+    fetch_function = fetch_function_map.get(entity_type)
+    if not fetch_function:
+        logging.error(f"Unsupported entity type: {entity_type}")
+        return []
+
+    all_metadata = []
+    # Different batch sizes for different entity types
+    batch_size = 20 if entity_type == "album" else 50
+
+    for batch in uf.batch(url_triplets, batch_size):
+        original_urls, normalized_urls, spotify_ids = zip(*batch)
+        try:
+            # e.g. spotify_client.tracks([list of IDs]) returns a dict with 'tracks'
+            metadata_response = fetch_function(list(normalized_urls))
+            # The key in the response is typically 'tracks', 'albums', 'artists', etc.
+            key_name = entity_type + "s"
+            metadata_items = metadata_response.get(key_name, [])
+            # zip each metadata item with the corresponding original, normalized, and ID
+            all_metadata.extend(
+                zip(metadata_items, original_urls, normalized_urls, spotify_ids)
+            )
+        except Exception as e:
+            logging.error(f"Error processing batch for entity type '{entity_type}': {e}")
+            logging.error("Traceback:\n" + traceback.format_exc())
+    return all_metadata
+
+
+def add_urls_metadata_to_cache_batched(
+    spotify_client: spotipy.Spotify,
+    input_urls: list[str],
+    db_path: str
+) -> None:
     start_time = time.time()
 
-    try:
-        conn_cache = initialize_spotify_cache()
-        conn_cache.execute("PRAGMA journal_mode=WAL;")  # Enable WAL mode
-        cursor = create_spotify_url_cache_table(conn_cache)
-    except Exception as e:
-        logging.error(f"Error initializing cache: {e}")
-        logging.error("Traceback: " + traceback.format_exc())
-        return None
+    # Track how many were skipped because they're already cached
+    already_cached_count = 0
+    # Store "unsupported" separately if you want to gather them later
+    # (but we'll also keep them in spotify_urls_by_type["unsupported"]).
+    new_urls = []
 
-    try:
-        unsupported_urls = []
-        new_urls = []
-        cached_metadata = []
+    # 1. Identify new uncached URLs
+    for url in input_urls:
+        normalized_url, spotify_id, entity_type = normalize_and_extract_id(url)
 
-        for url in tqdm.tqdm(input_urls, desc="Processing URLs", unit="url"):
-            original_url = url
+        if not normalized_url or not spotify_id or not entity_type:
+            # Treat as "unsupported"
+            entity_type = "unsupported"
 
-            if "spotify.link" in url:
-                resolved_url = uf.resolve_short_url(url)
-                if not resolved_url:
-                    logging.warning(f"Failed to resolve shortened URL: {url}")
-                    continue
-                url = resolved_url
+        # Check if it's already in the cache
+        cache_data = get_cache_data(db_path, normalized_url)
+        if not cache_data.empty:
+            already_cached_count += 1
+            continue
 
-            if any(x in url for x in ["/wrapped", "/concert", "/playlist", "/socialsession", "/blend"]):
-                unsupported_urls.append(original_url)
-                cursor.execute(
-                    """
-                    INSERT OR REPLACE INTO spotify_url_cache (original_url, normalized_url, spotify_id, metadata)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    (json.dumps([original_url]), url, 'Error: unsupported URL', json.dumps({"error": "unsupported URL"}))
+        new_urls.append((url, normalized_url, spotify_id, entity_type))
+
+    # 2. Group URLs by entity type
+    spotify_urls_by_type = {
+        "track": [],
+        "album": [],
+        "artist": [],
+        "show": [],
+        "episode": [],
+        # We explicitly include "unsupported" to store them in the DB too
+        "unsupported": [],
+    }
+    for original_url, normalized_url, spotify_id, entity_type in new_urls:
+        if entity_type not in spotify_urls_by_type:
+            entity_type = "unsupported"
+        spotify_urls_by_type[entity_type].append((original_url, normalized_url, spotify_id))
+
+    # Log quick summary
+    total_new = sum(len(urls) for urls in spotify_urls_by_type.values())
+    logging.info(f"Skipped {already_cached_count} URLs already in cache.")
+    logging.info(f"Found {total_new} new URLs (including unsupported) to be processed.")
+
+    from tqdm import tqdm
+
+    # We’ll do two passes:
+    #   A) recognized Spotify types -> fetch metadata
+    #   B) unsupported -> store with empty metadata
+
+    # A) Recognized Spotify entity types
+    recognized_types = ("track", "album", "artist", "show", "episode")
+    recognized_count = sum(len(spotify_urls_by_type[t]) for t in recognized_types)
+    logging.info(f"Found {recognized_count} new recognized and supported Spotify URLs to be fetched and cached.")
+
+    with tqdm(total=recognized_count, desc="Caching recognized URLs", unit="url") as pbar:
+        for et in recognized_types:
+            url_triplets = spotify_urls_by_type[et]
+            if not url_triplets:
+                continue
+
+            results = fetch_metadata_in_batches(spotify_client, et, url_triplets)
+            for metadata_item, original_url, normalized_url, spotify_id in results:
+                update_cache(
+                    db_path=db_path,
+                    original_url=original_url,
+                    normalized_url=normalized_url,
+                    spotify_id=spotify_id,
+                    entity_type=et,
+                    metadata=metadata_item,
                 )
-                conn_cache.commit()
-                continue
+                pbar.update(1)
 
-            # Normalize the URL
-            parsed_url = urlparse(url)
-            normalized_url = urlunparse(parsed_url._replace(query=""))
-
-            # Extract Spotify ID from the normalized URL
-            match = re.search(r"spotify\.com/(track|album|artist|show|episode)/([\w\d]+)", normalized_url)
-            spotify_id = match.group(2) if match else None
-            
-            if not spotify_id:
-                logging.warning(f"Could not extract Spotify ID from URL: {normalized_url}")
-                continue
-
-            query = """
-                SELECT * FROM spotify_url_cache
-                WHERE normalized_url = ?
-            """
-            existing_cache_data = pd.read_sql_query(query, conn_cache, params=(normalized_url,))
-            if len(existing_cache_data) == 1:
-                existing_original_urls = json.loads(existing_cache_data['original_url'].iloc[0])
-                if original_url not in existing_original_urls:
-                    existing_original_urls.append(original_url)
-                    cursor.execute(
-                        """
-                        UPDATE spotify_url_cache
-                        SET original_url = ?
-                        WHERE normalized_url = ?
-                        """,
-                        (json.dumps(existing_original_urls), normalized_url)
-                    )
-                    conn_cache.commit()
-                cached_metadata.append(json.loads(existing_cache_data['metadata'].iloc[0]))
-            else:
-                new_urls.append((original_url, normalized_url, spotify_id))
-
-        if unsupported_urls:
-            logging.info(f"Skipped and cached {len(unsupported_urls)} unsupported URLs.")
-
-        if not new_urls:
-            logging.info("All URLs were already cached.")
-
-        spotify_urls_by_type = {etype: [] for etype in ["track", "album", "artist", "show", "episode"]}
-        for original_url, normalized_url, spotify_id in new_urls:
-            match = re.search(r"spotify\.com/(track|album|artist|show|episode)/([\w\d]+)", normalized_url)
-            if match:
-                entity_type = match.group(1)
-                spotify_urls_by_type[entity_type].append((original_url, normalized_url, spotify_id))
-            else:
-                logging.warning(f"Invalid or unrecognized URL: {original_url}")
-
-        all_metadata = []
-        fetch_function_map = {
-            "track": spotify_client.tracks,
-            "album": spotify_client.albums,
-            "artist": spotify_client.artists,
-            "show": spotify_client.shows,
-            "episode": spotify_client.episodes,
-        }
-
-        for entity_type, url_pairs in spotify_urls_by_type.items():
-            if not url_pairs:
-                logging.debug(f"No URLs to process for {entity_type}")
-                continue
-
-            fetch_function = fetch_function_map.get(entity_type)
-            if not fetch_function:
-                logging.error(f"Unsupported entity type: {entity_type}")
-                continue
-
-            batch_size = 20 if entity_type == "album" else 50
-            for batch_index, batch in enumerate(tqdm.tqdm(uf.batch(url_pairs, batch_size), desc=f"Processing {entity_type} batches", unit="batch")):
-                original_urls, normalized_urls, spotify_ids = zip(*batch)
-                logging.info(f"Processing batch {batch_index} of size {len(batch)} for {entity_type}.")
-
-                try:
-                    metadata = fetch_function(list(normalized_urls))
-                    if not metadata:
-                        logging.error(f"Received empty metadata for {entity_type} batch {batch_index}: {normalized_urls}")
-                        continue
-
-                    if not isinstance(metadata, dict):
-                        logging.error(f"Unexpected metadata format for {entity_type} batch {batch_index}: {metadata}")
-                        continue
-
-                    metadata_items = metadata.get(entity_type + "s")
-                    if not metadata_items:
-                        logging.error(
-                            f"Metadata for {entity_type} batch {batch_index} is missing or empty. Batch info: {normalized_urls}, Raw response: {metadata}"
-                        )
-                        continue
-                    
-                    for item, original_url, normalized_url, spotify_id in zip(metadata_items, original_urls, normalized_urls, spotify_ids):
-                        all_metadata.append((item, original_url, normalized_url, spotify_id))
-
-                except requests.exceptions.HTTPError as e:
-                    if e.response.status_code == 404:
-                        logging.error(f"Resource not found (404) for batch {batch_index}: {normalized_urls}")
-                        continue
-                except Exception as e:
-                    logging.error(f"Unexpected error processing {entity_type} batch {batch_index}: {normalized_urls}. Error: {e}")
-                    logging.error("Traceback: " + traceback.format_exc())
-
-        for item, original_url, normalized_url, spotify_id in all_metadata:
-            query = """
-                SELECT original_url FROM spotify_url_cache
-                WHERE normalized_url = ?
-            """
-            existing_data = pd.read_sql_query(query, conn_cache, params=(normalized_url,))
-            if len(existing_data) == 1:
-                original_urls = json.loads(existing_data['original_url'].iloc[0])
-                if original_url not in original_urls:
-                    original_urls.append(original_url)
-            else:
-                original_urls = [original_url]
-
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO spotify_url_cache (original_url, normalized_url, spotify_id, metadata)
-                VALUES (?, ?, ?, ?)
-                """,
-                (json.dumps(original_urls), normalized_url, spotify_id, json.dumps(item))
+    # B) Unsupported entity types
+    unsupported_triplets = spotify_urls_by_type["unsupported"]
+    if unsupported_triplets:
+        logging.info(f"Storing {len(unsupported_triplets)} unsupported URLs in cache with empty metadata.")
+        for original_url, normalized_url, spotify_id in unsupported_triplets:
+            # We store them in the DB but with entity_type="unsupported" and empty metadata
+            update_cache(
+                db_path=db_path,
+                original_url=original_url,
+                normalized_url=normalized_url,
+                spotify_id=spotify_id,
+                entity_type="unsupported",
+                metadata={},
             )
-            conn_cache.commit()
 
-        logging.info(f"Processed {len(all_metadata)} new items.")
-    except Exception as e:
-        logging.error(f"Error during the caching process: {e}")
-        logging.error("Traceback: " + traceback.format_exc())
-    finally:
-        logging.info(f"Completed in {time.time() - start_time:.2f} seconds.")
+    elapsed = time.time() - start_time
+    logging.info(f"Completed processing in {elapsed:.2f} seconds.")
 
 
-def main(df, data_spotify_links_column_name):
+
+def main(df: pd.DataFrame, data_spotify_links_column_name: str, db_path: str | None = None) -> None:
+    """
+    Main entry point:
+    1. Initializes the cache (if not already).
+    2. Authenticates with Spotify.
+    3. Extracts distinct Spotify links from the given df column.
+    4. Adds URL metadata to the cache in batches.
+
+    Args:
+        df (pd.DataFrame): A DataFrame that contains a column with Spotify links.
+        data_spotify_links_column_name (str): Name of the column containing Spotify links.
+        db_path (str | None): Optional path to the SQLite database file.
+    """
     logging.info(
-'''
---------------------------------------------------------------------------------------------------------------------
-[2] Creating Spotify URL cache and pulling URL metadata using Spotify API
---------------------------------------------------------------------------------------------------------------------
-''')
-    spotify_client = authenticate_spotify(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, SCOPE)
-    unique_spotify_links = uf.generate_distinct_values_from_list_column(df, data_spotify_links_column_name)
-    add_urls_metadata_to_cache_batched(spotify_client, unique_spotify_links)
+"\n" + "-" * 100 + "\n"
+"[2] Creating Spotify URL cache and pulling URL metadata using Spotify API\n"
++ "-" * 100
+    )
+
+    # 1. Initialize the cache (create table if needed)
+    resolved_db_path = initialize_cache(db_path)
+
+    # 2. Authenticate with Spotify
+    client_id, client_secret, redirect_uri = get_spotify_credentials()
+    spotify_client = authenticate_spotify(client_id, client_secret, redirect_uri, SCOPE)
+
+    # 3. Extract distinct Spotify links from the DataFrame
+    logging.info(f"Extracting distinct Spotify links from column '{data_spotify_links_column_name}'.")
+    unique_spotify_links = uf.generate_distinct_values_from_list_column(
+        df, data_spotify_links_column_name
+    )
+    logging.info(f"Found {len(unique_spotify_links)} distinct Spotify URLs. Beginning processing now...")
+
+    # 4. Add the URL metadata to cache in batches
+    add_urls_metadata_to_cache_batched(spotify_client, unique_spotify_links, resolved_db_path)

@@ -1,9 +1,12 @@
+import datetime
 import os
 import logging
+import sqlite3
+import pandas as pd
 from dopetracks_summary.data_prep import prepare_data_main
 from dopetracks_summary.data_prep import spotify_db_manager as sdm
 from dopetracks_summary import utility_functions as uf
-import dopetracks_summary.data_prep.spotify_db_manager as sdm
+from dopetracks_summary import create_spotify_playlist as csp
 
 def main():
 
@@ -21,23 +24,26 @@ Initializing Run of Dopetracks Summary package
     # Step 1: Pull and clean data
     data = prepare_data_main.pull_and_clean_messages(messages_db_path)
 
-    print(data['messages'].head())
+    logging.info(data['messages'].head())
 
     # Step 2: Get Spotify URL metadata and cache URls
     sdm.main(data['messages'], 'all_spotify_links')
+    
 
     # Step 3: Create Spotify playlist and add tracks
-
     # Name of playlist to generate
-    PLAYLIST_NAME = 'Dopetracks Generated Playlist'
-
+    PLAYLIST_NAME = 'Dope Tracks songs of 2024 (🔥🎧)'
     
-    '''
-    TODO: update to accept multiple playlist names as input, each with their own lookup definition. 
-        i created this package to create a playlist with all songs sent in my friends music
-        group chat (Dopetracks) in 2024, but it'd be nice to also generate playlists for any chat or custom
-        filter of message. for example i could create a playlist of songs sent to me in _any_ iMessage chat
-    '''
+    # Tracks to inclue in playlist
+    track_original_urls_list = data['messages'][
+        (data['messages']['chat_id'].isin([16, 286])) &
+        (data['messages']['date'] > datetime.datetime(2024, 1, 1)) & 
+        (data['messages']['spotify_song_links'].apply(len) > 0) & 
+        (data['messages']['chat_name'].apply(lambda x: isinstance(x, str) and "dope tracks" in x.lower()))
+    ].explode('spotify_song_links')['spotify_song_links'].unique().tolist()
+    
+    csp.main(PLAYLIST_NAME, track_original_urls_list)
+  
 
 if __name__ == "__main__":
     main()
