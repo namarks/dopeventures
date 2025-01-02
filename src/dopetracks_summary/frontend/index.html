@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dopetracks Playlist Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        form {
+            display: inline-block;
+            text-align: left;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        #result {
+            margin-top: 20px;
+            text-align: left;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dopetracks Playlist Generator</h1>
+    <p>Upload your iMessage chat database to create a Spotify playlist.</p>
+
+    <div class="form-group">
+        <button id="spotifyLogin">Log In to Spotify</button>
+    </div>
+
+    <form id="uploadForm" style="display: none;">
+        <div class="form-group">
+            <label for="file">Upload chat.db file:</label>
+            <input type="file" id="file" name="file" required />
+        </div>
+        <div class="form-group">
+            <label for="startDate">Start Date:</label>
+            <input type="date" id="startDate" name="start_date" required />
+        </div>
+        <div class="form-group">
+            <label for="endDate">End Date:</label>
+            <input type="date" id="endDate" name="end_date" required />
+        </div>
+        <div class="form-group">
+            <label for="playlistName">Playlist Name:</label>
+            <input type="text" id="playlistName" name="playlist_name" required />
+        </div>
+        <div class="form-group">
+            <label for="chatName">Chat Name (Optional):</label>
+            <input type="text" id="chatName" name="chat_name" />
+        </div>
+        <button type="submit">Generate Playlist</button>
+    </form>
+
+    <div id="result">
+        <h2>Result:</h2>
+        <pre id="resultOutput"></pre>
+    </div>
+
+    <script>
+        const BASE_URL = ""; // Relative path since backend and frontend are served together
+
+        document.getElementById("spotifyLogin").onclick = () => {
+            const clientId = "YOUR_SPOTIFY_CLIENT_ID"; // Replace with your Spotify client ID
+            const redirectUri = "http://127.0.0.1:8000/callback"; // Update with your backend callback URL
+            const scopes = "playlist-modify-public user-read-playback-state";
+
+            const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+            window.location.href = authUrl;
+        };
+
+        document.getElementById("uploadForm").onsubmit = async (e) => {
+            e.preventDefault();
+
+            const fileInput = document.getElementById("file").files[0];
+            const startDate = document.getElementById("startDate").value;
+            const endDate = document.getElementById("endDate").value;
+            const playlistName = document.getElementById("playlistName").value;
+            const chatName = document.getElementById("chatName").value;
+
+            const formData = new FormData();
+            formData.append("file", fileInput);
+            formData.append("start_date", startDate);
+            formData.append("end_date", endDate);
+            formData.append("playlist_name", playlistName);
+            formData.append("chat_name_text", chatName); // Optional field
+
+            const resultOutput = document.getElementById("resultOutput");
+            resultOutput.innerText = "Processing...";
+
+            try {
+                const response = await fetch(`${BASE_URL}/upload-chat/`, {
+                    method: "POST",
+                    body: formData,
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    resultOutput.innerText = JSON.stringify(data, null, 2);
+                } else {
+                    resultOutput.innerText = `Error: ${data.error}`;
+                }
+            } catch (error) {
+                resultOutput.innerText = `Error: ${error.message}`;
+            }
+        };
+    </script>
+</body>
+</html>
