@@ -7,6 +7,7 @@ from dopetracks_summary.data_prep import prepare_data_main
 from dopetracks_summary.data_prep import spotify_db_manager as sdm
 from dopetracks_summary import utility_functions as uf
 from dopetracks_summary import create_spotify_playlist as csp
+from dopetracks_summary import generate_summary_stats as gss
 
 def main():
 
@@ -32,17 +33,21 @@ Initializing Run of Dopetracks Summary package
 
     # Step 3: Create Spotify playlist and add tracks
     # Name of playlist to generate
-    PLAYLIST_NAME = 'Dope Tracks songs of 2024 (🔥🎧)'
+    PLAYLIST_NAME = 'Dope Tracks (🔥🎧) songs of 2024'
     
     # Tracks to inclue in playlist
     track_original_urls_list = data['messages'][
         (data['messages']['chat_id'].isin([16, 286])) &
-        (data['messages']['date'] > datetime.datetime(2024, 1, 1)) & 
+        (data['messages']['date'] >= datetime.datetime(2024, 1, 1)) & 
+        (data['messages']['date'] < datetime.datetime(2025, 1, 1)) & 
         (data['messages']['spotify_song_links'].apply(len) > 0) & 
         (data['messages']['chat_name'].apply(lambda x: isinstance(x, str) and "dope tracks" in x.lower()))
     ].explode('spotify_song_links')['spotify_song_links'].unique().tolist()
     
     csp.main(PLAYLIST_NAME, track_original_urls_list)
+
+    # Setp 4: Generate summary statistics
+    gss.main(data)
   
 
 if __name__ == "__main__":

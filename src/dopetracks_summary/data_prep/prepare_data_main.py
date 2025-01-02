@@ -5,6 +5,7 @@ import dopetracks_summary.data_prep.data_pull as dp
 import dopetracks_summary.data_prep.data_cleaning as dc 
 import dopetracks_summary.data_prep.data_enrichment as de
 import dopetracks_summary.data_prep.spotify_db_manager as sdm
+import dopetracks_summary.data_prep.import_contact_info as ici
 
 # Configure logging with timestamps
 logging.basicConfig(
@@ -74,6 +75,11 @@ def pull_and_clean_messages(db_path: Optional[str] = None):
         data_enriched = time.time()
         logging.info(f"Data successfully enriched! Time taken: {data_enriched - data_cleaned:.2f}s")
 
+        logging.info("Importing contact info...")
+        contacts = ici.main()
+        contacts_pulled = time.time()
+        logging.info(f"Successfully pulled contact info! Time taken: {contacts_pulled - data_enriched:.2f}s")
+
         # For demonstration, return all datasets as a dictionary
         return {
             "messages": messages,
@@ -81,6 +87,7 @@ def pull_and_clean_messages(db_path: Optional[str] = None):
             "chat_message_join": chat_message_join,
             "chat_handle_join": chat_handle_join,
             "attachments": attachments,
+            "contacts": contacts
         }
     
     except Exception as e:
