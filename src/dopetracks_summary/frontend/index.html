@@ -131,8 +131,7 @@
                 if (response.ok) {
                     // resultOutput.innerText = "Username validated successfully!";
                     resultOutput.innerText = `Username validated successfully! iMessage database found at: (${JSON.stringify(data.filepath, null, 2)})`;
-                    document.getElementById("stage2").style.display = "none";
-                    // document.getElementById("stage2").style.display = "block";
+                    document.getElementById("stage2").style.display = "block";
                 } else {
                     resultOutput.innerText = `Error: ${data.error}`;
                 }
