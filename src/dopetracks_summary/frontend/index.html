@@ -5,242 +5,236 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dopetracks Playlist Generator</title>
     <style>
+        /* Add styling here */
         body {
             font-family: Arial, sans-serif;
-            text-align: center;
-            margin-top: 50px;
+            padding: 20px;
+            line-height: 1.6;
         }
-        form {
-            display: inline-block;
-            text-align: left;
+        section {
             margin-bottom: 20px;
         }
-        .form-group {
-            margin-bottom: 15px;
+        .disabled {
+            opacity: 0.5;
+            pointer-events: none;
         }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
+        table {
+            width: 100%;
+            border-collapse: collapse;
         }
-        #result {
-            margin-top: 20px;
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+        th, td {
+            padding: 8px;
             text-align: left;
-            display: inline-block;
-            max-width: 600px; /* Set a maximum width */
-            word-wrap: break-word; /* Break long words */
-            white-space: pre-wrap; /* Preserve newlines and wrap text */
-            overflow-wrap: break-word; /* Support breaking long words */
         }
-        #resultOutput {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
+        .status {
+            font-style: italic;
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
     <h1>Dopetracks Playlist Generator</h1>
-    <p>Upload your iMessage chat database to create a Spotify playlist.</p>
 
-    <div class="form-group">
-        <button id="spotifyLogin">Log In to Spotify</button>
-    </div>
+    <!-- Setup Section -->
+    <section>
+        <h2>Setup</h2>
+        <div id="spotify-auth">
+            <p>Step 1: Authorize Spotify</p>
+            <button id="authorizeSpotify">Authorize Spotify</button>
+            <div id="spotifyStatus" class="status"></div>
+        </div>
+        <div id="username-validation">
+            <p>Step 2: Validate MacOS Username</p>
+            <input type="text" id="macUsername" placeholder="Enter your MacOS username">
+            <button id="validateUsername">Validate Username</button>
+            <div id="usernameStatus" class="status"></div>
+        </div>
+    </section>
 
-    <button id="getUserProfile" style="display: none;">Get User Profile</button>
+    <!-- Chat Group Search Section -->
+    <section>
+        <h2>Chat Group Search</h2>
+        <input type="text" id="chatSearch" placeholder="Search for chat name">
+        <button id="searchChats">Search</button>
+        <table id="chatTable">
+            <thead>
+                <tr>
+                    <th>Chat Name</th>
+                    <th># of Members</th>
+                    <th># of Spotify URLs Sent</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Chat results will be dynamically added here -->
+            </tbody>
+        </table>
+    </section>
 
-    <div id="profileContainer" style="margin-top: 20px;"></div>
+    <!-- Playlist Creation Section -->
+    <section id="playlistCreation" class="disabled">
+        <h2>Playlist Creation</h2>
+        <label for="playlistName">Playlist Name:</label>
+        <input type="text" id="playlistName" placeholder="Enter playlist name">
+        <label for="startDate">Start Date:</label>
+        <input type="date" id="startDate">
+        <label for="endDate">End Date:</label>
+        <input type="date" id="endDate">
+        <button id="createPlaylist">Create Playlist</button>
+    </section>
 
-    <div id="validate-username", class="form-group">
-        <!-- Add Username Validation -->
-        <input type="text" id="username" placeholder="Enter your system username">
-        <button id="validateUsername">Validate Username</button>
-        <div id="usernameValidationResult" style="margin-top: 10px; font-style: italic;"></div>
-    </div>
-    
-    <div id="stage2" style="display:none;">
-        <form id="uploadForm">
-            <div class="form-group">
-                <label for="startDate">Start Date:</label>
-                <input type="date" id="startDate" name="start_date" required>
-            </div>
-            <div class="form-group">
-                <label for="endDate">End Date:</label>
-                <input type="date" id="endDate" name="end_date" required>
-            </div>
-            <div class="form-group">
-                <label for="playlistName">Playlist Name:</label>
-                <input type="text" id="playlistName" name="playlist_name" required>
-            </div>
-            <div class="form-group">
-                <label for="chatName">Chat Name (Optional):</label>
-                <input type="text" id="chatName" name="chat_name">
-            </div>
-            <button type="button" id="generatePlaylist">Generate Playlist</button>
-        </form>
-        <div id="uploadResult" style="margin-top: 10px; font-style: italic;"></div>
-    </div>
-    
-    <div id="result">
-        <h2>Result:</h2>
-        <pre id="resultOutput"></pre>
-    </div>
-    
     <script>
-        const BASE_URL = ""; // Relative path since backend and frontend are served together
-    
-        console.log("Full URL:", window.location.href);
-        console.log("Search string:", window.location.search);
+        document.addEventListener("DOMContentLoaded", () => {
+        // State variables to track progress
+        let isSpotifyAuthorized = false;
+        let isUsernameValidated = false;
 
-        // Spotify Login
-        document.getElementById("spotifyLogin").onclick = async () => {
+        // Spotify Authorization
+        const authorizeSpotifyButton = document.getElementById("authorizeSpotify");
+        const spotifyStatus = document.getElementById("spotifyStatus");
+
+        authorizeSpotifyButton.addEventListener("click", async () => {
             try {
-                // Fetch client_id from the backend
                 const response = await fetch("/get-client-id");
                 const data = await response.json();
-                console.log("Response from /get-client-id:", data);
-                const clientId = data.client_id; // Get the Spotify Client ID
-    
-                // Dynamically set the redirectUri based on the current environment
-                const redirectUri =
-                    window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-                        ? "http://localhost:8888/callback" // Local environment
-                        : "https://your-production-domain.onrender.com/callback"; // Render environment
-    
-                const scopes = "playlist-modify-public user-read-playback-state";
-    
-                // Construct the Spotify authorization URL
-                const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
-                window.location.href = authUrl;
+                if (data.client_id) {
+                    const clientId = data.client_id;
+                    const redirectUri =
+                        window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+                            ? "http://localhost:8888/callback" // Local environment
+                            : "https://your-production-domain.onrender.com/callback"; // Render environment
+                    const scopes = "playlist-modify-public user-read-playback-state";
+                    const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+                    window.location.href = authUrl;
+                } else {
+                    spotifyStatus.textContent = "Error: Spotify Client ID not found.";
+                }
             } catch (error) {
-                console.error("Failed to fetch the client ID:", error);
+                console.error(error);
+                spotifyStatus.textContent = "Error authorizing Spotify.";
             }
-        };
+        });
 
-        // Validate username
-        document.getElementById("validateUsername").onclick = async () => {
-            const username = document.getElementById("username").value;
+        // Check if Spotify was authorized (called after redirect)
+        const urlParams = new URLSearchParams(window.location.search);
+        const spotifyCode = urlParams.get("code");
+        if (spotifyCode) {
+            spotifyStatus.textContent = "✅ Spotify Authorized";
+            isSpotifyAuthorized = true;
+            enablePlaylistCreation();
+        }
 
-            const resultOutput = document.getElementById("resultOutput");
-            resultOutput.innerText = "Validating username...";
+        // Username Validation
+        const validateUsernameButton = document.getElementById("validateUsername");
+        const macUsernameInput = document.getElementById("macUsername");
+        const usernameStatus = document.getElementById("usernameStatus");
 
+        validateUsernameButton.addEventListener("click", async () => {
+            const username = macUsernameInput.value.trim();
+            if (!username) {
+                usernameStatus.textContent = "Please enter a valid username.";
+                return;
+            }
+
+            usernameStatus.textContent = "Validating...";
             try {
                 const response = await fetch(`/validate-username?username=${encodeURIComponent(username)}`);
                 const data = await response.json();
 
                 if (response.ok) {
-                    // resultOutput.innerText = "Username validated successfully!";
-                    resultOutput.innerText = `Username validated successfully! iMessage database found at: (${JSON.stringify(data.filepath, null, 2)})`;
-                    document.getElementById("stage2").style.display = "none";
-                    // document.getElementById("stage2").style.display = "block";
+                    usernameStatus.textContent = `✅ Username validated. iMessage database found at: ${data.filepath}`;
+                    isUsernameValidated = true;
+                    enablePlaylistCreation();
                 } else {
-                    resultOutput.innerText = `Error: ${data.error}`;
+                    usernameStatus.textContent = `Error: ${data.error}`;
                 }
             } catch (error) {
-                resultOutput.innerText = `Error: ${error.message}`;
+                console.error(error);
+                usernameStatus.textContent = "Error validating username.";
             }
-        };
+        });
 
-    
-        // Handle Upload Form Submission
-        document.getElementById("generatePlaylist").onclick = async () => {
-            const username = document.getElementById("username").value;
+        // Enable Playlist Creation
+        function enablePlaylistCreation() {
+            if (isSpotifyAuthorized && isUsernameValidated) {
+                document.getElementById("playlistCreation").classList.remove("disabled");
+            }
+        }
+
+        // Chat Group Search
+        const chatSearchInput = document.getElementById("chatSearch");
+        const searchChatsButton = document.getElementById("searchChats");
+        const chatTableBody = document.getElementById("chatTable").querySelector("tbody");
+
+        searchChatsButton.addEventListener("click", async () => {
+            const searchTerm = chatSearchInput.value.trim();
+            if (!searchTerm) {
+                alert("Please enter a search term.");
+                return;
+            }
+
+            try {
+                chatTableBody.innerHTML = ""; // Clear existing rows
+                // Simulate fetching chat data (replace with actual API call)
+                const chats = [
+                    { name: "dope tracks", members: 7, urls: 31 },
+                    { name: "music lovers", members: 5, urls: 20 },
+                ]; // Example data
+
+                chats.forEach((chat) => {
+                    const row = document.createElement("tr");
+                    row.innerHTML = `
+                        <td>${chat.name}</td>
+                        <td>${chat.members}</td>
+                        <td>${chat.urls}</td>
+                    `;
+                    chatTableBody.appendChild(row);
+                });
+            } catch (error) {
+                console.error(error);
+                alert("Error searching for chats.");
+            }
+        });
+
+        // Playlist Creation
+        const createPlaylistButton = document.getElementById("createPlaylist");
+
+        createPlaylistButton.addEventListener("click", async () => {
+            const playlistName = document.getElementById("playlistName").value.trim();
             const startDate = document.getElementById("startDate").value;
             const endDate = document.getElementById("endDate").value;
-            const playlistName = document.getElementById("playlistName").value;
-            const chatName = document.getElementById("chatName").value;
 
-            const formData = new FormData();
-            formData.append("username", username);
-            formData.append("start_date", startDate);
-            formData.append("end_date", endDate);
-            formData.append("playlist_name", playlistName);
-            formData.append("chat_name_text", chatName);
-
-            const resultOutput = document.getElementById("resultOutput");
-            resultOutput.innerText = "Generating playlist...";
+            if (!playlistName || !startDate || !endDate) {
+                alert("Please fill out all fields.");
+                return;
+            }
 
             try {
                 const response = await fetch("/upload-chat/", {
                     method: "POST",
-                    body: formData,
+                    body: new URLSearchParams({
+                        username: macUsernameInput.value.trim(),
+                        start_date: startDate,
+                        end_date: endDate,
+                        playlist_name: playlistName,
+                    }),
                 });
-
                 const data = await response.json();
+
                 if (response.ok) {
-                    resultOutput.innerText = JSON.stringify(data, null, 2);
+                    alert(`Playlist "${playlistName}" created successfully!`);
                 } else {
-                    resultOutput.innerText = `Error: ${data.error}`;
+                    alert(`Error: ${data.error}`);
                 }
             } catch (error) {
-                resultOutput.innerText = `Error: ${error.message}`;
+                console.error(error);
+                alert("Error creating playlist.");
             }
-        };
-    
-        // Fetch User Profile
-        document.getElementById("getUserProfile").onclick = async () => {
-            try {
-                const response = await fetch(`${BASE_URL}/user-profile`);
-                const data = await response.json();
+        });
+    });
 
-                // Display the user profile data in the result area
-                document.getElementById("resultOutput").innerText = JSON.stringify(data, null, 2);
-
-                // Extract the display name and profile image URL
-                const displayName = data.display_name || "Unknown User";
-                const profileImageUrl = data.images && data.images.length > 0 ? data.images[0].url : null;
-
-                // Render the profile image and display name dynamically
-                const profileContainer = document.getElementById("profileContainer");
-                profileContainer.innerHTML = `
-                    <h2>${displayName}</h2>
-                    ${profileImageUrl ? `<img src="${profileImageUrl}" alt="Profile Image" style="width: 150px; height: 150px; border-radius: 50%;">` : "<p>No profile image available</p>"}
-                `;
-            } catch (error) {
-                console.error("Error fetching user profile:", error);
-                document.getElementById("resultOutput").innerText = `Error: ${error.message}`;
-            }
-        };
-
-        // Handle Post-Authorization
-        
-        window.onload = async () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const authorizationCode = urlParams.get("code");
-
-            if (authorizationCode) {
-                console.log("Authorization successful!");
-
-                // Hide the Spotify Login button
-                document.getElementById("spotifyLogin").style.display = "none";
-
-                // Show the Get User Profile button
-                document.getElementById("getUserProfile").style.display = "inline-block";
-
-                // Show the Upload Form
-                document.getElementById("uploadForm").style.display = "block";
-
-                // Clean up the URL by removing the "code" parameter
-                const newUrl = window.location.origin + window.location.pathname;
-                window.history.replaceState({}, document.title, newUrl);
-
-                // Optionally, you can send the authorization code to your backend for further processing
-                try {
-                    const response = await fetch(`/callback?code=${authorizationCode}`);
-                    const data = await response.json();
-                    console.log("Tokens retrieved:", data);
-                } catch (error) {
-                    console.error("Error during callback processing:", error);
-                }
-            } else {
-                console.log("No authorization code detected. Showing default UI.");
-
-                // Ensure only the Spotify Login button is visible
-                document.getElementById("spotifyLogin").style.display = "inline-block";
-                document.getElementById("uploadForm").style.display = "none";
-                document.getElementById("getUserProfile").style.display = "none";
-            }
-        };
     </script>
 </body>
 </html>

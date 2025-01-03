@@ -140,6 +140,16 @@ async def validate_username(username: str):
         "filepath": file_path
         }
 
+@app.get("/chat-search")
+async def chat_search(query: str):
+    # Example: Search chat database for matching group names
+    # Replace this with actual database query logic
+    return [
+        {"name": "dope tracks", "members": 7, "urls": 31},
+        {"name": "music lovers", "members": 5, "urls": 20}
+    ]
+
+
 # Serve static files (like index.html)
 app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
 
