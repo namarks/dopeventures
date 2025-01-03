@@ -22,4 +22,5 @@ spotify_cache.db
 # Ignore egg-info metadata
 *.egg-info/
 
-
+# Databse files
+.db
