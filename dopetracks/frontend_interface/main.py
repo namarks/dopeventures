@@ -1,6 +1,6 @@
 import argparse
 import asyncio
-from dopetracks.core_logic import processs_user_inputs
+from dopetracks.frontend_interface.core_logic import processs_user_inputs
 
 def main():
     # Command-line argument parser

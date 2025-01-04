@@ -9,7 +9,7 @@ import time
 from dotenv import load_dotenv
 import requests
 from typing import Optional
-from dopetracks.core_logic import processs_user_inputs
+from dopetracks.frontend_interface.core_logic import processs_user_inputs
 from queue import SimpleQueue
 
 

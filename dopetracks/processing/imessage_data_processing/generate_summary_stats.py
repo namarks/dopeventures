@@ -1,4 +1,4 @@
-import dopetracks.import_contact_info as ici
+import dopetracks.processing.contacts_data_processing.import_contact_info as ici
 import importlib
 from datetime import datetime
 import pandas as pd

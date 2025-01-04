@@ -1,7 +1,7 @@
 import pandas as pd
 import typedstream
 import numpy as np
-import dopetracks.dictionaries as dictionaries
+import dopetracks.utils.dictionaries as dictionaries
 
 def detect_reaction(associated_message_type):
     ''' Detect and translate whether the iMessage was a reaction'''

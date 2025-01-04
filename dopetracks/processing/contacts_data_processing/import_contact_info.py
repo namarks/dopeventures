@@ -8,9 +8,6 @@ import re
 import pandas as pd
 
 
-
-
-
 def get_contacts_db_path():
     """Find the path to the macOS AddressBook SQLite database."""
     sources_dir = os.path.join(

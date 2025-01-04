@@ -24,3 +24,7 @@ spotify_cache.db
 
 # Databse files
 .db
+
+# Ignore build files
+build/ 
+dopetracks_summary.egg-info/

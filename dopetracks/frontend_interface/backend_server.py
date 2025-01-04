@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from dopetracks.core_logic import process_user_inputs
+from dopetracks.frontend_interface.core_logic import process_user_inputs
 
 app = Flask(__name__)
 

@@ -13,7 +13,7 @@ import tqdm
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-import dopetracks.utility_functions as uf
+import dopetracks.utils.utility_functions as uf
 
 from dotenv import load_dotenv
 load_dotenv()
