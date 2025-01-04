@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 import pandas as pd
 from dopetracks_summary.backend import prepare_data_main
 from dopetracks_summary.backend import spotify_db_manager as sdm
@@ -6,20 +7,22 @@ from dopetracks_summary import utility_functions as uf
 from dopetracks_summary.backend import create_spotify_playlist as csp
 from dopetracks_summary.backend import generate_summary_stats as gss
 
-def processs_user_inputs(start_date, end_date, playlist_name, filepath=None, chat_name_text=None):
-
-    logging.info(
-'''
---------------------------------------------------------------------------------------------------------------------
-Initializing Run of Dopetracks Summary package
---------------------------------------------------------------------------------------------------------------------
-'''
-    )
-
+def processs_user_inputs(start_date = '2025-01-01', 
+                         end_date = '2025-01-05', 
+                         playlist_name = 'tester playlist', 
+                         filepath=None, 
+                         chat_name_text: Optional[str] = None):
+    
+    '''
+    --------------------------------------------------------------------------------------------------------------------
+    Initializing Run of Dopetracks Summary package
+    --------------------------------------------------------------------------------------------------------------------
+    '''
     # Generalized messages_db_path
     if filepath:
         messages_db_path = filepath
         logging.info(f"Using inputed filepath: {messages_db_path}")
+
     else: 
         messages_db_path = uf.get_messages_db_path()
         logging.info(f"Using default messages_db_path: {messages_db_path}")
@@ -27,7 +30,6 @@ Initializing Run of Dopetracks Summary package
     # Step 1: Pull and clean data
     data = prepare_data_main.pull_and_clean_messages(messages_db_path)
 
-    logging.info(data['messages'].head())
 
     # Step 2: Get Spotify URL metadata and cache URls
     sdm.main(data['messages'], 'all_spotify_links')
@@ -60,6 +62,9 @@ Initializing Run of Dopetracks Summary package
     )
     
     csp.main(PLAYLIST_NAME, track_original_urls_list)
+    
 
     # Setp 4: Generate summary statistics
     # summary = gss.main(data)  
+if __name__ == '__main__':
+    processs_user_inputs()
