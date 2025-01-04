@@ -191,7 +191,7 @@ async def chat_search(query: str):
 
 
 # Serve static files (like index.html)
-app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
+app.mount("/", StaticFiles(directory="website", html=True), name="static")
 
 # print("SPOTIFY_CLIENT_ID:", os.getenv("SPOTIFY_CLIENT_ID"))
 # print("Registered routes:", app.routes)
