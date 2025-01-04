@@ -86,7 +86,8 @@ async def callback(request: Request):
     # Exchange the authorization code for an access token
     SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
     SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
-    redirect_uri = "http://localhost:8888/callback"
+    redirect_uri = os.getenv("SPOTIFY_REDIRECT_URI")  # Fetch from environment variables
+
 
     token_url = "https://accounts.spotify.com/api/token"
     payload = {
