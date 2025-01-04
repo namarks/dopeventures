@@ -5,7 +5,7 @@ setup(
     version="0.1.0",
     author="Nick Marks",
     author_email="nmarkspdx@gmail.com",
-    url="https://github.com/nmarks/dopeventures",  # GitHub repo URL
+    url="https://github.com/namarks/dopeventures",  # GitHub repo URL
     packages=find_packages(),  # Look for packages in src/
     # package_dir={"": "dopetracks/dopetracks"},              # Base directory for packages
     python_requires=">=3.11.11",
