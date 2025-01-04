@@ -17,6 +17,7 @@ from queue import SimpleQueue
 load_dotenv()
 
 app = FastAPI()
+port = int(os.getenv("PORT", 8888))  # Default to 8888 if PORT is not set
 
 # Temporary in-memory token store (use a database in production)
 user_tokens = {}
