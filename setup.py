@@ -6,8 +6,8 @@ setup(
     author="Nick Marks",
     author_email="nmarkspdx@gmail.com",
     url="https://github.com/nmarks/dopetracks_summary",  # GitHub repo URL
-    packages=find_packages(where="src"),  # Look for packages in src/
-    package_dir={"": "src"},              # Base directory for packages
+    packages=find_packages(),  # Look for packages in src/
+    package_dir={"": "backend"},              # Base directory for packages
     install_requires=[
         Flask==3.1.0
         flask_session==0.8.0

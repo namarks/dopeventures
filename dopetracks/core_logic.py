@@ -1,11 +1,11 @@
 import logging
 from typing import Optional
 import pandas as pd
-from dopetracks_summary.backend import prepare_data_main
-from dopetracks_summary.backend import spotify_db_manager as sdm
-from dopetracks_summary import utility_functions as uf
-from dopetracks_summary.backend import create_spotify_playlist as csp
-from dopetracks_summary.backend import generate_summary_stats as gss
+from dopetracks import prepare_data_main
+from dopetracks import spotify_db_manager as sdm
+from dopetracks import utility_functions as uf
+from dopetracks import create_spotify_playlist as csp
+from dopetracks import generate_summary_stats as gss
 
 def processs_user_inputs(start_date = '2025-01-01', 
                          end_date = '2025-01-05', 

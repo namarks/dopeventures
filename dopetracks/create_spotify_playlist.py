@@ -4,9 +4,9 @@ import os
 import spotipy as sp
 import pandas as pd
 import logging
-import dopetracks_summary.data_prep.spotify_db_manager as sdm
+import dopetracks.spotify_db_manager as sdm
 from spotipy.oauth2 import SpotifyOAuth
-import dopetracks_summary.data_prep.spotify_db_manager as sdm
+import dopetracks.spotify_db_manager as sdm
 
 
 CLIENT_ID=os.getenv('SPOTIFY_CLIENT_ID')

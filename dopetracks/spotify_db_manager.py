@@ -13,7 +13,10 @@ import tqdm
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-import dopetracks_summary.utility_functions as uf
+import dopetracks.utility_functions as uf
+
+from dotenv import load_dotenv
+load_dotenv()
 
 # Load environment variables for Spotify
 CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")

@@ -1,11 +1,11 @@
 from typing import Optional
 import logging
 import time
-import dopetracks_summary.backend.data_pull as dp
-import dopetracks_summary.backend.data_cleaning as dc 
-import dopetracks_summary.backend.data_enrichment as de
-import dopetracks_summary.backend.spotify_db_manager as sdm
-import dopetracks_summary.backend.import_contact_info as ici
+import dopetracks.data_pull as dp
+import dopetracks.data_cleaning as dc 
+import dopetracks.data_enrichment as de
+import dopetracks.spotify_db_manager as sdm
+import dopetracks.import_contact_info as ici
 
 # Configure logging with timestamps
 logging.basicConfig(
