@@ -1,6 +1,6 @@
 import logging
 from io import StringIO
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, Request, File, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 import asyncio
 from fastapi.staticfiles import StaticFiles
@@ -132,6 +132,36 @@ async def get_user_profile():
         )
 
     return response.json()
+
+
+@app.post("/validate-chat-file/")
+async def validate_chat_file(file: UploadFile = File(...)):
+    try:
+        # Save the uploaded file temporarily
+        temp_dir = "/tmp"  # Temporary directory
+        temp_file_path = os.path.join(temp_dir, file.filename)
+
+        with open(temp_file_path, "wb") as f:
+            f.write(await file.read())
+
+        # Validate the file (check if it exists and its type)
+        if not os.path.exists(temp_file_path):
+            return JSONResponse(
+                status_code=404,
+                content={"error": "File upload failed or file not found."}
+            )
+
+        # Perform additional checks, e.g., file size or type
+        if not file.filename.endswith(".db"):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid file type. Only '.db' files are allowed."}
+            )
+
+        return {"message": "File uploaded successfully.", "filepath": temp_file_path}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    
 
 @app.get("/validate-username")
 async def validate_username(username: str):

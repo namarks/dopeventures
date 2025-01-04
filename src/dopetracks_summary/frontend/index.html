@@ -47,10 +47,18 @@
             <div id="spotifyStatus" class="status"></div>
         </div>
         <div id="username-validation">
-            <p>Step 2: Validate MacOS Username</p>
+            <p>Step 2 (old): Validate MacOS Username</p>
             <input type="text" id="macUsername" placeholder="Enter your MacOS username">
             <button id="validateUsername">Validate Username</button>
             <div id="usernameStatus" class="status"></div>
+        </div>
+        <div id="file-upload">
+            <p>Step 2 (new): Upload iMessage Chat Database</p>
+            <form id="uploadForm">
+                <input type="file" id="chatDbFile" accept=".db">
+                <button type="submit">Upload File</button>
+            </form>
+            <div id="fileUploadStatus" class="status"></div>
         </div>
     </section>
 
@@ -112,6 +120,44 @@
         let isSpotifyAuthorized = false;
         let isUsernameValidated = false;
         
+        ////////////////////////////////////////////////
+        ///////// Add File Upload Script Here /////////
+        ////////////////////////////////////////////////
+
+        const uploadForm = document.getElementById("uploadForm");
+        const chatDbFileInput = document.getElementById("chatDbFile");
+        const fileUploadStatus = document.getElementById("fileUploadStatus");
+
+        uploadForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const file = chatDbFileInput.files[0];
+            if (!file) {
+                fileUploadStatus.textContent = "Please select a file before uploading.";
+                return;
+            }
+
+            fileUploadStatus.textContent = "Uploading file...";
+            const formData = new FormData();
+            formData.append("file", file);
+
+            try {
+                const response = await fetch("/validate-chat-file/", {
+                    method: "POST",
+                    body: formData,
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    fileUploadStatus.textContent = `✅ File uploaded successfully. Path: ${data.filepath}`;
+                } else {
+                    fileUploadStatus.textContent = `Error: ${data.error}`;
+                }
+            } catch (error) {
+                console.error(error);
+                fileUploadStatus.textContent = "Error uploading file.";
+            }
+        });
 
         ////////////////////////////////////////////////////////////////
         // Spotify Authorization
@@ -183,6 +229,7 @@
         // Check if Spotify was authorized (called after redirect)
         const urlParams = new URLSearchParams(window.location.search);
         const spotifyCode = urlParams.get("code");
+        console.log("Spotify code:", spotifyCode);
         if (spotifyCode) {
             spotifyStatus.textContent = "✅ Spotify Authorized";
             isSpotifyAuthorized = true;
