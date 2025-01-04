@@ -1,14 +1,16 @@
-from fastapi import FastAPI, UploadFile, Form, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+import logging
+from io import StringIO
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+import asyncio
 from fastapi.staticfiles import StaticFiles
 import os
+import time
 from dotenv import load_dotenv
 import requests
-
-import logging
-logger = logging.getLogger("uvicorn.error")
-
-
+from typing import Optional
+from dopetracks_summary.backend.core_logic import processs_user_inputs
+from queue import SimpleQueue
 
 
 # Load environment variables
@@ -38,8 +40,9 @@ async def upload_chat(
     start_date: str = Form(...),
     end_date: str = Form(...),
     playlist_name: str = Form(...),
-    chat_name_text: str = Form(None),
+    chat_name_text: Optional[str]= Form(None),
 ):
+
     try:
         # Dynamically construct the file path
         file_path = f"/Users/{username}/Library/Messages/chat.db"
@@ -55,19 +58,24 @@ async def upload_chat(
         with open(file_path, "rb") as f:
             file_content = f.read()
 
-        # Process the file (placeholder logic)
-        upload_dir = "uploads"
-        os.makedirs(upload_dir, exist_ok=True)
-        processed_file_path = os.path.join(upload_dir, f"{username}_chat.db")
-        with open(processed_file_path, "wb") as f:
-            f.write(file_content)
+        # Call the core logic function to process inputs and create a playlist
+        logging.info(f"Processing chat data for playlist: {playlist_name}")
 
+        processs_user_inputs(
+            start_date=start_date,
+            end_date=end_date,
+            playlist_name=playlist_name,
+            filepath=file_path,
+            chat_name_text=chat_name_text,
+        )
+             
         return {"message": "File processed successfully.", "playlist": playlist_name}
+    
     except Exception as e:
-        logger.error(f"Debug Info: {e}")
+        error_message = f"An error occurred while creating the playlist: {str(e)}"
+        logging.error(error_message)
         return JSONResponse(status_code=500, content={"error": str(e)})
-
-
+    
 @app.get("/callback")
 async def callback(request: Request):
     code = request.query_params.get("code")

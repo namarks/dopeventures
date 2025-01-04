@@ -85,52 +85,74 @@
         <button id="createPlaylist">Create Playlist</button>
     </section>
 
+    <div id="playlistCreationStatus" style="margin-top: 20px; font-style: italic;"></div>
+
     <script>
-        document.addEventListener("DOMContentLoaded", () => {
+        ////////////////////////////////////////////////
+        ///////// Create helper functions here /////////
+        ////////////////////////////////////////////////
+        
+        // Helper function to get the current timestamp
+        function getCurrentTimestamp() {
+            const now = new Date();
+            return now.toLocaleTimeString(); // Format: "hh:mm:ss AM/PM" or "HH:mm:ss"
+        }
+
+        // Enable Playlist Creation
+        function enablePlaylistCreation() {
+            if (isSpotifyAuthorized && isUsernameValidated) {
+                document.getElementById("playlistCreation").classList.remove("disabled");
+            }
+        }
+        ////////////////////////////////////////////////////////////////
+        ///////// Create dynamic variables here functions here /////////
+        ////////////////////////////////////////////////////////////////
+
         // State variables to track progress
         let isSpotifyAuthorized = false;
         let isUsernameValidated = false;
+        
 
+        ////////////////////////////////////////////////////////////////
         // Spotify Authorization
+        ////////////////////////////////////////////////////////////////
         const authorizeSpotifyButton = document.getElementById("authorizeSpotify");
         const spotifyStatus = document.getElementById("spotifyStatus");
 
         authorizeSpotifyButton.addEventListener("click", async () => {
-            try {
-                const response = await fetch("/get-client-id");
-                const data = await response.json();
-                if (data.client_id) {
-                    const clientId = data.client_id;
-                    const redirectUri =
-                        window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-                            ? "http://localhost:8888/callback" // Local environment
-                            : "https://your-production-domain.onrender.com/callback"; // Render environment
-                    const scopes = "playlist-modify-public user-read-playback-state";
-                    const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
-                    window.location.href = authUrl;
-                } else {
-                    spotifyStatus.textContent = "Error: Spotify Client ID not found.";
+                try {
+                    const response = await fetch("/get-client-id");
+                    if (!response.ok) {
+                        console.log(`${response.promise}`);
+                        console.log(`HTTP error! Status: ${response.status}`);
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    if (data.client_id) {
+                        const clientId = data.client_id;
+                        const redirectUri =
+                            window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+                                ? "http://localhost:8888/callback" // Local environment
+                                : "https://your-production-domain.onrender.com/callback"; // Render environment
+                        const scopes = "playlist-modify-public user-read-playback-state";
+                        const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+                        window.location.href = authUrl;
+                    } else {
+                        spotifyStatus.textContent = "Error: Spotify Client ID not found.";
+                    }
+                } catch (error) {
+                    console.error(error);
+                    spotifyStatus.textContent = "Error authorizing Spotify.";
                 }
-            } catch (error) {
-                console.error(error);
-                spotifyStatus.textContent = "Error authorizing Spotify.";
-            }
         });
 
-        // Check if Spotify was authorized (called after redirect)
-        const urlParams = new URLSearchParams(window.location.search);
-        const spotifyCode = urlParams.get("code");
-        if (spotifyCode) {
-            spotifyStatus.textContent = "✅ Spotify Authorized";
-            isSpotifyAuthorized = true;
-            enablePlaylistCreation();
-        }
-
+        ////////////////////////////////////////////////////////////////
         // Username Validation
+        ////////////////////////////////////////////////////////////////
         const validateUsernameButton = document.getElementById("validateUsername");
         const macUsernameInput = document.getElementById("macUsername");
         const usernameStatus = document.getElementById("usernameStatus");
-
+        
         validateUsernameButton.addEventListener("click", async () => {
             const username = macUsernameInput.value.trim();
             if (!username) {
@@ -147,8 +169,10 @@
                     usernameStatus.textContent = `✅ Username validated. iMessage database found at: ${data.filepath}`;
                     isUsernameValidated = true;
                     enablePlaylistCreation();
-                } else {
+                } else if (data.error) {
                     usernameStatus.textContent = `Error: ${data.error}`;
+                } else {
+                    usernameStatus.textContent = "Unknown error occurred.";
                 }
             } catch (error) {
                 console.error(error);
@@ -156,14 +180,18 @@
             }
         });
 
-        // Enable Playlist Creation
-        function enablePlaylistCreation() {
-            if (isSpotifyAuthorized && isUsernameValidated) {
-                document.getElementById("playlistCreation").classList.remove("disabled");
-            }
+        // Check if Spotify was authorized (called after redirect)
+        const urlParams = new URLSearchParams(window.location.search);
+        const spotifyCode = urlParams.get("code");
+        if (spotifyCode) {
+            spotifyStatus.textContent = "✅ Spotify Authorized";
+            isSpotifyAuthorized = true;
+            enablePlaylistCreation();
         }
-
+       
+        ////////////////////////////////////////////////////////////////    
         // Chat Group Search
+        ////////////////////////////////////////////////////////////////
         const chatSearchInput = document.getElementById("chatSearch");
         const searchChatsButton = document.getElementById("searchChats");
         const chatTableBody = document.getElementById("chatTable").querySelector("tbody");
@@ -198,10 +226,15 @@
             }
         });
 
-        // Playlist Creation
+        ////////////////////////////////////////////////////////////////
+        /////////////// Playlist Creation    ///////////////////////////
+        ////////////////////////////////////////////////////////////////
         const createPlaylistButton = document.getElementById("createPlaylist");
+        console.log("Attaching event listener to Create Playlist button");
+        const playlistCreationStatus = document.getElementById("playlistCreationStatus");
 
         createPlaylistButton.addEventListener("click", async () => {
+            console.log("Create Playlist button clicked!");
             const playlistName = document.getElementById("playlistName").value.trim();
             const startDate = document.getElementById("startDate").value;
             const endDate = document.getElementById("endDate").value;
@@ -210,6 +243,15 @@
                 alert("Please fill out all fields.");
                 return;
             }
+
+            console.log("Validation passed. Sending request to backend...");
+
+            console.log(`Creating playlist: "${playlistName}"...`);
+            console.log(`Start Date: ${startDate}`);
+            console.log(`End Date: ${endDate}`);
+            console.log(`Username: ${macUsernameInput.value.trim()}`);
+
+            playlistCreationStatus.textContent = `[${getCurrentTimestamp()}] Creating playlist: "${playlistName}"...\n\n`;
 
             try {
                 const response = await fetch("/upload-chat/", {
@@ -224,17 +266,17 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    alert(`Playlist "${playlistName}" created successfully!`);
+                    playlistCreationStatus.textContent += `[${getCurrentTimestamp()}] Playlist "${playlistName}" created successfully!`;
                 } else {
-                    alert(`Error: ${data.error}`);
+                    playlistCreationStatus.textContent += `[${getCurrentTimestamp()}] Playlist "${playlistName}" not created. Error: ${data.error}`;
                 }
             } catch (error) {
                 console.error(error);
                 alert("Error creating playlist.");
             }
-        });
-    });
+            });
 
+            
     </script>
 </body>
 </html>

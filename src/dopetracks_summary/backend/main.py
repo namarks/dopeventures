@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 from dopetracks_summary.backend.core_logic import processs_user_inputs
 
 def main():
@@ -13,7 +14,7 @@ def main():
     args = parser.parse_args()
 
     # Call the core logic
-    result = processs_user_inputs(args.start_date, args.end_date, args.playlist_name, args.filepath, args.chat_name_text)
+    processs_user_inputs(args.start_date, args.end_date, args.playlist_name, args.filepath, args.chat_name_text)
     
 if __name__ == "__main__":
     main()
