@@ -8,9 +8,11 @@ The solution to this problem turns out to be relatively straightforward once you
 2. Generate Spotify playlist and populate with identified songs
 
 
-To 
+## Local usage
 
-### Caching
+There is currently version of a website that works when hosted locally. To start this, ensure that you've install dopetracks, navigate to the in the `/dopeventures` working directory, and then run `uvicorn packages.dopetracks.dopetracks.frontend_interface.web_interface:app --reload --host 127.0.0.1 --port 888` 
+
+## Caching
 
 This project uses an SQLite database to cache metadata for Spotify URLs, stored in the user's home directory at `~/.spotify_cache/spotify_cache.db`. This ensures efficient reuse of metadata and reduces API calls.
 
@@ -19,7 +21,7 @@ To initialize the cache, simply run the script. The cache directory will be crea
 The cache file is not included in this repository to ensure user privacy and prevent unnecessary commits.
 
 
-### Useful resources
+## Useful resources
 - typedstream library to parse Apple-formatted binary https://github.com/dgelessus/python-typedstream
 - Other projects that parse iMessage data
     - https://github.com/yortos/imessage-analysis/blob/master/notebooks/imessages-analysis.ipynb
