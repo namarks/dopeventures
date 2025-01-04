@@ -25,4 +25,4 @@ The cache file is not included in this repository to ensure user privacy and pre
     - https://github.com/yortos/imessage-analysis/blob/master/notebooks/imessages-analysis.ipynb
     - https://github.com/caleb531/imessage-conversation-analyzer/tree/167fb9c9a9082df453857f640d60904b30690443
     - BAIB project: https://github.com/arjunpat/treehacks24/blob/eb97a81c97b577e37a85d5dbdfdb2464c9fd7bfa/README.md
-- List of music-related APIs: https://musicmachinery.com/music-apis/Renamed repository to dopetracks
+- List of music-related APIs: https://musicmachinery.com/music-apis/
