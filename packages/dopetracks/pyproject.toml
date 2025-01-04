@@ -2,7 +2,7 @@
 name = "dopetracks"
 version = "0.1.0"
 description = ""
-authors = ["nmarks <nmarkspdx@gmail.com>"]
+authors = ["namarks <nmarkspdx@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
