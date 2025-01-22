@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="dopetracks",
-    version="0.1.1",
+    version="0.1.2",
     author="Nick Marks",
     author_email="nmarkspdx@gmail.com",
     url="https://github.com/namarks/dopeventures",  # GitHub repo URL
