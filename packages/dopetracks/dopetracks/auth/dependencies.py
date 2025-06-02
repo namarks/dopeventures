@@ -88,11 +88,38 @@ def get_user_agent(request: Request) -> str:
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """
     Require admin privileges.
-    You can extend the User model to have an is_admin field later.
     """
-    # For now, we'll consider the first user as admin
-    # In production, add an is_admin field to the User model
-    if current_user.id != 1:
+    if not current_user.is_admin():
         raise AuthorizationError("Admin privileges required")
+    
+    return current_user
+
+def require_super_admin(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Require super admin privileges.
+    """
+    if not current_user.is_super_admin():
+        raise AuthorizationError("Super admin privileges required")
+    
+    return current_user
+
+def require_permission(permission: str):
+    """
+    Factory function to create permission-specific dependencies.
+    Usage: @app.get("/endpoint", dependencies=[Depends(require_permission("view_users"))])
+    """
+    def permission_dependency(current_user: User = Depends(get_current_user)) -> User:
+        if not current_user.has_permission(permission):
+            raise AuthorizationError(f"Permission '{permission}' required")
+        return current_user
+    
+    return permission_dependency
+
+def require_user_or_admin(target_user_id: int, current_user: User = Depends(get_current_user)) -> User:
+    """
+    Require either the user owns the resource or has admin privileges.
+    """
+    if current_user.id != target_user_id and not current_user.is_admin():
+        raise AuthorizationError("Access denied: You can only access your own resources or be an admin")
     
     return current_user 

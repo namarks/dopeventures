@@ -13,6 +13,7 @@ from ..database.models import (
 )
 from ..auth.security import hash_file_content, generate_secure_filename
 from ..config import settings
+from .session_storage import session_storage
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,12 @@ class UserDataService:
     
     def get_cached_data(self, data_type: str) -> Optional[Dict[str, Any]]:
         """Get cached data for a specific type (messages, contacts, etc.)."""
+        # First try to get from session storage
+        session_data = session_storage.get_data(self.user.id, data_type)
+        if session_data is not None:
+            return session_data
+            
+        # Fall back to database cache if not in session
         cache_entry = self.db.query(UserDataCache).filter(
             UserDataCache.user_id == self.user.id,
             UserDataCache.data_type == data_type
@@ -32,72 +39,53 @@ class UserDataService:
         
         if cache_entry:
             try:
-                return json.loads(cache_entry.data_blob)
+                data = json.loads(cache_entry.data_blob)
+                # Store in session for future use
+                session_storage.store_data(self.user.id, data_type, data)
+                return data
             except json.JSONDecodeError:
                 logger.error(f"Failed to decode cached data for user {self.user.id}, type {data_type}")
                 return None
         
         return None
     
-    def set_cached_data(
-        self, 
-        data_type: str, 
-        data: Dict[str, Any], 
-        file_hash: Optional[str] = None
-    ) -> bool:
-        """Set cached data for a specific type."""
+    def cache_data(self, data_type: str, data: Dict[str, Any], file_hash: Optional[str] = None) -> None:
+        """Cache data for a specific type (messages, contacts, etc.)."""
+        # Store in session storage
+        session_storage.store_data(self.user.id, data_type, data)
+        
+        # Also store in database for persistence across sessions
         try:
-            data_blob = json.dumps(data, default=str)  # default=str for datetime serialization
-            
-            # Check if entry exists
-            cache_entry = self.db.query(UserDataCache).filter(
+            data_blob = json.dumps(data)
+            cache_entry = UserDataCache(
+                user_id=self.user.id,
+                data_type=data_type,
+                data_blob=data_blob,
+                file_hash=file_hash
+            )
+            self.db.merge(cache_entry)  # Use merge to handle both insert and update
+            self.db.commit()
+            logger.info(f"Cached {data_type} data for user {self.user.id}")
+        except Exception as e:
+            logger.error(f"Failed to cache data for user {self.user.id}: {e}")
+            self.db.rollback()
+    
+    def clear_cached_data(self, data_type: str) -> None:
+        """Clear cached data for a specific type."""
+        # Clear from session storage
+        session_storage.clear_data_type(self.user.id, data_type)
+        
+        # Clear from database
+        try:
+            self.db.query(UserDataCache).filter(
                 UserDataCache.user_id == self.user.id,
                 UserDataCache.data_type == data_type
-            ).first()
-            
-            if cache_entry:
-                # Update existing entry
-                cache_entry.data_blob = data_blob
-                cache_entry.file_hash = file_hash
-            else:
-                # Create new entry
-                cache_entry = UserDataCache(
-                    user_id=self.user.id,
-                    data_type=data_type,
-                    data_blob=data_blob,
-                    file_hash=file_hash
-                )
-                self.db.add(cache_entry)
-            
+            ).delete()
             self.db.commit()
-            logger.info(f"Cached data updated for user {self.user.id}, type {data_type}")
-            return True
-            
+            logger.info(f"Cleared {data_type} cache for user {self.user.id}")
         except Exception as e:
-            logger.error(f"Failed to cache data for user {self.user.id}, type {data_type}: {e}")
+            logger.error(f"Failed to clear cache for user {self.user.id}: {e}")
             self.db.rollback()
-            return False
-    
-    def clear_cached_data(self, data_type: Optional[str] = None) -> bool:
-        """Clear cached data. If data_type is None, clear all cached data for user."""
-        try:
-            query = self.db.query(UserDataCache).filter(
-                UserDataCache.user_id == self.user.id
-            )
-            
-            if data_type:
-                query = query.filter(UserDataCache.data_type == data_type)
-            
-            deleted_count = query.delete()
-            self.db.commit()
-            
-            logger.info(f"Cleared {deleted_count} cached data entries for user {self.user.id}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to clear cached data for user {self.user.id}: {e}")
-            self.db.rollback()
-            return False
     
     def save_uploaded_file(
         self, 
@@ -289,6 +277,46 @@ class UserDataService:
             logger.error(f"Failed to clear Spotify tokens for user {self.user.id}: {e}")
             self.db.rollback()
             return False
+
+    def set_preferred_db_path(self, db_path: str) -> bool:
+        """Store the preferred Messages database path for the user."""
+        try:
+            data_blob = json.dumps({"db_path": db_path})
+            cache_entry = self.db.query(UserDataCache).filter(
+                UserDataCache.user_id == self.user.id,
+                UserDataCache.data_type == "preferred_db_path"
+            ).first()
+            if cache_entry:
+                cache_entry.data_blob = data_blob
+            else:
+                cache_entry = UserDataCache(
+                    user_id=self.user.id,
+                    data_type="preferred_db_path",
+                    data_blob=data_blob
+                )
+                self.db.add(cache_entry)
+            self.db.commit()
+            logger.info(f"Preferred DB path set for user {self.user.id}: {db_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set preferred DB path for user {self.user.id}: {e}")
+            self.db.rollback()
+            return False
+
+    def get_preferred_db_path(self) -> str | None:
+        """Get the preferred Messages database path for the user, if set."""
+        cache_entry = self.db.query(UserDataCache).filter(
+            UserDataCache.user_id == self.user.id,
+            UserDataCache.data_type == "preferred_db_path"
+        ).first()
+        if cache_entry:
+            try:
+                data = json.loads(cache_entry.data_blob)
+                return data.get("db_path")
+            except Exception as e:
+                logger.error(f"Failed to decode preferred DB path for user {self.user.id}: {e}")
+                return None
+        return None
 
 def get_user_data_service(db: Session, user: User) -> UserDataService:
     """Factory function to create UserDataService instance."""

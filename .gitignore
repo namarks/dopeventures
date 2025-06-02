@@ -31,3 +31,9 @@ dopetracks_summary.egg-info/
 
 # Ignore log files
 .backend.log
+
+# Ignore uploads
+user_uploads/
+*.db
+*.db-wal
+*.db-shm

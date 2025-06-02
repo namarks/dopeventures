@@ -3,12 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Dopetracks Playlist Generator</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 40px;
             line-height: 1.6;
+        }
+        
+        /* Authentication Modal Styles */
+        .auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .auth-modal {
+            background: white;
+            border-radius: 10px;
+            padding: 40px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+        
+        .auth-modal h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .auth-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .auth-form input {
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .auth-form input:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+        
+        .auth-form button {
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .auth-form button:hover {
+            background-color: #0056b3;
+        }
+        
+        .auth-form button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .auth-switch {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .auth-switch a {
+            color: #007bff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        
+        .auth-switch a:hover {
+            text-decoration: underline;
+        }
+        
+        .auth-error {
+            color: #dc3545;
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 5px;
+        }
+        
+        .auth-success {
+            color: #155724;
+            text-align: center;
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 5px;
+        }
+        
+        /* User Info Bar */
+        .user-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: #343a40;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 1500;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .user-role {
+            background-color: #007bff;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .user-role.admin {
+            background-color: #dc3545;
+        }
+        
+        .user-role.super_admin {
+            background-color: #6f42c1;
+        }
+        
+        .logout-btn {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .logout-btn:hover {
+            background-color: #5a6268;
+        }
+        
+        .admin-link {
+            background-color: #dc3545;
+            color: white;
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .admin-link:hover {
+            background-color: #c82333;
+            color: white;
+        }
+        
+        /* Adjust main content for user bar */
+        body.authenticated {
+            padding-top: 60px;
+        }
+        
+        /* Hide main content when not authenticated */
+        .main-content {
+            display: none;
+        }
+        
+        .main-content.visible {
+            display: block;
         }
         
         /* Floating Progress Indicator */
@@ -340,150 +527,207 @@
     </style>
 </head>
 <body>
-    <!-- Floating Progress Indicator -->
-    <div class="floating-progress" id="floatingProgress">
-        <!-- Completed steps will be added here dynamically -->
+    <!-- User Bar (hidden initially) -->
+    <div class="user-bar" id="userBar" style="display: none;">
+        <div class="user-info">
+            <span>Welcome, <strong id="currentUsername">User</strong></span>
+            <span class="user-role" id="currentUserRole">user</span>
+        </div>
+        <div>
+            <a href="/admin/" class="admin-link" id="adminLink" style="display: none;">Admin Panel</a>
+            <button class="logout-btn" id="logoutBtn">Logout</button>
+        </div>
     </div>
 
-    <h1>Dopetracks Playlist Generator</h1>
-
-    <!-- Spotify Authorization Section -->
-    <section id="spotifyAuth" class="active">
-        <h2><span class="step-number">Step 1:</span> Spotify Authorization</h2>
-        <div class="section-content">
-            <p><em>Connect your Spotify account to create playlists.</em></p>
+    <!-- Authentication Modal -->
+    <div class="auth-overlay" id="authOverlay">
+        <div class="auth-modal">
+            <h2 id="authTitle">Welcome to Dopetracks</h2>
             
-            <div id="spotifyStatus" style="margin: 10px 0; padding: 10px; border-radius: 5px; font-weight: bold;">
-                <span id="spotifyStatusText">Not connected to Spotify</span>
-            </div>
+            <div id="authError" class="auth-error" style="display: none;"></div>
+            <div id="authSuccess" class="auth-success" style="display: none;"></div>
             
-            <button id="authorizeSpotify">Connect to Spotify</button>
+            <!-- Login Form -->
+            <form class="auth-form" id="loginForm">
+                <input type="text" id="loginUsername" placeholder="Username" required>
+                <input type="password" id="loginPassword" placeholder="Password" required>
+                <button type="submit" id="loginBtn">Login</button>
+            </form>
             
-            <div id="userProfileContainer" style="margin-top: 15px; display: none;">
-                <div><strong>Connected as:</strong></div>
-                <div id="userProfile" style="background-color: #f8f9fa; padding: 10px; border-radius: 5px;"></div>
-            </div>
-        </div>
-    </section>
-
-    <!-- System Setup Section -->
-    <section id="systemSetup" class="disabled">
-        <h2><span class="step-number">Step 2:</span> System Setup</h2>
-        <div class="section-content">
-            <p><em>Verify your system has access to the Messages database.</em></p>
+            <!-- Register Form -->
+            <form class="auth-form" id="registerForm" style="display: none;">
+                <input type="text" id="registerUsername" placeholder="Username" required>
+                <input type="email" id="registerEmail" placeholder="Email" required>
+                <input type="password" id="registerPassword" placeholder="Password" required>
+                <button type="submit" id="registerBtn">Register</button>
+            </form>
             
-            <div id="systemStatus" style="margin: 10px 0; padding: 10px; border-radius: 5px; font-weight: bold;">
-                <span id="systemStatusText">System access not verified</span>
-            </div>
-
-            <div>
-                <label for="username">macOS Username:</label>
-                <input type="text" id="username" placeholder="e.g., johnsmith" style="margin-left: 10px; width: 200px;">
-                <button id="validateUsername">Verify Access</button>
-            </div>
-
-            <div style="margin-top: 15px;">
-                <p><strong>Alternative:</strong> Upload your Messages database file</p>
-                <input type="file" id="chatFileInput" accept=".db">
-                <button id="validateChatFile">Validate File</button>
-            </div>
-
-            <div id="uploadStatus"></div>
-        </div>
-    </section>
-
-    <!-- Data Preparation Section -->
-    <section id="dataPreparation" class="disabled">
-        <h2><span class="step-number">Step 3:</span> Data Preparation</h2>
-        <div class="section-content">
-            <p><em>Process your iMessage data for searching and playlist creation (~45 seconds).</em></p>
+            <!-- Forgot Password Form -->
+            <form class="auth-form" id="forgotPasswordForm" style="display: none;">
+                <input type="email" id="forgotPasswordEmail" placeholder="Email address" required>
+                <button type="submit" id="forgotPasswordBtn">Send Reset Link</button>
+            </form>
             
-            <div id="dataStatus" style="margin: 10px 0; padding: 10px; border-radius: 5px; font-weight: bold;">
-                <span id="dataStatusText">Data not prepared</span>
-            </div>
+            <!-- Reset Password Form -->
+            <form class="auth-form" id="resetPasswordForm" style="display: none;">
+                <input type="password" id="resetNewPassword" placeholder="New Password" required>
+                <input type="password" id="resetConfirmPassword" placeholder="Confirm New Password" required>
+                <button type="submit" id="resetPasswordBtn">Reset Password</button>
+            </form>
             
-            <button id="prepareDataButton">Prepare Data</button>
-            
-            <div id="dataPreparationProgress" style="margin-top: 15px; display: none;">
-                <div><strong>Data Preparation Progress:</strong></div>
-                <div id="progressMessages" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4; margin-top: 10px;"></div>
+            <div class="auth-switch">
+                <p id="authSwitchText">Don't have an account? <a href="#" data-auth-action="register">Register</a> | <a href="#" data-auth-action="forgot-password">Forgot Password?</a></p>
             </div>
         </div>
-    </section>
+    </div>
 
-    <!-- Chat Search Section -->
-    <section id="chatSearch" class="disabled">
-        <h2><span class="step-number">Step 4:</span> Chat Search & Selection</h2>
-        <div class="section-content">
-            <p><em>Search for chats by name or participant names, then select which ones to include in your playlist.</em></p>
-            
-            <div class="search-container">
-                <input type="text" id="searchInput" placeholder="Search chats by name or participant...">
-                <button id="searchButton">Search Chats</button>
-            </div>
+    <!-- Main Application Content -->
+    <div class="main-content" id="mainContent">
+        <!-- Floating Progress Indicator -->
+        <div class="floating-progress" id="floatingProgress">
+            <!-- Completed steps will be added here dynamically -->
+        </div>
 
-            <div id="searchResults" style="margin-top: 20px; overflow-x: auto;">
-                <div style="width: 100%; overflow-x: auto;">
-                    <table id="chatTable" style="display: none; min-width: 900px;">
-                    <thead>
-                        <tr>
-                                <th class="sticky-col left-col" style="width: 50px;">Select</th>
-                                <th class="sticky-col" style="min-width: 180px;">Chat Name</th>
-                            <th style="width: 80px;">Members</th>
-                            <th style="width: 100px;">Total Messages</th>
-                            <th style="width: 100px;">My Messages</th>
-                            <th style="width: 80px;">Spotify URLs</th>
-                                <th style="width: 140px;">Most Recent Song Date</th>
-                        </tr>
-                    </thead>
-                    <tbody id="chatTableBody">
-                    </tbody>
-                </table>
+        <h1>Dopetracks Playlist Generator</h1>
+
+        <!-- Spotify Authorization Section -->
+        <section id="spotifyAuth" class="active">
+            <h2><span class="step-number">Step 1:</span> Spotify Authorization</h2>
+            <div class="section-content">
+                <p><em>Connect your Spotify account to create playlists.</em></p>
+                
+                <div id="spotifyStatus" style="margin: 10px 0; padding: 10px; border-radius: 5px; font-weight: bold;">
+                    <span id="spotifyStatusText">Not connected to Spotify</span>
+                </div>
+                
+                <button id="authorizeSpotify">Connect to Spotify</button>
+                
+                <div id="userProfileContainer" style="margin-top: 15px; display: none;">
+                    <div><strong>Connected as:</strong></div>
+                    <div id="userProfile" style="background-color: #f8f9fa; padding: 10px; border-radius: 5px;"></div>
                 </div>
             </div>
+        </section>
 
-            <div id="selectedChatsSection" style="margin-top: 25px;">
-                <h3>Selected Chats:</h3>
-                <div id="selectedChatsDisplay">
-                    <p style="color: #666; font-style: italic;">No chats selected</p>
+        <!-- System Setup Section -->
+        <section id="systemSetup" class="disabled">
+            <h2><span class="step-number">Step 2:</span> System Setup</h2>
+            <div class="section-content">
+                <p><em>Verify your system has access to the Messages database.</em></p>
+                
+                <div id="systemStatus" style="margin: 10px 0; padding: 10px; border-radius: 5px; font-weight: bold;">
+                    <span id="systemStatusText">System access not verified</span>
                 </div>
-                <button id="clearSelectedChats" style="display: none; background-color: #dc3545;">Clear All</button>
+
+                <div>
+                    <label for="username">macOS Username:</label>
+                    <input type="text" id="username" placeholder="e.g., johnsmith" style="margin-left: 10px; width: 200px;">
+                    <button id="validateUsername">Verify Access</button>
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <p><strong>Alternative:</strong> Upload your Messages database file</p>
+                    <input type="file" id="chatFileInput" accept=".db">
+                    <button id="validateChatFile">Validate File</button>
+                </div>
+
+                <div id="uploadStatus"></div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Playlist Creation Section -->
-    <section id="playlistCreation" class="disabled">
-        <h2><span class="step-number">Step 5:</span> Playlist Creation</h2>
-        <div class="section-content">
-            <p><em>Create a Spotify playlist from your selected chats and date range.</em></p>
-            <p><em style="color: #dc3545;">⚠️ Please complete previous steps and select at least one chat first</em></p>
+        <!-- Data Preparation Section -->
+        <section id="dataPreparation" class="disabled">
+            <h2><span class="step-number">Step 3:</span> Data Preparation</h2>
+            <div class="section-content">
+                <p><em>Process your iMessage data for searching and playlist creation (~45 seconds).</em></p>
+                
+                <div id="dataStatus" style="margin: 10px 0; padding: 10px; border-radius: 5px; font-weight: bold;">
+                    <span id="dataStatusText">Data not prepared</span>
+                </div>
+                
+                <button id="prepareDataButton">Prepare Data</button>
+                
+                <div id="dataPreparationProgress" style="margin-top: 15px; display: none;">
+                    <div><strong>Data Preparation Progress:</strong></div>
+                    <div id="progressMessages" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4; margin-top: 10px;"></div>
+                </div>
+            </div>
+        </section>
 
-            <form id="playlistForm">
-                <div style="margin-bottom: 15px;">
-                    <label for="playlistName">Playlist Name:</label><br>
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <input type="text" id="playlistName" name="playlist_name" required style="width: 300px;">
-                        <button type="button" id="refreshPlaylists" title="Refresh playlist list" style="padding: 5px 10px;">🔄</button>
+        <!-- Chat Search Section -->
+        <section id="chatSearch" class="disabled">
+            <h2><span class="step-number">Step 4:</span> Chat Search & Selection</h2>
+            <div class="section-content">
+                <p><em>Search for chats by name or participant names, then select which ones to include in your playlist.</em></p>
+                
+                <div class="search-container">
+                    <input type="text" id="searchInput" placeholder="Search chats by name or participant...">
+                    <button id="searchButton">Search Chats</button>
+                </div>
+
+                <div id="searchResults" style="margin-top: 20px; overflow-x: auto;">
+                    <div style="width: 100%; overflow-x: auto;">
+                        <table id="chatTable" style="display: none; min-width: 900px;">
+                        <thead>
+                            <tr>
+                                    <th class="sticky-col left-col" style="width: 50px;">Select</th>
+                                    <th class="sticky-col" style="min-width: 180px;">Chat Name</th>
+                                <th style="width: 80px;">Members</th>
+                                <th style="width: 100px;">Total Messages</th>
+                                <th style="width: 100px;">My Messages</th>
+                                <th style="width: 80px;">Spotify URLs</th>
+                                    <th style="width: 140px;">Most Recent Song Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="chatTableBody">
+                        </tbody>
+                    </table>
                     </div>
                 </div>
 
-                <div style="margin-bottom: 15px;">
-                    <label for="startDate">Start Date:</label>
-                    <input type="date" id="startDate" name="start_date" required>
-                    
-                    <label for="endDate" style="margin-left: 20px;">End Date:</label>
-                    <input type="date" id="endDate" name="end_date" required>
+                <div id="selectedChatsSection" style="margin-top: 25px;">
+                    <h3>Selected Chats:</h3>
+                    <div id="selectedChatsDisplay">
+                        <p style="color: #666; font-style: italic;">No chats selected</p>
+                    </div>
+                    <button id="clearSelectedChats" style="display: none; background-color: #dc3545;">Clear All</button>
                 </div>
+            </div>
+        </section>
 
-                <button type="submit" id="createPlaylist" disabled style="opacity: 0.6;">Create Playlist</button>
-            </form>
+        <!-- Playlist Creation Section -->
+        <section id="playlistCreation" class="disabled">
+            <h2><span class="step-number">Step 5:</span> Playlist Creation</h2>
+            <div class="section-content">
+                <p><em>Create a Spotify playlist from your selected chats and date range.</em></p>
+                <p><em style="color: #dc3545;">⚠️ Please complete previous steps and select at least one chat first</em></p>
 
-            <div id="playlistStatus"></div>
-        </div>
-    </section>
+                <form id="playlistForm">
+                    <div style="margin-bottom: 15px;">
+                        <label for="playlistName">Playlist Name:</label><br>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <input type="text" id="playlistName" name="playlist_name" required style="width: 300px;">
+                            <button type="button" id="refreshPlaylists" title="Refresh playlist list" style="padding: 5px 10px;">🔄</button>
+                        </div>
+                    </div>
 
-    <script src="config.js"></script>
-    <script src="script.js"></script>
+                    <div style="margin-bottom: 15px;">
+                        <label for="startDate">Start Date:</label>
+                        <input type="date" id="startDate" name="start_date" required>
+                        
+                        <label for="endDate" style="margin-left: 20px;">End Date:</label>
+                        <input type="date" id="endDate" name="end_date" required>
+                    </div>
+
+                    <button type="submit" id="createPlaylist" disabled style="opacity: 0.6;">Create Playlist</button>
+                </form>
+
+                <div id="playlistStatus"></div>
+            </div>
+        </section>
+    </div>
+
+    <script src="config.js?v=20250601-2100"></script>
+    <script src="script.js?v=20250601-2100"></script>
 </body>
 </html>

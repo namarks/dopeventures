@@ -5,7 +5,7 @@ Supports SQLite for development and PostgreSQL for production.
 import logging
 from contextlib import contextmanager
 from typing import Generator
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
@@ -28,14 +28,15 @@ def create_database_engine() -> Engine:
     
     database_url = settings.DATABASE_URL
     connect_args = {}
+    engine_kwargs = {}
     
     # SQLite-specific configuration
     if database_url.startswith("sqlite"):
         # Enable foreign key constraints for SQLite
         connect_args = {
             "check_same_thread": False,
-            "poolclass": StaticPool,
         }
+        engine_kwargs["poolclass"] = StaticPool
         
         @event.listens_for(Engine, "connect")
         def set_sqlite_pragma(dbapi_connection, connection_record):
@@ -59,6 +60,7 @@ def create_database_engine() -> Engine:
         database_url,
         connect_args=connect_args,
         echo=settings.DEBUG,  # Log SQL queries in debug mode
+        **engine_kwargs
     )
     
     logger.info(f"Database engine created for: {database_url.split('@')[0] if '@' in database_url else database_url}")
@@ -125,7 +127,7 @@ def check_database_health() -> bool:
     try:
         with get_db_session() as db:
             # Simple query to test connection
-            db.execute("SELECT 1")
+            db.execute(text("SELECT 1"))
         return True
     except Exception as e:
         logger.error(f"Database health check failed: {e}")

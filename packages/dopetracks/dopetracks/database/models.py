@@ -19,6 +19,8 @@ class User(Base):
     email = Column(String(100), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
+    role = Column(String(20), default="user")  # user, admin, super_admin
+    permissions = Column(Text)  # JSON string of specific permissions
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
@@ -27,6 +29,37 @@ class User(Base):
     spotify_tokens = relationship("UserSpotifyToken", back_populates="user", cascade="all, delete-orphan")
     data_cache = relationship("UserDataCache", back_populates="user", cascade="all, delete-orphan")
     playlists = relationship("UserPlaylist", back_populates="user", cascade="all, delete-orphan")
+    password_resets = relationship("UserPasswordReset", back_populates="user", cascade="all, delete-orphan")
+
+    def has_permission(self, permission: str) -> bool:
+        """Check if user has a specific permission."""
+        if self.role == "super_admin":
+            return True
+        if self.role == "admin":
+            admin_permissions = [
+                "view_users", "manage_users", "view_system_stats", 
+                "manage_sessions", "view_logs"
+            ]
+            if permission in admin_permissions:
+                return True
+        
+        # Check custom permissions
+        if self.permissions:
+            import json
+            try:
+                custom_perms = json.loads(self.permissions)
+                return permission in custom_perms
+            except:
+                return False
+        return False
+    
+    def is_admin(self) -> bool:
+        """Check if user has admin role or higher."""
+        return self.role in ["admin", "super_admin"]
+    
+    def is_super_admin(self) -> bool:
+        """Check if user has super admin role."""
+        return self.role == "super_admin"
 
 class UserSession(Base):
     """User session model for authentication."""
@@ -127,6 +160,28 @@ class UserPlaylist(Base):
     # Indexes
     __table_args__ = (
         Index('idx_user_playlists', 'user_id', 'created_at'),
+    )
+
+class UserPasswordReset(Base):
+    """Password reset tokens for users."""
+    __tablename__ = "user_password_resets"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    reset_token = Column(String(255), unique=True, index=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    ip_address = Column(String(45))  # Track where reset was requested
+    user_agent = Column(String(500))
+    
+    # Relationships
+    user = relationship("User", back_populates="password_resets")
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_reset_token_expires', 'reset_token', 'expires_at'),
+        Index('idx_user_resets', 'user_id', 'created_at'),
     )
 
 # Utility functions for models

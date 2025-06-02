@@ -1,5 +1,549 @@
 console.log("script.js loaded!");
 
+// Global variables for authentication
+let isAuthenticated = false;
+let currentUser = null;
+let isInResetMode = false; // Track if we're in password reset mode
+let resetToken = null; // Store the reset token from URL
+// BASE_URL is defined in config.js
+const AUTH_BASE_URL = `${BASE_URL}/auth`;
+
+// Cache refresh: 2025-06-01 20:32 - Force reload for forgot password link
+
+// DOM elements for authentication
+const authOverlay = document.getElementById('authOverlay');
+const userBar = document.getElementById('userBar');
+const mainContent = document.getElementById('mainContent');
+const loginForm = document.getElementById('loginForm');
+const registerForm = document.getElementById('registerForm');
+const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+const resetPasswordForm = document.getElementById('resetPasswordForm');
+const authTitle = document.getElementById('authTitle');
+const authError = document.getElementById('authError');
+const authSuccess = document.getElementById('authSuccess');
+const switchToRegister = document.getElementById('switchToRegister');
+const authSwitchText = document.getElementById('authSwitchText');
+const currentUsername = document.getElementById('currentUsername');
+const currentUserRole = document.getElementById('currentUserRole');
+const adminLink = document.getElementById('adminLink');
+const logoutBtn = document.getElementById('logoutBtn');
+
+// Check for reset token in URL parameters
+function checkForResetToken() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    
+    if (token) {
+        resetToken = token;
+        isInResetMode = true;
+        // Clear the token from URL for security
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return true;
+    }
+    return false;
+}
+
+// Check authentication status on page load
+async function checkAuthStatus() {
+    // Check if we're in password reset mode first
+    if (checkForResetToken()) {
+        await verifyResetToken();
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${AUTH_BASE_URL}/status`);
+        const data = await response.json();
+        
+        if (data.authenticated) {
+            currentUser = data.user;
+            isAuthenticated = true;
+            showMainApp();
+        } else {
+            showAuthModal();
+        }
+    } catch (error) {
+        console.error('Error checking auth status:', error);
+        showAuthModal();
+    }
+}
+
+// Show authentication modal
+function showAuthModal() {
+    authOverlay.style.display = 'flex';
+    userBar.style.display = 'none';
+    mainContent.classList.remove('visible');
+    document.body.classList.remove('authenticated');
+}
+
+// Show main application
+function showMainApp() {
+    authOverlay.style.display = 'none';
+    userBar.style.display = 'flex';
+    mainContent.classList.add('visible');
+    document.body.classList.add('authenticated');
+    
+    if (currentUser) {
+        currentUsername.textContent = currentUser.username;
+        currentUserRole.textContent = currentUser.role || 'user';
+        currentUserRole.className = `user-role ${currentUser.role || 'user'}`;
+        
+        // Show admin link for admin users
+        if (currentUser.role === 'admin' || currentUser.role === 'super_admin') {
+            adminLink.style.display = 'inline-block';
+        }
+    }
+    
+    // Check Spotify authorization status
+    checkSpotifyAuthStatus();
+}
+
+// Check Spotify authorization status
+async function checkSpotifyAuthStatus() {
+    try {
+        const response = await apiFetch('/user-profile');
+        if (response.ok) {
+            // User has Spotify tokens and they're valid
+            const profile = await response.json();
+            updateStatus(
+                document.getElementById("spotifyStatus"),
+                document.getElementById("spotifyStatusText"),
+                "✅ Connected to Spotify",
+                "success"
+            );
+            
+            // Update profile display
+            document.getElementById('userProfile').innerHTML = `
+                <strong>Name:</strong> ${profile.display_name}<br>
+                <strong>Email:</strong> ${profile.email}<br>
+                <strong>Country:</strong> ${profile.country}
+            `;
+            document.getElementById('userProfileContainer').style.display = 'block';
+            
+            // Update button text
+            const spotifyButton = document.getElementById("authorizeSpotify");
+            if (spotifyButton) {
+                spotifyButton.textContent = "Reconnect to Spotify";
+            }
+            
+            // Enable next steps
+            isSpotifyAuthorized = true;
+            completeCurrentStep();
+        } else {
+            // User doesn't have valid Spotify tokens
+            updateStatus(
+                document.getElementById("spotifyStatus"),
+                document.getElementById("spotifyStatusText"),
+                "Not connected to Spotify",
+                "pending"
+            );
+        }
+    } catch (error) {
+        console.log('Spotify not connected yet:', error);
+        updateStatus(
+            document.getElementById("spotifyStatus"),
+            document.getElementById("spotifyStatusText"),
+            "Not connected to Spotify",
+            "pending"
+        );
+    }
+}
+
+// Show/hide auth error
+function showAuthError(message) {
+    authError.textContent = message;
+    authError.style.display = 'block';
+    authSuccess.style.display = 'none';
+}
+
+// Show/hide auth success
+function showAuthSuccess(message) {
+    authSuccess.textContent = message;
+    authSuccess.style.display = 'block';
+    authError.style.display = 'none';
+}
+
+// Clear auth messages
+function clearAuthMessages() {
+    authError.style.display = 'none';
+    authSuccess.style.display = 'none';
+}
+
+// Switch between login and register forms
+function switchAuthMode(mode = 'login') {
+    console.log('switchAuthMode called with mode:', mode);
+    clearAuthMessages();
+    
+    // Hide all forms first
+    loginForm.style.display = 'none';
+    registerForm.style.display = 'none';
+    forgotPasswordForm.style.display = 'none';
+    resetPasswordForm.style.display = 'none';
+    
+    switch (mode) {
+        case 'register':
+            authTitle.textContent = 'Create Account';
+            registerForm.style.display = 'block';
+            authSwitchText.innerHTML = 'Already have an account? <a href="#" data-auth-action="login">Login</a>';
+            break;
+            
+        case 'forgot-password':
+            authTitle.textContent = 'Reset Password';
+            forgotPasswordForm.style.display = 'block';
+            authSwitchText.innerHTML = 'Remember your password? <a href="#" data-auth-action="login">Login</a>';
+            break;
+            
+        case 'reset-password':
+            authTitle.textContent = 'Set New Password';
+            resetPasswordForm.style.display = 'block';
+            authSwitchText.innerHTML = 'Go back to <a href="#" data-auth-action="login">Login</a>';
+            break;
+            
+        default: // login
+            authTitle.textContent = 'Welcome Back';
+            loginForm.style.display = 'block';
+            const newHTML = 'Don\'t have an account? <a href="#" data-auth-action="register">Register</a> | <a href="#" data-auth-action="forgot-password">Forgot Password?</a>';
+            console.log('Setting authSwitchText innerHTML to:', newHTML);
+            authSwitchText.innerHTML = newHTML;
+            break;
+    }
+    
+    console.log('switchAuthMode completed, current authSwitchText innerHTML:', authSwitchText.innerHTML);
+}
+
+// Handle login
+async function handleLogin(event) {
+    event.preventDefault();
+    clearAuthMessages();
+    
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    
+    if (!username || !password) {
+        showAuthError('Please enter both username and password');
+        return;
+    }
+    
+    const loginBtn = document.getElementById('loginBtn');
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Logging in...';
+    
+    try {
+        const response = await fetch(`${AUTH_BASE_URL}/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ username, password }),
+            credentials: 'include'
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            currentUser = data.user;
+            isAuthenticated = true;
+            showAuthSuccess('Login successful!');
+            
+            setTimeout(() => {
+                showMainApp();
+            }, 1000);
+        } else {
+            // Handle different error response formats
+            let errorMessage = 'Login failed';
+            if (data.detail) {
+                if (Array.isArray(data.detail)) {
+                    // Pydantic validation errors
+                    errorMessage = data.detail.map(err => err.msg || err.message || String(err)).join(', ');
+                } else {
+                    errorMessage = data.detail;
+                }
+            } else if (data.message) {
+                errorMessage = data.message;
+            }
+            showAuthError(errorMessage);
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        showAuthError('Login failed. Please try again.');
+    } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Login';
+    }
+}
+
+// Handle registration
+async function handleRegister(event) {
+    event.preventDefault();
+    clearAuthMessages();
+    
+    const username = document.getElementById('registerUsername').value.trim();
+    const email = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value;
+    
+    if (!username || !email || !password) {
+        showAuthError('Please fill in all fields');
+        return;
+    }
+    
+    if (password.length < 8) {
+        showAuthError('Password must be at least 8 characters long');
+        return;
+    }
+    
+    const registerBtn = document.getElementById('registerBtn');
+    registerBtn.disabled = true;
+    registerBtn.textContent = 'Creating account...';
+    
+    try {
+        const response = await fetch(`${AUTH_BASE_URL}/register`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ username, email, password }),
+            credentials: 'include'
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            currentUser = data.user;
+            isAuthenticated = true;
+            showAuthSuccess('Account created successfully!');
+            
+            setTimeout(() => {
+                showMainApp();
+            }, 1000);
+        } else {
+            // Handle different error response formats
+            let errorMessage = 'Registration failed';
+            if (data.detail) {
+                if (Array.isArray(data.detail)) {
+                    // Pydantic validation errors
+                    errorMessage = data.detail.map(err => {
+                        if (err.msg) return err.msg;
+                        if (err.message) return err.message;
+                        if (typeof err === 'string') return err;
+                        return String(err);
+                    }).join(', ');
+                } else {
+                    errorMessage = data.detail;
+                }
+            } else if (data.message) {
+                errorMessage = data.message;
+            }
+            console.log('Registration error details:', data);
+            showAuthError(errorMessage);
+        }
+    } catch (error) {
+        console.error('Registration error:', error);
+        showAuthError('Registration failed. Please try again.');
+    } finally {
+        registerBtn.disabled = false;
+        registerBtn.textContent = 'Register';
+    }
+}
+
+// Handle logout
+async function handleLogout() {
+    try {
+        await fetch(`${AUTH_BASE_URL}/logout`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+    } catch (error) {
+        console.error('Logout error:', error);
+    }
+    
+    currentUser = null;
+    isAuthenticated = false;
+    showAuthModal();
+}
+
+// Verify reset token
+async function verifyResetToken() {
+    if (!resetToken) {
+        showAuthError('Invalid reset link');
+        switchAuthMode('login');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${AUTH_BASE_URL}/verify-reset-token?token=${encodeURIComponent(resetToken)}`);
+        const data = await response.json();
+        
+        if (response.ok) {
+            showAuthModal();
+            switchAuthMode('reset-password');
+            showAuthSuccess(`Reset password for ${data.user_email}`);
+        } else {
+            showAuthError(data.detail || 'Invalid or expired reset token');
+            switchAuthMode('login');
+            isInResetMode = false;
+            resetToken = null;
+        }
+    } catch (error) {
+        console.error('Token verification error:', error);
+        showAuthError('Error verifying reset token');
+        switchAuthMode('login');
+        isInResetMode = false;
+        resetToken = null;
+    }
+}
+
+// Handle forgot password
+async function handleForgotPassword(event) {
+    event.preventDefault();
+    clearAuthMessages();
+    
+    const email = document.getElementById('forgotPasswordEmail').value.trim();
+    
+    if (!email) {
+        showAuthError('Please enter your email address');
+        return;
+    }
+    
+    const forgotBtn = document.getElementById('forgotPasswordBtn');
+    forgotBtn.disabled = true;
+    forgotBtn.textContent = 'Sending...';
+    
+    try {
+        const response = await fetch(`${AUTH_BASE_URL}/forgot-password`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email }),
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showAuthSuccess(data.message);
+            // Show additional development info
+            setTimeout(() => {
+                showAuthSuccess(data.message + '\n\nDEV MODE: Check the browser console for the reset link.');
+            }, 100);
+        } else {
+            showAuthError(data.detail || 'Error sending reset email');
+        }
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        showAuthError('Error sending reset email. Please try again.');
+    } finally {
+        forgotBtn.disabled = false;
+        forgotBtn.textContent = 'Send Reset Link';
+    }
+}
+
+// Handle reset password
+async function handleResetPassword(event) {
+    event.preventDefault();
+    clearAuthMessages();
+    
+    if (!resetToken) {
+        showAuthError('Invalid reset session');
+        return;
+    }
+    
+    const newPassword = document.getElementById('resetNewPassword').value;
+    const confirmPassword = document.getElementById('resetConfirmPassword').value;
+    
+    if (!newPassword || !confirmPassword) {
+        showAuthError('Please fill in both password fields');
+        return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+        showAuthError('Passwords do not match');
+        return;
+    }
+    
+    if (newPassword.length < 8) {
+        showAuthError('Password must be at least 8 characters long');
+        return;
+    }
+    
+    const resetBtn = document.getElementById('resetPasswordBtn');
+    resetBtn.disabled = true;
+    resetBtn.textContent = 'Resetting...';
+    
+    try {
+        const response = await fetch(`${AUTH_BASE_URL}/reset-password`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+                token: resetToken, 
+                new_password: newPassword 
+            }),
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showAuthSuccess(data.message);
+            
+            // Reset state and switch to login
+            isInResetMode = false;
+            resetToken = null;
+            
+            setTimeout(() => {
+                switchAuthMode('login');
+            }, 2000);
+        } else {
+            showAuthError(data.detail || 'Error resetting password');
+        }
+    } catch (error) {
+        console.error('Reset password error:', error);
+        showAuthError('Error resetting password. Please try again.');
+    } finally {
+        resetBtn.disabled = false;
+        resetBtn.textContent = 'Reset Password';
+    }
+}
+
+// Add event listeners for authentication
+loginForm.addEventListener('submit', handleLogin);
+registerForm.addEventListener('submit', handleRegister);
+forgotPasswordForm.addEventListener('submit', handleForgotPassword);
+resetPasswordForm.addEventListener('submit', handleResetPassword);
+logoutBtn.addEventListener('click', handleLogout);
+
+// Event delegation for auth switch links (register, forgot password, etc.)
+authSwitchText.addEventListener('click', (e) => {
+    if (e.target.tagName === 'A' && e.target.hasAttribute('data-auth-action')) {
+        e.preventDefault();
+        const action = e.target.getAttribute('data-auth-action');
+        console.log('Auth switch link clicked:', action);
+        
+        if (action === 'login') {
+            isInResetMode = false;
+            resetToken = null;
+            switchAuthMode('login');
+        } else if (action === 'register') {
+            switchAuthMode('register');
+        } else if (action === 'forgot-password') {
+            switchAuthMode('forgot-password');
+        }
+    }
+});
+
+// Legacy event listener for the initial register switch (if it exists)
+if (switchToRegister) {
+    switchToRegister.addEventListener('click', (e) => {
+        e.preventDefault();
+        switchAuthMode('register');
+    });
+}
+
+// Initialize authentication when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    checkAuthStatus();
+});
+
 // Helper function to update fetch calls to use BASE_URL
 function apiFetch(path, options) {
     return fetch(BASE_URL + path, options);
@@ -201,8 +745,7 @@ function restoreSection(stepId) {
         badge.remove();
     }
     
-    // Temporarily set as current step for proper display
-    const originalCurrentStep = currentStep;
+    // Set as current step for proper display and keep it open
     currentStep = stepIndex;
     updateSectionStates();
     updateFloatingProgress();
@@ -213,13 +756,6 @@ function restoreSection(stepId) {
             behavior: 'smooth',
             block: 'start'
         });
-        
-        // After scrolling, restore the original current step
-        setTimeout(() => {
-            currentStep = originalCurrentStep;
-            updateSectionStates();
-            updateFloatingProgress();
-        }, 1000);
     }, 300);
 }
 
@@ -234,7 +770,7 @@ function updateStatus(statusElement, statusTextElement, message, type) {
 }
 
 ///////////////////////////////////////////////////////////////
-//////// Data Preparation Functions /////////////////////////
+//////// Data Preparation Functions
 ///////////////////////////////////////////////////////////////
 
 // Update data status display
@@ -861,6 +1397,10 @@ cleanupAndReset();
 initializeFloatingProgress();
 updateSelectedChatsDisplay();
 updatePlaylistButtonState();
+
+// Explicitly initialize the login form with forgot password link
+console.log('Initializing login form with forgot password link');
+switchAuthMode('login');
 
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {
