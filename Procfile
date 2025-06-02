@@ -1,0 +1,1 @@
+web: uvicorn packages.dopetracks.dopetracks.multiuser_app:app --host 0.0.0.0 --port $PORT 
