@@ -21,12 +21,16 @@ The solution to this problem turns out to be relatively straightforward once you
 git clone https://github.com/yourusername/dopeventures.git
 cd dopeventures
 
-# Create and activate virtual environment
+# Option A: Create local virtual environment
 python3 -m venv venv
 source venv/bin/activate  # On macOS/Linux
 
+# Option B: Use external virtual environment (like the author uses)
+# python3 -m venv /Users/yourusername/root_code_repo/venvs/dopetracks_env
+# source /Users/yourusername/root_code_repo/venvs/dopetracks_env/bin/activate
+
 # Install dependencies
-pip install -r requirements.txt  # You'll need to create this
+pip install -r requirements.txt
 ```
 
 ### 2. Spotify API Setup
@@ -62,7 +66,15 @@ pip install -r requirements.txt  # You'll need to create this
    - **Python** (if you have a separate Python.app)
    - Or the specific application you're using
 
-### 4. Alternative: Upload Database File
+### 4. Configure Frontend
+
+Ensure the frontend is configured to connect to the backend:
+```bash
+# Check that website/config.js contains the correct backend URL:
+echo 'const BASE_URL = "http://localhost:8888";' > website/config.js
+```
+
+### 5. Alternative: Upload Database File
 
 If you prefer not to grant full disk access, you can:
 1. Manually copy your Messages database: 
@@ -73,14 +85,26 @@ If you prefer not to grant full disk access, you can:
 
 ## Local Usage
 
-1. **Start the Web Server**:
+1. **Start the Backend Server**:
    ```bash
-   source venv/bin/activate
+   # Activate your virtual environment
+   source venv/bin/activate  # If using local venv
+   # OR
+   # source /Users/yourusername/root_code_repo/venvs/dopetracks_env/bin/activate  # If using external venv
+   
+   # Start the FastAPI backend
    uvicorn packages.dopetracks.dopetracks.frontend_interface.web_interface:app --host 0.0.0.0 --port 8888 --reload
    ```
 
-2. **Open Your Browser**:
-   - Go to: http://localhost:8888
+2. **Start the Frontend Server** (in a separate terminal):
+   ```bash
+   cd website
+   python3 -m http.server 8889
+   ```
+
+3. **Open Your Browser**:
+   - Go to: **http://localhost:8889** (frontend)
+   - The backend API runs on http://localhost:8888
    - Follow the setup steps in the interface:
      1. Authorize Spotify
      2. Validate username OR upload database file
@@ -108,6 +132,11 @@ If you prefer not to grant full disk access, you can:
 4. **"Address already in use" Error**:
    - Kill existing process: `pkill -f uvicorn`
    - Or use a different port: `--port 8889`
+
+5. **Frontend/Backend Connection Issues**:
+   - Ensure frontend is running on port 8889 and backend on port 8888
+   - Check that `website/config.js` has the correct `BASE_URL`
+   - Verify CORS settings allow requests from localhost:8889
 
 ## Security Notes
 

@@ -98,7 +98,7 @@ def add_tracks_to_playlist(sp, playlist_id, track_ids):
     """
 
     logging.warning(f"track_ids to add (count={len(track_ids)}): {track_ids}")
-
+    
     # Step 1: Get all existing tracks in the playlist (not just first 100)
     all_items = get_all_playlist_items(sp, playlist_id)
     existing_tracks = [item["track"]["id"] for item in all_items if item.get("track")]
@@ -112,7 +112,7 @@ def add_tracks_to_playlist(sp, playlist_id, track_ids):
         logging.info("No new tracks to add; all tracks are already in the playlist.")
         return 0  # Return 0 if nothing added
 
-    # Step 3: Add the unique tracks to the playlist in batches of 100
+     # Step 3: Add the unique tracks to the playlist in batches of 100
     for i in range(0, len(unique_track_ids), 100):
         batch = unique_track_ids[i : i + 100]
         sp.playlist_add_items(playlist_id, batch)

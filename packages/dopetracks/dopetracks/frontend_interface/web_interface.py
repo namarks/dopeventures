@@ -145,7 +145,7 @@ async def create_playlist_from_cached_data(cached_data, playlist_name, start_dat
         if len(desc) > 300:
             desc = desc[:297] + '...'
         return desc
-
+    
     try:
         # Check if we have valid Spotify tokens from the web session
         access_token = user_tokens.get("access_token")
@@ -154,7 +154,7 @@ async def create_playlist_from_cached_data(cached_data, playlist_name, start_dat
                 'status': 'error',
                 'errors': ['No Spotify authentication found. Please re-authenticate with Spotify.']
             }
-
+        
         # Debug logging
         logging.debug("Selected chat names:", selected_chat_names)
         logging.debug("Date range:", start_date, "to", end_date)
@@ -164,12 +164,31 @@ async def create_playlist_from_cached_data(cached_data, playlist_name, start_dat
         
         logging.info(f"Using cached data with {len(messages_df)} total messages")
         
+        # Debug: Check what columns exist in the DataFrame
+        logging.debug(f"Available columns in messages_df: {list(messages_df.columns)}")
+        
+        # Check if spotify_song_links column exists
+        if 'spotify_song_links' not in messages_df.columns:
+            logging.error("Column 'spotify_song_links' not found in messages DataFrame")
+            return {
+                'status': 'error',
+                'errors': [f"Data structure error: 'spotify_song_links' column not found. Available columns: {list(messages_df.columns)}"]
+            }
+        
         # Step 1: Filter messages by date range and selected chats
-        filtered_by_date = messages_df[
-            (messages_df['date'] >= start_date) &
-            (messages_df['date'] <= end_date) &
-            (messages_df['spotify_song_links'].apply(len) > 0)
-        ]
+        try:
+            filtered_by_date = messages_df[
+                (messages_df['date'] >= start_date) &
+                (messages_df['date'] <= end_date) &
+                (messages_df['spotify_song_links'].apply(len) > 0)
+            ]
+        except Exception as e:
+            logging.error(f"Error filtering messages by date and spotify links: {str(e)}")
+            logging.debug(f"Sample spotify_song_links values: {messages_df['spotify_song_links'].head()}")
+            return {
+                'status': 'error',
+                'errors': [f"Error filtering messages: {str(e)}"]
+            }
         logging.debug("Messages after date and spotify link filter:", len(filtered_by_date))
         if not filtered_by_date.empty:
             logging.debug("Dates of messages with Spotify links after date filter:", filtered_by_date['date'].tolist())
