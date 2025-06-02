@@ -30,4 +30,21 @@ python-multipart>=0.0.6
 
 # For Flask support (if using the alternative backend)
 flask>=2.3.0
-flask-session>=0.5.0 
+flask-session>=0.5.0
+
+# Multi-user architecture dependencies
+sqlalchemy>=2.0.0
+alembic>=1.12.0
+psycopg2-binary>=2.9.0
+bcrypt>=4.0.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.0
+
+# Session management & caching
+redis>=5.0.0
+
+# Cloud storage (optional)
+boto3>=1.28.0
+
+# Database URL parsing
+dj-database-url>=2.1.0 
