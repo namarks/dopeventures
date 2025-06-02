@@ -97,42 +97,27 @@ def add_tracks_to_playlist(sp, playlist_id, track_ids):
         track_ids (list): List of Spotify track IDs to add.
     """
 
-    # Step 1: Get existing tracks in the playlist
-    existing_tracks = []
-    results = sp.playlist_items(
-        playlist_id,
-        fields="items.track.id,total",
-        additional_types=["track"]
-    )
-    
-    # Use a while loop to gather *all* tracks in the playlist.
-    # If 'next' isn't present, break out of the loop.
-    while results:
-        # Safely extract 'items' (in case it's missing or None)
-        items = results.get("items", [])
-        existing_tracks.extend(
-            item["track"]["id"] for item in items if item.get("track")
-        )
+    logging.warning(f"track_ids to add (count={len(track_ids)}): {track_ids}")
 
-        # Check for 'next' safely:
-        next_url = results.get("next")
-        if next_url:
-            results = sp.next(results)  # Grab the next page
-        else:
-            break
+    # Step 1: Get all existing tracks in the playlist (not just first 100)
+    all_items = get_all_playlist_items(sp, playlist_id)
+    existing_tracks = [item["track"]["id"] for item in all_items if item.get("track")]
+    logging.warning(f"existing_tracks in playlist (count={len(existing_tracks)}): {existing_tracks}")
 
     # Step 2: Filter out tracks already in the playlist
     unique_track_ids = [track_id for track_id in track_ids if track_id not in existing_tracks]
+    logging.warning(f"unique_track_ids to add (count={len(unique_track_ids)}): {unique_track_ids}")
+
     if not unique_track_ids:
         logging.info("No new tracks to add; all tracks are already in the playlist.")
-        return
+        return 0  # Return 0 if nothing added
 
-
-     # Step 3: Add the unique tracks to the playlist in batches of 100
+    # Step 3: Add the unique tracks to the playlist in batches of 100
     for i in range(0, len(unique_track_ids), 100):
         batch = unique_track_ids[i : i + 100]
         sp.playlist_add_items(playlist_id, batch)
     logging.info(f"Added {len(unique_track_ids)} new tracks to the playlist.")
+    return len(unique_track_ids)  # Return the count of new tracks added
 
 def get_all_playlist_items(sp, playlist_id: str) -> list[dict]:
     """
@@ -162,7 +147,7 @@ def get_all_playlist_items(sp, playlist_id: str) -> list[dict]:
         items = response.get("items", [])
         all_items.extend(items)
 
-        # If we’ve reached the end or there's no 'next' in the response, break
+        # If we've reached the end or there's no 'next' in the response, break
         if not response.get("next"):
             break
 
@@ -185,30 +170,47 @@ def get_song_ids_from_spotify_items(playlist_items: list[dict]) -> list[str]:
     return [item["track"]["id"] for item in playlist_items if item.get("track")]
 
 
-def get_song_ids_from_cached_urls(track_original_urls_list):
+def get_song_ids_from_cached_urls(normalized_urls_list):
     """
-    Retrieve Spotify track IDs from the cache based on the original URLs.
-    
+    Retrieve Spotify track IDs from the cache based on normalized URLs.
     Args:
-        conn_cache (sqlite3.Connection): SQLite database connection.
-        track_original_urls_list (list[str]): List of Spotify original URLs.
-
+        normalized_urls_list (list[str]): List of normalized Spotify track URLs (no query params).
     Returns:
         A list of Spotify track IDs.
     """
-
     conn_cache = sqlite3.connect(sdm.initialize_cache())
-    placeholders = ', '.join('?' for _ in track_original_urls_list)  # Generate placeholders
+    logging.info(f"Cache connected. Input normalized URLs count: {len(normalized_urls_list)}")
+    
+    if not normalized_urls_list:
+        logging.warning("No URLs provided to get_song_ids_from_cached_urls")
+        conn_cache.close()
+        return []
+    
+    # Check what's actually in the cache
+    cursor = conn_cache.cursor()
+    cursor.execute("SELECT COUNT(*) FROM spotify_url_cache WHERE entity_type = 'track'")
+    track_count = cursor.fetchone()[0]
+    logging.info(f"Cache contains {track_count} track entries")
+    
+    # Check a sample of URLs in cache to see format
+    cursor.execute("SELECT normalized_url, spotify_id FROM spotify_url_cache WHERE entity_type = 'track' LIMIT 3")
+    samples = cursor.fetchall()
+    logging.info(f"Sample cached normalized URLs: {samples}")
+    
+    placeholders = ', '.join('?' for _ in normalized_urls_list)  # Generate placeholders
     query = f"""
     SELECT DISTINCT spotify_id
     FROM spotify_url_cache
-    WHERE EXISTS (
-        SELECT 1
-        FROM json_each(original_url)
-        WHERE value IN ({placeholders})
-    )
+    WHERE normalized_url IN ({placeholders})
+    AND entity_type = 'track'
     """
-    return pd.read_sql_query(query, conn_cache, params=track_original_urls_list)['spotify_id'].tolist()
+    
+    logging.info(f"Executing query with {len(normalized_urls_list)} parameters (normalized URLs)")
+    result_df = pd.read_sql_query(query, conn_cache, params=normalized_urls_list)
+    logging.info(f"Query returned {len(result_df)} rows")
+    
+    conn_cache.close()
+    return result_df['spotify_id'].tolist()
 
 
 def main(PLAYLIST_NAME, TRACKS_TO_ADD):
@@ -241,7 +243,11 @@ def main(PLAYLIST_NAME, TRACKS_TO_ADD):
     unique_ids = [tid for tid in spotify_ids_to_add if tid not in existing_playlist_song_ids]
     
     # Add songs
-    add_tracks_to_playlist(sp, playlist['id'], unique_ids)
+    added_count = add_tracks_to_playlist(sp, playlist['id'], unique_ids)
+    if added_count > 0:
+        print(f"Added {added_count} new tracks to the playlist.")
+    else:
+        print("No new tracks were added to the playlist.")
 
 if __name__ == "__main__":
     main()

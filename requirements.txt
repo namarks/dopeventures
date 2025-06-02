@@ -1,0 +1,33 @@
+# Core web framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Spotify API
+spotipy>=2.22.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# HTTP requests
+requests>=2.31.0
+
+# Apple data parsing (for iMessage binary data)
+pytypedstream>=0.1.0
+
+# Progress bars
+tqdm>=4.65.0
+
+# Development/testing (optional)
+pytest>=7.4.0
+ipython>=8.0.0
+
+# File upload handling
+python-multipart>=0.0.6
+
+# For Flask support (if using the alternative backend)
+flask>=2.3.0
+flask-session>=0.5.0 

@@ -113,18 +113,8 @@ def normalize_and_extract_id(url: str) -> tuple[str | None, str | None, str | No
     """
     Given a Spotify URL (including possibly a shortened URL),
     return a 3-tuple of (normalized_url, spotify_id, entity_type).
-
-    Args:
-        url (str): The original (possibly shortened) Spotify URL.
-
-    Returns:
-        tuple[str | None, str | None, str | None]:
-            - normalized_url: The normalized URL (with no query parameters),
-                              or None if resolution fails.
-            - spotify_id: The extracted Spotify ID, or None if not found.
-            - entity_type: One of 'track', 'album', 'artist', 'show', or 'episode',
-                           or None if not matched.
     """
+    print(f"[DEBUG] Normalizing URL: {url}")
     if "spotify.link" in url:
         resolved_url = uf.resolve_short_url(url)
         if not resolved_url:
@@ -139,6 +129,7 @@ def normalize_and_extract_id(url: str) -> tuple[str | None, str | None, str | No
     entity_type = match.group(1) if match else None
     spotify_id = match.group(2) if match else None
 
+    print(f"[DEBUG] Result: normalized_url={normalized_url}, spotify_id={spotify_id}, entity_type={entity_type}")
     return normalized_url, spotify_id, entity_type
 
 
@@ -207,6 +198,10 @@ def update_cache(
         conn.commit()
 
 
+def is_valid_spotify_id(spotify_id):
+    return isinstance(spotify_id, str) and re.fullmatch(r"[A-Za-z0-9]{22}", spotify_id)
+
+
 def fetch_metadata_in_batches(
     spotify_client: spotipy.Spotify,
     entity_type: str,
@@ -247,15 +242,19 @@ def fetch_metadata_in_batches(
 
     for batch in uf.batch(url_triplets, batch_size):
         original_urls, normalized_urls, spotify_ids = zip(*batch)
+        # Filter for valid Spotify IDs
+        valid_indices = [i for i, sid in enumerate(spotify_ids) if is_valid_spotify_id(sid)]
+        if not valid_indices:
+            continue
+        filtered_spotify_ids = [spotify_ids[i] for i in valid_indices]
+        filtered_original_urls = [original_urls[i] for i in valid_indices]
+        filtered_normalized_urls = [normalized_urls[i] for i in valid_indices]
         try:
-            # e.g. spotify_client.tracks([list of IDs]) returns a dict with 'tracks'
-            metadata_response = fetch_function(list(normalized_urls))
-            # The key in the response is typically 'tracks', 'albums', 'artists', etc.
+            metadata_response = fetch_function(filtered_spotify_ids)
             key_name = entity_type + "s"
             metadata_items = metadata_response.get(key_name, [])
-            # zip each metadata item with the corresponding original, normalized, and ID
             all_metadata.extend(
-                zip(metadata_items, original_urls, normalized_urls, spotify_ids)
+                zip(metadata_items, filtered_original_urls, filtered_normalized_urls, filtered_spotify_ids)
             )
         except Exception as e:
             logging.error(f"Error processing batch for entity type '{entity_type}': {e}")
@@ -269,27 +268,18 @@ def add_urls_metadata_to_cache_batched(
     db_path: str
 ) -> None:
     start_time = time.time()
-
-    # Track how many were skipped because they're already cached
     already_cached_count = 0
-    # Store "unsupported" separately if you want to gather them later
-    # (but we'll also keep them in spotify_urls_by_type["unsupported"]).
     new_urls = []
 
-    # 1. Identify new uncached URLs
     for url in input_urls:
         normalized_url, spotify_id, entity_type = normalize_and_extract_id(url)
-
+        print(f"[DEBUG] Adding to cache: original_url={url}, normalized_url={normalized_url}, spotify_id={spotify_id}, entity_type={entity_type}")
         if not normalized_url or not spotify_id or not entity_type:
-            # Treat as "unsupported"
             entity_type = "unsupported"
-
-        # Check if it's already in the cache
         cache_data = get_cache_data(db_path, normalized_url)
         if not cache_data.empty:
             already_cached_count += 1
             continue
-
         new_urls.append((url, normalized_url, spotify_id, entity_type))
 
     # 2. Group URLs by entity type
@@ -314,7 +304,7 @@ def add_urls_metadata_to_cache_batched(
 
     from tqdm import tqdm
 
-    # We’ll do two passes:
+    # We'll do two passes:
     #   A) recognized Spotify types -> fetch metadata
     #   B) unsupported -> store with empty metadata
 

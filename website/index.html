@@ -5,325 +5,485 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dopetracks Playlist Generator</title>
     <style>
-        /* Add styling here */
         body {
             font-family: Arial, sans-serif;
-            padding: 20px;
+            margin: 40px;
             line-height: 1.6;
         }
+        
+        /* Floating Progress Indicator */
+        .floating-progress {
+            position: fixed;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .floating-step {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            border: 2px solid transparent;
+        }
+        
+        .floating-step.incomplete {
+            background-color: #6c757d;
+            border-color: #5a6268;
+        }
+        
+        .floating-step.completed {
+            background-color: #28a745;
+            border-color: #1e7e34;
+        }
+        
+        .floating-step.active {
+            background-color: #ffc107;
+            color: #212529;
+            border-color: #e0a800;
+            box-shadow: 0 0 10px rgba(255, 193, 7, 0.5);
+        }
+        
+        .floating-step:hover {
+            transform: scale(1.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .floating-step .tooltip {
+            position: absolute;
+            left: 55px;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #333;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            z-index: 1001;
+        }
+        
+        .floating-step:hover .tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .floating-step .tooltip::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: -5px;
+            transform: translateY(-50%);
+            border-right: 5px solid #333;
+            border-top: 5px solid transparent;
+            border-bottom: 5px solid transparent;
+        }
+        
         section {
-            margin-bottom: 20px;
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            transition: all 0.3s ease;
+            margin-left: 80px; /* Add space for floating progress */
         }
-        .disabled {
+        
+        /* Completed section styles - now they get hidden when moved to floating */
+        section.completed-floating {
+            display: none;
+        }
+        
+        /* Collapsed section styles */
+        section.collapsed {
+            padding: 10px 20px;
+            background-color: #e8f5e8;
+            border-color: #28a745;
+        }
+        
+        section.collapsed .section-content {
+            display: none;
+        }
+        
+        section.collapsed h2 {
+            margin: 5px 0;
+            color: #28a745;
+            font-size: 1.1em;
+        }
+        
+        .completion-badge {
+            display: inline-block;
+            background-color: #28a745;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .expand-button {
+            background: none;
+            border: none;
+            color: #007bff;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-left: 15px;
+            text-decoration: underline;
+        }
+        
+        .expand-button:hover {
+            color: #0056b3;
+        }
+        
+        /* Disabled section styles */
+        section.disabled {
+            background-color: #f8f9fa;
+            opacity: 0.7;
+            border-color: #dee2e6;
+        }
+        
+        section.disabled h2 {
+            color: #6c757d;
+        }
+        
+        section.disabled button {
             opacity: 0.5;
-            pointer-events: none;
+            cursor: not-allowed;
         }
+        
+        /* Active section styles */
+        section.active {
+            background-color: #fff3cd;
+            border-color: #ffc107;
+            box-shadow: 0 0 10px rgba(255, 193, 7, 0.3);
+        }
+        
+        /* Responsive design for smaller screens */
+        @media (max-width: 768px) {
+            section {
+                margin-left: 20px;
+            }
+            
+            .floating-progress {
+                left: 5px;
+                gap: 8px;
+            }
+            
+            .floating-step {
+                width: 35px;
+                height: 35px;
+                font-size: 16px;
+            }
+        }
+        
+        h1, h2 {
+            color: #333;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        
+        button:hover:not(:disabled) {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        input, textarea, select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+            font-size: 14px;
+        }
+        
         table {
             width: 100%;
             border-collapse: collapse;
+            margin-top: 10px;
         }
-        table, th, td {
-            border: 1px solid #ddd;
-        }
+        
         th, td {
+            border: 1px solid #ddd;
             padding: 8px;
             text-align: left;
         }
-        .status {
-            font-style: italic;
-            margin-top: 10px;
+        
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        
+        .chat-checkbox {
+            margin-right: 8px;
+        }
+        
+        .selected-chat-badge {
+            display: inline-block;
+            background-color: #007bff;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 15px;
+            margin: 2px;
+            font-size: 12px;
+        }
+        
+        .remove-chat {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            margin-left: 5px;
+            cursor: pointer;
+            font-size: 10px;
+            line-height: 1;
+        }
+        
+        .status-indicator {
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .status-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #b8daff;
+        }
+        
+        #progressMessages {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .progress-message {
+            margin: 5px 0;
+            padding: 2px 0;
+        }
+        
+        .step-number {
+            color: #6c757d;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        /* Sticky columns for chat search table */
+        #chatTable th.sticky-col, #chatTable td.sticky-col {
+            position: sticky;
+            left: 0;
+            background: #f2f2f2;
+            z-index: 2;
+        }
+        #chatTable th.left-col, #chatTable td.left-col {
+            left: 0;
+            z-index: 3;
+        }
+        #chatTable th.sticky-col:nth-child(2), #chatTable td.sticky-col:nth-child(2) {
+            left: 50px;
+            z-index: 2;
         }
     </style>
 </head>
 <body>
+    <!-- Floating Progress Indicator -->
+    <div class="floating-progress" id="floatingProgress">
+        <!-- Completed steps will be added here dynamically -->
+    </div>
+
     <h1>Dopetracks Playlist Generator</h1>
 
-    <!-- Setup Section -->
-    <section>
-        <h2>Setup</h2>
-        <div id="spotify-auth">
-            <p>Step 1: Authorize Spotify</p>
-            <button id="authorizeSpotify">Authorize Spotify</button>
-            <div id="spotifyStatus" class="status"></div>
-        </div>
-        <div id="username-validation">
-            <p>Step 2 (old): Validate MacOS Username</p>
-            <input type="text" id="macUsername" placeholder="Enter your MacOS username">
-            <button id="validateUsername">Validate Username</button>
-            <div id="usernameStatus" class="status"></div>
-        </div>
-        <div id="file-upload">
-            <p>Step 2 (new): Upload iMessage Chat Database</p>
-            <form id="uploadForm">
-                <input type="file" id="chatDbFile" accept=".db">
-                <button type="submit">Upload File</button>
-            </form>
-            <div id="fileUploadStatus" class="status"></div>
+    <!-- Spotify Authorization Section -->
+    <section id="spotifyAuth" class="active">
+        <h2><span class="step-number">Step 1:</span> Spotify Authorization</h2>
+        <div class="section-content">
+            <p><em>Connect your Spotify account to create playlists.</em></p>
+            
+            <div id="spotifyStatus" style="margin: 10px 0; padding: 10px; border-radius: 5px; font-weight: bold;">
+                <span id="spotifyStatusText">Not connected to Spotify</span>
+            </div>
+            
+            <button id="authorizeSpotify">Connect to Spotify</button>
+            
+            <div id="userProfileContainer" style="margin-top: 15px; display: none;">
+                <div><strong>Connected as:</strong></div>
+                <div id="userProfile" style="background-color: #f8f9fa; padding: 10px; border-radius: 5px;"></div>
+            </div>
         </div>
     </section>
 
-    <!-- Chat Group Search Section -->
-    <section>
-        <h2>Chat Group Search</h2>
-        <input type="text" id="chatSearch" placeholder="Search for chat name">
-        <button id="searchChats">Search</button>
-        <table id="chatTable">
-            <thead>
-                <tr>
-                    <th>Chat Name</th>
-                    <th># of Members</th>
-                    <th># of Spotify URLs Sent</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Chat results will be dynamically added here -->
-            </tbody>
-        </table>
+    <!-- System Setup Section -->
+    <section id="systemSetup" class="disabled">
+        <h2><span class="step-number">Step 2:</span> System Setup</h2>
+        <div class="section-content">
+            <p><em>Verify your system has access to the Messages database.</em></p>
+            
+            <div id="systemStatus" style="margin: 10px 0; padding: 10px; border-radius: 5px; font-weight: bold;">
+                <span id="systemStatusText">System access not verified</span>
+            </div>
+
+            <div>
+                <label for="username">macOS Username:</label>
+                <input type="text" id="username" placeholder="e.g., johnsmith" style="margin-left: 10px; width: 200px;">
+                <button id="validateUsername">Verify Access</button>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <p><strong>Alternative:</strong> Upload your Messages database file</p>
+                <input type="file" id="chatFileInput" accept=".db">
+                <button id="validateChatFile">Validate File</button>
+            </div>
+
+            <div id="uploadStatus"></div>
+        </div>
+    </section>
+
+    <!-- Data Preparation Section -->
+    <section id="dataPreparation" class="disabled">
+        <h2><span class="step-number">Step 3:</span> Data Preparation</h2>
+        <div class="section-content">
+            <p><em>Process your iMessage data for searching and playlist creation (~45 seconds).</em></p>
+            
+            <div id="dataStatus" style="margin: 10px 0; padding: 10px; border-radius: 5px; font-weight: bold;">
+                <span id="dataStatusText">Data not prepared</span>
+            </div>
+            
+            <button id="prepareDataButton">Prepare Data</button>
+            
+            <div id="dataPreparationProgress" style="margin-top: 15px; display: none;">
+                <div><strong>Data Preparation Progress:</strong></div>
+                <div id="progressMessages" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4; margin-top: 10px;"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Chat Search Section -->
+    <section id="chatSearch" class="disabled">
+        <h2><span class="step-number">Step 4:</span> Chat Search & Selection</h2>
+        <div class="section-content">
+            <p><em>Search for chats by name or participant names, then select which ones to include in your playlist.</em></p>
+            
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Search chats by name or participant...">
+                <button id="searchButton">Search Chats</button>
+            </div>
+
+            <div id="searchResults" style="margin-top: 20px; overflow-x: auto;">
+                <div style="width: 100%; overflow-x: auto;">
+                    <table id="chatTable" style="display: none; min-width: 900px;">
+                        <thead>
+                            <tr>
+                                <th class="sticky-col left-col" style="width: 50px;">Select</th>
+                                <th class="sticky-col" style="min-width: 180px;">Chat Name</th>
+                                <th style="width: 80px;">Members</th>
+                                <th style="width: 100px;">Total Messages</th>
+                                <th style="width: 100px;">My Messages</th>
+                                <th style="width: 80px;">Spotify URLs</th>
+                                <th style="width: 140px;">Most Recent Song Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="chatTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="selectedChatsSection" style="margin-top: 25px;">
+                <h3>Selected Chats:</h3>
+                <div id="selectedChatsDisplay">
+                    <p style="color: #666; font-style: italic;">No chats selected</p>
+                </div>
+                <button id="clearSelectedChats" style="display: none; background-color: #dc3545;">Clear All</button>
+            </div>
+        </div>
     </section>
 
     <!-- Playlist Creation Section -->
     <section id="playlistCreation" class="disabled">
-        <h2>Playlist Creation</h2>
-        <label for="playlistName">Playlist Name:</label>
-        <input type="text" id="playlistName" placeholder="Enter playlist name">
-        <label for="startDate">Start Date:</label>
-        <input type="date" id="startDate">
-        <label for="endDate">End Date:</label>
-        <input type="date" id="endDate">
-        <button id="createPlaylist">Create Playlist</button>
+        <h2><span class="step-number">Step 5:</span> Playlist Creation</h2>
+        <div class="section-content">
+            <p><em>Create a Spotify playlist from your selected chats and date range.</em></p>
+            <p><em style="color: #dc3545;">⚠️ Please complete previous steps and select at least one chat first</em></p>
+
+            <form id="playlistForm">
+                <div style="margin-bottom: 15px;">
+                    <label for="playlistName">Playlist Name:</label><br>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="text" id="playlistName" name="playlist_name" required style="width: 300px;">
+                        <button type="button" id="refreshPlaylists" title="Refresh playlist list" style="padding: 5px 10px;">🔄</button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label for="startDate">Start Date:</label>
+                    <input type="date" id="startDate" name="start_date" required>
+                    
+                    <label for="endDate" style="margin-left: 20px;">End Date:</label>
+                    <input type="date" id="endDate" name="end_date" required>
+                </div>
+
+                <button type="submit" id="createPlaylist" disabled style="opacity: 0.6;">Create Playlist</button>
+            </form>
+
+            <div id="playlistStatus"></div>
+        </div>
     </section>
 
-    <div id="playlistCreationStatus" style="margin-top: 20px; font-style: italic;"></div>
-
-    <script>
-        ////////////////////////////////////////////////
-        ///////// Create helper functions here /////////
-        ////////////////////////////////////////////////
-        
-        // Helper function to get the current timestamp
-        function getCurrentTimestamp() {
-            const now = new Date();
-            return now.toLocaleTimeString(); // Format: "hh:mm:ss AM/PM" or "HH:mm:ss"
-        }
-
-        // Enable Playlist Creation
-        function enablePlaylistCreation() {
-            if (isSpotifyAuthorized && isUsernameValidated) {
-                document.getElementById("playlistCreation").classList.remove("disabled");
-            }
-        }
-        ////////////////////////////////////////////////////////////////
-        ///////// Create dynamic variables here functions here /////////
-        ////////////////////////////////////////////////////////////////
-
-        // State variables to track progress
-        let isSpotifyAuthorized = false;
-        let isUsernameValidated = false;
-        
-        ////////////////////////////////////////////////
-        ///////// Add File Upload Script Here /////////
-        ////////////////////////////////////////////////
-
-        const uploadForm = document.getElementById("uploadForm");
-        const chatDbFileInput = document.getElementById("chatDbFile");
-        const fileUploadStatus = document.getElementById("fileUploadStatus");
-
-        uploadForm.addEventListener("submit", async (event) => {
-            event.preventDefault();
-
-            const file = chatDbFileInput.files[0];
-            if (!file) {
-                fileUploadStatus.textContent = "Please select a file before uploading.";
-                return;
-            }
-
-            fileUploadStatus.textContent = "Uploading file...";
-            const formData = new FormData();
-            formData.append("file", file);
-
-            try {
-                const response = await fetch("/validate-chat-file/", {
-                    method: "POST",
-                    body: formData,
-                });
-
-                const data = await response.json();
-                if (response.ok) {
-                    fileUploadStatus.textContent = `✅ File uploaded successfully. Path: ${data.filepath}`;
-                } else {
-                    fileUploadStatus.textContent = `Error: ${data.error}`;
-                }
-            } catch (error) {
-                console.error(error);
-                fileUploadStatus.textContent = "Error uploading file.";
-            }
-        });
-
-        ////////////////////////////////////////////////////////////////
-        // Spotify Authorization
-        ////////////////////////////////////////////////////////////////
-        const authorizeSpotifyButton = document.getElementById("authorizeSpotify");
-        const spotifyStatus = document.getElementById("spotifyStatus");
-
-        authorizeSpotifyButton.addEventListener("click", async () => {
-                try {
-                    const response = await fetch("/get-client-id");
-                    if (!response.ok) {
-                        console.log(`${response.promise}`);
-                        console.log(`HTTP error! Status: ${response.status}`);
-                        throw new Error(`HTTP error! Status: ${response.status}`);
-                    }
-                    const data = await response.json();
-                    if (data.client_id) {
-                        const clientId = data.client_id;
-                        const redirectUri =
-                            window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-                                ? "http://localhost:8888/callback" // Local environment
-                                : "https://your-production-domain.onrender.com/callback"; // Render environment
-                        const scopes = "playlist-modify-public user-read-playback-state";
-                        const authUrl = `https://accounts.spotify.com/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
-                        window.location.href = authUrl;
-                    } else {
-                        spotifyStatus.textContent = "Error: Spotify Client ID not found.";
-                    }
-                } catch (error) {
-                    console.error(error);
-                    spotifyStatus.textContent = "Error authorizing Spotify.";
-                }
-        });
-
-        ////////////////////////////////////////////////////////////////
-        // Username Validation
-        ////////////////////////////////////////////////////////////////
-        const validateUsernameButton = document.getElementById("validateUsername");
-        const macUsernameInput = document.getElementById("macUsername");
-        const usernameStatus = document.getElementById("usernameStatus");
-        
-        validateUsernameButton.addEventListener("click", async () => {
-            const username = macUsernameInput.value.trim();
-            if (!username) {
-                usernameStatus.textContent = "Please enter a valid username.";
-                return;
-            }
-
-            usernameStatus.textContent = "Validating...";
-            try {
-                const response = await fetch(`/validate-username?username=${encodeURIComponent(username)}`);
-                const data = await response.json();
-
-                if (response.ok) {
-                    usernameStatus.textContent = `✅ Username validated. iMessage database found at: ${data.filepath}`;
-                    isUsernameValidated = true;
-                    enablePlaylistCreation();
-                } else if (data.error) {
-                    usernameStatus.textContent = `Error: ${data.error}`;
-                } else {
-                    usernameStatus.textContent = "Unknown error occurred.";
-                }
-            } catch (error) {
-                console.error(error);
-                usernameStatus.textContent = "Error validating username.";
-            }
-        });
-
-        // Check if Spotify was authorized (called after redirect)
-        const urlParams = new URLSearchParams(window.location.search);
-        const spotifyCode = urlParams.get("code");
-        console.log("Spotify code:", spotifyCode);
-        if (spotifyCode) {
-            spotifyStatus.textContent = "✅ Spotify Authorized";
-            isSpotifyAuthorized = true;
-            enablePlaylistCreation();
-        }
-       
-        ////////////////////////////////////////////////////////////////    
-        // Chat Group Search
-        ////////////////////////////////////////////////////////////////
-        const chatSearchInput = document.getElementById("chatSearch");
-        const searchChatsButton = document.getElementById("searchChats");
-        const chatTableBody = document.getElementById("chatTable").querySelector("tbody");
-
-        searchChatsButton.addEventListener("click", async () => {
-            const searchTerm = chatSearchInput.value.trim();
-            if (!searchTerm) {
-                alert("Please enter a search term.");
-                return;
-            }
-
-            try {
-                chatTableBody.innerHTML = ""; // Clear existing rows
-                // Simulate fetching chat data (replace with actual API call)
-                const chats = [
-                    { name: "dope tracks", members: 7, urls: 31 },
-                    { name: "music lovers", members: 5, urls: 20 },
-                ]; // Example data
-
-                chats.forEach((chat) => {
-                    const row = document.createElement("tr");
-                    row.innerHTML = `
-                        <td>${chat.name}</td>
-                        <td>${chat.members}</td>
-                        <td>${chat.urls}</td>
-                    `;
-                    chatTableBody.appendChild(row);
-                });
-            } catch (error) {
-                console.error(error);
-                alert("Error searching for chats.");
-            }
-        });
-
-        ////////////////////////////////////////////////////////////////
-        /////////////// Playlist Creation    ///////////////////////////
-        ////////////////////////////////////////////////////////////////
-        const createPlaylistButton = document.getElementById("createPlaylist");
-        console.log("Attaching event listener to Create Playlist button");
-        const playlistCreationStatus = document.getElementById("playlistCreationStatus");
-
-        createPlaylistButton.addEventListener("click", async () => {
-            console.log("Create Playlist button clicked!");
-            const playlistName = document.getElementById("playlistName").value.trim();
-            const startDate = document.getElementById("startDate").value;
-            const endDate = document.getElementById("endDate").value;
-
-            if (!playlistName || !startDate || !endDate) {
-                alert("Please fill out all fields.");
-                return;
-            }
-
-            console.log("Validation passed. Sending request to backend...");
-
-            console.log(`Creating playlist: "${playlistName}"...`);
-            console.log(`Start Date: ${startDate}`);
-            console.log(`End Date: ${endDate}`);
-            console.log(`Username: ${macUsernameInput.value.trim()}`);
-
-            playlistCreationStatus.textContent = `[${getCurrentTimestamp()}] Creating playlist: "${playlistName}"...\n\n`;
-
-            try {
-                const response = await fetch("/upload-chat/", {
-                    method: "POST",
-                    body: new URLSearchParams({
-                        username: macUsernameInput.value.trim(),
-                        start_date: startDate,
-                        end_date: endDate,
-                        playlist_name: playlistName,
-                    }),
-                });
-                const data = await response.json();
-
-                if (response.ok) {
-                    playlistCreationStatus.textContent += `[${getCurrentTimestamp()}] Playlist "${playlistName}" created successfully!`;
-                } else {
-                    playlistCreationStatus.textContent += `[${getCurrentTimestamp()}] Playlist "${playlistName}" not created. Error: ${data.error}`;
-                }
-            } catch (error) {
-                console.error(error);
-                alert("Error creating playlist.");
-            }
-            });
-
-            
-    </script>
+    <script src="config.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

@@ -7,10 +7,113 @@ The solution to this problem turns out to be relatively straightforward once you
 2. Find messages containing Spotify links
 2. Generate Spotify playlist and populate with identified songs
 
+## Prerequisites
 
-## Local usage
+- **macOS only** (requires access to Messages database)
+- **Python 3.11+**
+- **Spotify Premium account** (required for playlist creation)
 
-There is currently version of a website that works when hosted locally. To start this, ensure that you've install dopetracks, navigate to the in the `/dopeventures` working directory, and then run `uvicorn packages.dopetracks.dopetracks.frontend_interface.web_interface:app --reload --host 127.0.0.1 --port 888` 
+## Setup Instructions
+
+### 1. Clone and Install Dependencies
+
+```bash
+git clone https://github.com/yourusername/dopeventures.git
+cd dopeventures
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On macOS/Linux
+
+# Install dependencies
+pip install -r requirements.txt  # You'll need to create this
+```
+
+### 2. Spotify API Setup
+
+1. **Create Spotify Developer App**:
+   - Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+   - Click "Create App"
+   - App Name: "Dopetracks" (or any name)
+   - App Description: "Personal playlist creator"
+   - Redirect URI: `http://localhost:8888/callback`
+   - Check the boxes for Terms of Service
+   - Click "Save"
+
+2. **Get Your Credentials**:
+   - Copy your **Client ID** and **Client Secret**
+
+3. **Create Environment File**:
+   Create a `.env` file in the project root:
+   ```bash
+   SPOTIFY_CLIENT_ID=your_client_id_here
+   SPOTIFY_CLIENT_SECRET=your_client_secret_here
+   SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
+   ```
+
+### 3. Grant System Permissions (macOS)
+
+**Enable Full Disk Access for Terminal/Python**:
+1. Open **System Preferences** → **Security & Privacy** → **Privacy**
+2. Select **Full Disk Access** from the left sidebar
+3. Click the lock icon and enter your password
+4. Click the "+" button and add:
+   - **Terminal** (if running from Terminal)
+   - **Python** (if you have a separate Python.app)
+   - Or the specific application you're using
+
+### 4. Alternative: Upload Database File
+
+If you prefer not to grant full disk access, you can:
+1. Manually copy your Messages database: 
+   ```bash
+   cp ~/Library/Messages/chat.db ./my_messages.db
+   ```
+2. Use the file upload feature in the web interface
+
+## Local Usage
+
+1. **Start the Web Server**:
+   ```bash
+   source venv/bin/activate
+   uvicorn packages.dopetracks.dopetracks.frontend_interface.web_interface:app --host 0.0.0.0 --port 8888 --reload
+   ```
+
+2. **Open Your Browser**:
+   - Go to: http://localhost:8888
+   - Follow the setup steps in the interface:
+     1. Authorize Spotify
+     2. Validate username OR upload database file
+     3. Prepare data (processes your message history)
+     4. Search for chats and select ones for your playlist
+     5. Create playlist with your chosen date range
+
+## Troubleshooting
+
+### Common Issues:
+
+1. **"No module named 'packages'" Error**:
+   - Make sure you're running the command from the project root (`dopeventures/`)
+   - Ensure virtual environment is activated
+
+2. **"Permission denied" for Messages Database**:
+   - Grant Full Disk Access (see setup instructions above)
+   - Or use the file upload alternative
+
+3. **Spotify Authorization Fails**:
+   - Check your `.env` file has correct credentials
+   - Ensure redirect URI in Spotify app matches: `http://localhost:8888/callback`
+   - Make sure you're using `localhost:8888`, not `127.0.0.1:8888`
+
+4. **"Address already in use" Error**:
+   - Kill existing process: `pkill -f uvicorn`
+   - Or use a different port: `--port 8889`
+
+## Security Notes
+
+- Your `.env` file contains sensitive credentials - never commit it to version control
+- The Messages database contains personal data - handle with care
+- All processing happens locally on your machine
 
 ## Caching
 
@@ -19,7 +122,6 @@ This project uses an SQLite database to cache metadata for Spotify URLs, stored 
 To initialize the cache, simply run the script. The cache directory will be created automatically if it doesn't exist.
 
 The cache file is not included in this repository to ensure user privacy and prevent unnecessary commits.
-
 
 ## Useful resources
 - typedstream library to parse Apple-formatted binary https://github.com/dgelessus/python-typedstream
