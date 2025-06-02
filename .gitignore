@@ -28,3 +28,6 @@ spotify_cache.db
 # Ignore build files
 build/ 
 dopetracks_summary.egg-info/
+
+# Ignore log files
+.backend.log
