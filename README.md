@@ -1,5 +1,9 @@
 # Dopetracks Project Repo 
 
+> **For Developers**: 
+> - See [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md) for architecture, database schema, and technical details
+> - See [docs/](./docs/) for additional guides and analysis documents
+
 The impetus for this project was a desire to automatically create a Spotify playlist that contained all the songs my friends had sent to eachother in the Dopetracks chat group. 
 
 The solution to this problem turns out to be relatively straightforward once you figure things out: 
@@ -92,8 +96,8 @@ If you prefer not to grant full disk access, you can:
    # OR
    # source /Users/yourusername/root_code_repo/venvs/dopetracks_env/bin/activate  # If using external venv
    
-   # Start the FastAPI backend
-   uvicorn packages.dopetracks.dopetracks.frontend_interface.web_interface:app --host 0.0.0.0 --port 8888 --reload
+   # Start the FastAPI backend (use python3 on macOS)
+   python3 start_multiuser.py
    ```
 
 2. **Start the Frontend Server** (in a separate terminal):
