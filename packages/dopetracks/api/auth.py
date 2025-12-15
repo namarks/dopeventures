@@ -195,7 +195,6 @@ async def login(
 ):
     """Authenticate user and create session."""
     # #region agent log
-    import json
     with open('/Users/nmarks/root_code_repo/dopeventures/.cursor/debug.log', 'a') as f:
         f.write(json.dumps({"location":"auth.py:188","message":"login endpoint entry","data":{"username":user_data.username,"hasPassword":bool(user_data.password)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"})+"\n")
     # #endregion
@@ -203,7 +202,6 @@ async def login(
     user = authenticate_user(db, user_data.username, user_data.password)
     
     # #region agent log
-    import time
     with open('/Users/nmarks/root_code_repo/dopeventures/.cursor/debug.log', 'a') as f:
         f.write(json.dumps({"location":"auth.py:197","message":"authentication result","data":{"authenticated":user is not None,"userId":user.id if user else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"})+"\n")
     # #endregion

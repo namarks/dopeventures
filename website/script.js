@@ -5,7 +5,9 @@ let isAuthenticated = false;
 let currentUser = null;
 let isInResetMode = false; // Track if we're in password reset mode
 let resetToken = null; // Store the reset token from URL
-// BASE_URL is defined in config.js
+// BASE_URL is defined in config.js - make sure it's loaded first
+// Since config.js loads before this script, BASE_URL should always be defined
+// Just use it directly - if it's undefined, we'll get a clear error
 const AUTH_BASE_URL = `${BASE_URL}/auth`;
 
 // Cache refresh: 2025-06-01 20:32 - Force reload for forgot password link
@@ -83,17 +85,62 @@ async function checkAuthStatus() {
 
 // Show authentication modal
 function showAuthModal() {
+    console.log('showAuthModal called, authOverlay:', authOverlay);
+    if (!authOverlay) {
+        console.error('authOverlay not initialized! Trying to initialize now...');
+        initializeAuthElements();
+        if (!authOverlay) {
+            console.error('Failed to initialize authOverlay!');
+            return;
+        }
+    }
     authOverlay.style.display = 'flex';
-    userBar.style.display = 'none';
-    mainContent.classList.remove('visible');
+    if (userBar) userBar.style.display = 'none';
+    if (mainContent) {
+        mainContent.classList.remove('visible');
+    }
     document.body.classList.remove('authenticated');
+    
+    // Make sure login form is visible
+    if (loginForm) {
+        loginForm.style.display = 'block';
+    }
+    if (registerForm) {
+        registerForm.style.display = 'none';
+    }
+    if (forgotPasswordForm) {
+        forgotPasswordForm.style.display = 'none';
+    }
+    if (resetPasswordForm) {
+        resetPasswordForm.style.display = 'none';
+    }
+    
+    console.log('Auth modal should now be visible');
 }
 
 // Show main application
 function showMainApp() {
-    authOverlay.style.display = 'none';
-    userBar.style.display = 'flex';
-    mainContent.classList.add('visible');
+    // Ensure all elements are initialized
+    if (!authOverlay || !mainContent || !userBar) {
+        console.log('Elements not initialized, initializing now...');
+        initializeDOMElements();
+        initializeAuthElements();
+    }
+    
+    if (authOverlay) authOverlay.style.display = 'none';
+    if (userBar) userBar.style.display = 'flex';
+    if (mainContent) {
+        mainContent.classList.add('visible');
+        console.log('Main content should now be visible');
+    } else {
+        console.error('mainContent element not found!');
+        // Try to get it directly
+        mainContent = document.getElementById('mainContent');
+        if (mainContent) {
+            mainContent.classList.add('visible');
+            console.log('Main content found and made visible');
+        }
+    }
     document.body.classList.add('authenticated');
     
     if (currentUser) {
@@ -223,27 +270,35 @@ function switchAuthMode(mode = 'login') {
         case 'register':
             authTitle.textContent = 'Create Account';
             registerForm.style.display = 'block';
-            authSwitchText.innerHTML = 'Already have an account? <a href="#" data-auth-action="login">Login</a>';
+            authSwitchText.innerHTML = 'Already have an account? <a href="javascript:void(0)" data-auth-action="login">Login</a>';
+            // Re-attach event listeners to new links
+            attachAuthLinkListeners();
             break;
             
         case 'forgot-password':
             authTitle.textContent = 'Reset Password';
             forgotPasswordForm.style.display = 'block';
-            authSwitchText.innerHTML = 'Remember your password? <a href="#" data-auth-action="login">Login</a>';
+            authSwitchText.innerHTML = 'Remember your password? <a href="javascript:void(0)" data-auth-action="login">Login</a>';
+            // Re-attach event listeners to new links
+            attachAuthLinkListeners();
             break;
             
         case 'reset-password':
             authTitle.textContent = 'Set New Password';
             resetPasswordForm.style.display = 'block';
-            authSwitchText.innerHTML = 'Go back to <a href="#" data-auth-action="login">Login</a>';
+            authSwitchText.innerHTML = 'Go back to <a href="javascript:void(0)" data-auth-action="login">Login</a>';
+            // Re-attach event listeners to new links
+            attachAuthLinkListeners();
             break;
             
         default: // login
             authTitle.textContent = 'Welcome Back';
             loginForm.style.display = 'block';
-            const newHTML = 'Don\'t have an account? <a href="#" data-auth-action="register">Register</a> | <a href="#" data-auth-action="forgot-password">Forgot Password?</a>';
+            const newHTML = 'Don\'t have an account? <a href="javascript:void(0)" data-auth-action="register">Register</a> | <a href="javascript:void(0)" data-auth-action="forgot-password">Forgot Password?</a>';
             console.log('Setting authSwitchText innerHTML to:', newHTML);
             authSwitchText.innerHTML = newHTML;
+            // Re-attach event listeners to new links
+            attachAuthLinkListeners();
             break;
     }
     
@@ -600,6 +655,37 @@ async function handleResetPassword(event) {
     }
 }
 
+// Helper function to attach listeners to auth links (must be defined before initializeAuthElements)
+function attachAuthLinkListeners() {
+    if (!authSwitchText) return;
+    
+    const authLinks = authSwitchText.querySelectorAll('a[data-auth-action]');
+    authLinks.forEach(link => {
+        // Remove any existing listeners by cloning the node
+        const newLink = link.cloneNode(true);
+        link.parentNode.replaceChild(newLink, link);
+        
+        // Attach new listener
+        newLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            const action = newLink.getAttribute('data-auth-action');
+            console.log('Auth link clicked:', action);
+            if (action === 'login') {
+                isInResetMode = false;
+                resetToken = null;
+                switchAuthMode('login');
+            } else if (action === 'register') {
+                switchAuthMode('register');
+            } else if (action === 'forgot-password') {
+                switchAuthMode('forgot-password');
+            }
+            return false;
+        });
+    });
+}
+
 // Add event listeners for authentication
 // Initialize DOM elements and attach event handlers when DOM is ready
 function initializeAuthElements() {
@@ -621,7 +707,12 @@ function initializeAuthElements() {
     adminLink = document.getElementById('adminLink');
     logoutBtn = document.getElementById('logoutBtn');
     
-    console.log('loginForm found:', !!loginForm);
+    console.log('Elements found:', {
+        loginForm: !!loginForm,
+        registerForm: !!registerForm,
+        authSwitchText: !!authSwitchText,
+        authOverlay: !!authOverlay
+    });
     // #region agent log
     fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:620',message:'initializing auth elements',data:{loginFormExists:!!loginForm,registerFormExists:!!registerForm},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
     // #endregion
@@ -658,11 +749,19 @@ function initializeAuthElements() {
     }
     
     // Event delegation for auth switch links (register, forgot password, etc.)
+    // Use event delegation on the parent container to catch all clicks
     if (authSwitchText) {
+        console.log('Setting up event listener on authSwitchText');
         authSwitchText.addEventListener('click', (e) => {
-            if (e.target.tagName === 'A' && e.target.hasAttribute('data-auth-action')) {
+            console.log('Click detected on authSwitchText, target:', e.target, 'tagName:', e.target.tagName);
+            // Find the closest <a> tag (handles clicks on text inside links)
+            const link = e.target.closest('a[data-auth-action]');
+            console.log('Closest link found:', link);
+            if (link) {
                 e.preventDefault();
-                const action = e.target.getAttribute('data-auth-action');
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                const action = link.getAttribute('data-auth-action');
                 console.log('Auth switch link clicked:', action);
                 
                 if (action === 'login') {
@@ -674,22 +773,87 @@ function initializeAuthElements() {
                 } else if (action === 'forgot-password') {
                     switchAuthMode('forgot-password');
                 }
+                return false;
             }
-        });
+        }, true); // Use capture phase to catch events earlier
+        console.log('Event listener attached to authSwitchText');
+        
+        // Also attach directly to each link as a backup
+        attachAuthLinkListeners();
+    } else {
+        console.error('authSwitchText element not found!');
     }
-
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeAuthElements);
-} else {
-    // DOM is already loaded
-    initializeAuthElements();
 }
 
-// Initialize authentication when page loads
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize DOM elements
+function initializeDOMElements() {
+    // Initialize main content elements first (critical for showing app)
+    mainContent = document.getElementById("mainContent");
+    authOverlay = document.getElementById("authOverlay");
+    userBar = document.getElementById("userBar");
+    
+    // Initialize other elements
+    floatingProgress = document.getElementById("floatingProgress");
+    spotifySection = document.getElementById("spotifyAuth");
+    systemSection = document.getElementById("systemSetup");
+    chatSection = document.getElementById("chatSearch");
+    playlistSection = document.getElementById("playlistCreation");
+    searchInput = document.getElementById("searchInput");
+    searchButton = document.getElementById("searchButton");
+    chatTable = document.getElementById("chatTable");
+    chatTableBody = document.getElementById("chatTableBody");
+    selectedChatsDisplay = document.getElementById("selectedChatsDisplay");
+    clearSelectedChatsButton = document.getElementById("clearSelectedChats");
+    
+    console.log('DOMElements initialized:', {
+        mainContent: !!mainContent,
+        authOverlay: !!authOverlay,
+        userBar: !!userBar
+    });
+}
+
+// Initialize when DOM is ready
+function initializeApp() {
+    console.log('Initializing app, readyState:', document.readyState);
+    
+    // Initialize all DOM elements first
+    initializeDOMElements();
+    initializeAuthElements();
+    
+    // Make sure authOverlay is visible if user is not authenticated
+    // This ensures the modal shows even if checkAuthStatus hasn't run yet
+    if (authOverlay && !isAuthenticated) {
+        console.log('User not authenticated, showing auth modal');
+        showAuthModal();
+    }
+    
+    initializeLoginForm(); // Initialize login form after elements are ready
     checkAuthStatus();
-});
+    
+    // Initialize other app features
+    if (floatingProgress) {
+        initializeFloatingProgress();
+    }
+    if (selectedChatsDisplay) {
+        updateSelectedChatsDisplay();
+    }
+    
+    // Set up all event listeners
+    setupSearchHandlers();
+    setupChatSelectionHandlers();
+    setupSystemSetupHandlers();
+    setupPlaylistHandlers();
+    setupSpotifyHandlers();
+    setupSortingHandlers();
+    setupViewAllChatsHandler();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    // DOM is already loaded
+    initializeApp();
+}
 
 // Helper function to update fetch calls to use BASE_URL
 // Always includes credentials to ensure cookies are sent/received
@@ -717,7 +881,6 @@ function getCurrentTimestamp() {
 function enablePlaylistCreation() {
     if (isSpotifyAuthorized) {
         document.getElementById("playlistCreation").classList.remove("disabled");
-        document.getElementById("summaryStats").classList.remove("disabled");
         updatePlaylistButtonState(); // Use the new button state logic
         updateStatsButtonState();
     }
@@ -733,31 +896,27 @@ let isSystemSetup = false;
 // Note: Data preparation step removed - optimized queries work directly with database
 
 // Step management
-const steps = ['spotifyAuth', 'systemSetup', 'chatSearch', 'summaryStats', 'playlistCreation'];
+const steps = ['spotifyAuth', 'systemSetup', 'chatSearch', 'playlistCreation'];
 const stepTitles = {
     'spotifyAuth': 'Spotify Authorization',
     'systemSetup': 'System Setup', 
     'chatSearch': 'Chat Search & Selection',
-    'summaryStats': 'Summary Statistics',
     'playlistCreation': 'Playlist Creation'
 };
 let currentStep = 0;
 
-// DOM elements
-const floatingProgress = document.getElementById("floatingProgress");
-const spotifySection = document.getElementById("spotifyAuth");
-const systemSection = document.getElementById("systemSetup");
-const chatSection = document.getElementById("chatSearch");
-const playlistSection = document.getElementById("playlistCreation");
-
-// Data preparation elements removed - no longer needed with optimized queries
-
-const searchInput = document.getElementById("searchInput");
-const searchButton = document.getElementById("searchButton");
-const chatTable = document.getElementById("chatTable");
-const chatTableBody = document.getElementById("chatTableBody");
-const selectedChatsDisplay = document.getElementById("selectedChatsDisplay");
-const clearSelectedChatsButton = document.getElementById("clearSelectedChats");
+// DOM elements - will be initialized when DOM is ready
+let floatingProgress;
+let spotifySection;
+let systemSection;
+let chatSection;
+let playlistSection;
+let searchInput;
+let searchButton;
+let chatTable;
+let chatTableBody;
+let selectedChatsDisplay;
+let clearSelectedChatsButton;
 
 // Chat selection state
 // Store selected chats by chat_id (integer) for multi-chat playlist creation
@@ -830,7 +989,7 @@ function updateSectionStates() {
             if (index < 2) {
                 section.classList.add('collapsed');
             }
-            // Steps 2 and above (chatSearch, summaryStats, playlistCreation) stay open
+            // Steps 2 and above (chatSearch, playlistCreation) stay open
         } else if (index === currentStep) {
             // Current step - make it active
             section.classList.add('active');
@@ -846,7 +1005,7 @@ function completeCurrentStep(completionText) {
     const section = document.getElementById(stepId);
     
     // Only add steps 1-2 to floating progress (collapse them)
-    // Steps: 0=spotifyAuth, 1=systemSetup, 2=chatSearch, 3=summaryStats, 4=playlistCreation
+    // Steps: 0=spotifyAuth, 1=systemSetup, 2=chatSearch, 3=playlistCreation
     if (currentStep < 2) {
         // Hide the completed section
         section.classList.add('completed-floating');
@@ -928,10 +1087,6 @@ function updateStatus(statusElement, statusTextElement, message, type) {
 // Enable sections that depend on system setup (no data preparation needed with optimized queries)
 function enableDependentSections() {
     chatSection.classList.remove("disabled");
-    const summaryStatsSection = document.getElementById("summaryStats");
-    if (summaryStatsSection) {
-        summaryStatsSection.classList.remove("disabled");
-    }
     searchInput.disabled = false;
     searchButton.disabled = false;
     updatePlaylistButtonState();
@@ -941,10 +1096,6 @@ function enableDependentSections() {
 // Disable sections that depend on data preparation
 function disableDependentSections() {
     chatSection.classList.add("disabled");
-    const summaryStatsSection = document.getElementById("summaryStats");
-    if (summaryStatsSection) {
-        summaryStatsSection.classList.add("disabled");
-    }
     searchInput.disabled = true;
     searchButton.disabled = true;
     document.getElementById("playlistCreation").classList.add("disabled");
@@ -1013,11 +1164,13 @@ async function fetchUserProfile() {
 }
 
 // Debug: Check if button exists and add event listener
-const spotifyButton = document.getElementById("authorizeSpotify");
-console.log("Spotify button element:", spotifyButton);
-if (!spotifyButton) {
-    console.error("Spotify button not found!");
-} else {
+function setupSpotifyHandlers() {
+    const spotifyButton = document.getElementById("authorizeSpotify");
+    console.log("Spotify button element:", spotifyButton);
+    if (!spotifyButton) {
+        console.error("Spotify button not found!");
+        return;
+    }
     console.log("Adding event listener to Spotify button...");
     
     // Function to update button state based on authentication
@@ -1177,7 +1330,10 @@ if (!spotifyButton) {
 //////// System Setup
 ///////////////////////////////////////////////////////////////
 
-document.getElementById("validateUsername").addEventListener("click", async () => {
+function setupSystemSetupHandlers() {
+    const validateUsernameBtn = document.getElementById("validateUsername");
+    if (validateUsernameBtn) {
+        validateUsernameBtn.addEventListener("click", async () => {
     const username = document.getElementById("username").value.trim();
     if (!username) {
         updateStatus(
@@ -1218,9 +1374,12 @@ document.getElementById("validateUsername").addEventListener("click", async () =
             "error"
         );
     }
-});
-
-document.getElementById("validateChatFile").addEventListener("click", async () => {
+    });
+    }
+    
+    const validateChatFileBtn = document.getElementById("validateChatFile");
+    if (validateChatFileBtn) {
+        validateChatFileBtn.addEventListener("click", async () => {
     const fileInput = document.getElementById("chatFileInput");
     const file = fileInput.files[0];
     
@@ -1269,7 +1428,9 @@ document.getElementById("validateChatFile").addEventListener("click", async () =
             "error"
         );
     }
-});
+    });
+    }
+}
 
 ///////////////////////////////////////////////////////////////
 //////// Chat Search Functions
@@ -1337,7 +1498,9 @@ function removeSelectedChat(chatId) {
 window.removeSelectedChat = removeSelectedChat;
 
 // Clear all selected chats
-clearSelectedChatsButton.addEventListener('click', () => {
+function setupChatSelectionHandlers() {
+    if (clearSelectedChatsButton) {
+        clearSelectedChatsButton.addEventListener('click', () => {
     selectedChats.clear();
     selectedChatsInfo.clear();
     updateSelectedChatsDisplay();
@@ -1345,7 +1508,9 @@ clearSelectedChatsButton.addEventListener('click', () => {
     // Uncheck all checkboxes
     const checkboxes = document.querySelectorAll('.chat-checkbox');
     checkboxes.forEach(checkbox => checkbox.checked = false);
-});
+    });
+    }
+}
 
 // Handle chat checkbox changes (now using chat_id)
 function handleChatSelection(event) {
@@ -1657,22 +1822,28 @@ if (chatDetailsModal) {
 }
 
 // Search button click handler
-searchButton.addEventListener("click", () => {
+function setupSearchHandlers() {
+    if (searchButton) {
+        searchButton.addEventListener("click", () => {
     const searchTerm = searchInput.value.trim();
     if (searchTerm) {
         performSearch(searchTerm);
     }
-});
-
-// Add sorting functionality to table headers
-// Wait for DOM to be ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initSorting);
-} else {
-    initSorting();
+    });
+    }
+    
+    if (searchInput) {
+        searchInput.addEventListener("keypress", (event) => {
+            if (event.key === "Enter") {
+                if (searchButton) searchButton.click();
+            }
+        });
+    }
 }
 
-function initSorting() {
+// Add sorting functionality to table headers
+function setupSortingHandlers() {
+    function initSorting() {
     const sortableHeaders = document.querySelectorAll('#chatTable .sortable');
     sortableHeaders.forEach(header => {
         header.addEventListener('click', () => {
@@ -1698,12 +1869,20 @@ function initSorting() {
             }
         });
     });
+    }
+    
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initSorting);
+    } else {
+        initSorting();
+    }
 }
 
 // View All Chats button
-const viewAllChatsButton = document.getElementById("viewAllChatsButton");
-if (viewAllChatsButton) {
-    viewAllChatsButton.addEventListener("click", async () => {
+function setupViewAllChatsHandler() {
+    const viewAllChatsButton = document.getElementById("viewAllChatsButton");
+    if (viewAllChatsButton) {
+        viewAllChatsButton.addEventListener("click", async () => {
         try {
             viewAllChatsButton.disabled = true;
             viewAllChatsButton.textContent = "Loading...";
@@ -1726,14 +1905,10 @@ if (viewAllChatsButton) {
             viewAllChatsButton.textContent = "View All Chats";
         }
     });
+    }
 }
 
-// Allow Enter key to trigger search
-searchInput.addEventListener("keypress", (event) => {
-    if (event.key === "Enter") {
-        searchButton.click();
-    }
-});
+// Allow Enter key to trigger search - moved to setupSearchHandlers()
 
 ///////////////////////////////////////////////////////////////
 //////// Playlist Creation
@@ -1745,46 +1920,77 @@ function updatePlaylistButtonState() {
     const hasSpotifyAuth = isSpotifyAuthorized;
     
     const createButton = document.getElementById("createPlaylist");
+    const warningMessage = document.getElementById("playlistWarningMessage");
+    const playlistSectionEl = document.getElementById("playlistCreation");
     
     if (hasSelections && hasSpotifyAuth) {
-        createButton.disabled = false;
-        createButton.style.opacity = "1";
-        createButton.title = "";
-        playlistSection.classList.remove("disabled");
+        if (createButton) {
+            createButton.disabled = false;
+            createButton.style.opacity = "1";
+            createButton.title = "";
+        }
+        if (playlistSectionEl) {
+            playlistSectionEl.classList.remove("disabled");
+        }
+        if (playlistSection) {
+            playlistSection.classList.remove("disabled");
+        }
+        
+        // Hide warning message when chats are selected and Spotify is authorized
+        if (warningMessage) {
+            warningMessage.style.display = "none";
+        }
         
         // Move to playlist creation step if we're not already there
-        // Note: Steps are now: 0=spotifyAuth, 1=systemSetup, 2=chatSearch, 3=summaryStats, 4=playlistCreation
-        if (currentStep < 4) {
-            currentStep = 4;
+        // Note: Steps are now: 0=spotifyAuth, 1=systemSetup, 2=chatSearch, 3=playlistCreation
+        if (currentStep < 3) {
+            currentStep = 3;
             updateSectionStates();
         }
     } else {
-        createButton.disabled = true;
-        createButton.style.opacity = "0.6";
+        if (createButton) {
+            createButton.disabled = true;
+            createButton.style.opacity = "0.6";
+            
+            if (!hasSpotifyAuth) {
+                createButton.title = "Please complete Spotify authorization first";
+            } else if (!hasSelections) {
+                createButton.title = "Please select at least one chat";
+            }
+        }
         
-        if (!hasSpotifyAuth) {
-            createButton.title = "Please complete Spotify authorization first";
-        } else if (!hasSelections) {
-            createButton.title = "Please select at least one chat";
+        // Show warning message when prerequisites aren't met
+        if (warningMessage) {
+            warningMessage.style.display = "block";
         }
     }
 }
 
 // Handle playlist form submission
-document.getElementById("playlistForm").addEventListener("submit", async (event) => {
+function setupPlaylistHandlers() {
+    const playlistForm = document.getElementById("playlistForm");
+    if (playlistForm) {
+        playlistForm.addEventListener("submit", async (event) => {
     event.preventDefault();
 
     const statusDiv = document.getElementById("playlistStatus");
     const createButton = document.getElementById("createPlaylist");
     
     // Validate form inputs
+    const isNewPlaylist = playlistTypeNew && playlistTypeNew.checked;
     const playlistName = document.getElementById("playlistName").value.trim();
     const startDate = document.getElementById("startDate").value;
     const endDate = document.getElementById("endDate").value;
     const selectedChatIds = Array.from(selectedChats);
     
-    if (!playlistName) {
+    // Validate based on playlist type
+    if (isNewPlaylist && !playlistName) {
         statusDiv.innerHTML = '<div class="status-indicator status-error">❌ Please enter a playlist name</div>';
+        return;
+    }
+    
+    if (!isNewPlaylist && !selectedPlaylistId) {
+        statusDiv.innerHTML = '<div class="status-indicator status-error">❌ Please select an existing playlist</div>';
         return;
     }
     
@@ -1804,75 +2010,902 @@ document.getElementById("playlistForm").addEventListener("submit", async (event)
         return;
     }
 
-    const playlistNameInput = document.getElementById("playlistName");
-    const wasDisabled = playlistNameInput.disabled;
-    if (wasDisabled) playlistNameInput.disabled = false; // Enable if disabled
-
-    const formData = new FormData(event.target);
-
-    if (wasDisabled) playlistNameInput.disabled = true; // Restore disabled state
-
-    // Use chat_ids instead of chat names for the optimized endpoint
-    formData.append("selected_chat_ids", JSON.stringify(selectedChatIds));
-
-    // Add selected playlist ID if any
-    const playlistDropdown = document.getElementById('playlistDropdown');
-    if (playlistDropdown && playlistDropdown.value) {
-        formData.append('existing_playlist_id', playlistDropdown.value);
+    // Prepare request data as FormData (FastAPI expects form data for simple string parameters)
+    const formDataObj = new FormData();
+    
+    // For new playlists, use the name. For existing, use the selected ID
+    if (isNewPlaylist) {
+        formDataObj.append("playlist_name", playlistName);
+    } else {
+        // For existing playlists, we still need a name (it will be ignored if existing_playlist_id is provided)
+        // But let's use the selected playlist's name if available
+        formDataObj.append("playlist_name", playlistName || "Existing Playlist");
+        const existingPlaylistId = document.getElementById("selectedPlaylistId")?.value;
+        if (existingPlaylistId) {
+            formDataObj.append("existing_playlist_id", existingPlaylistId);
+        }
     }
     
-    const createButton = document.getElementById("createPlaylist");
-    const statusDiv = document.getElementById("playlistStatus");
+    formDataObj.append("start_date", startDate);
+    formDataObj.append("end_date", endDate);
+    formDataObj.append("selected_chat_ids", JSON.stringify(selectedChatIds));  // Backend expects JSON string
+    
+    // createButton and statusDiv are already declared above, reuse them
 
     try {
         createButton.disabled = true;
         createButton.textContent = "Creating Playlist...";
-        statusDiv.innerHTML = '<div class="status-indicator status-info">Creating playlist...</div>';
+        statusDiv.innerHTML = '';
+        
+        // Show progress bar
+        const progressContainer = document.getElementById("playlistProgressContainer");
+        const progressBar = document.getElementById("progressBar");
+        const progressPercent = document.getElementById("progressPercent");
+        const progressMessage = document.getElementById("progressMessage");
+        const progressStage = document.getElementById("progressStage");
+        
+        if (progressContainer) {
+            progressContainer.style.display = "block";
+        }
+        if (progressBar) {
+            progressBar.style.width = "0%";
+        }
+        if (progressPercent) {
+            progressPercent.textContent = "0%";
+        }
+        if (progressMessage) {
+            progressMessage.textContent = "Starting playlist creation...";
+        }
+        if (progressStage) {
+            progressStage.textContent = "Initializing...";
+        }
 
-        // Use optimized endpoint that supports multiple chat_ids
-        const response = await apiFetch("/create-playlist-optimized", {
-            method: "POST",
-            body: formData,
-        });
-
-        // Check if response is OK
+        // Use streaming endpoint for progress updates
+        let response;
+        try {
+            response = await fetch(`${BASE_URL}/create-playlist-optimized-stream`, {
+                method: "POST",
+                body: formDataObj,
+                credentials: 'include',
+                headers: {
+                    // Don't set Content-Type - browser will set it with boundary for FormData
+                }
+            });
+        } catch (fetchError) {
+            console.error("Fetch error:", fetchError);
+            throw new Error(`Network error: ${fetchError.message}`);
+        }
+        
         if (!response.ok) {
-            let errorMessage = `HTTP ${response.status}: `;
+            // Try to get error message from response
+            let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
             try {
                 const errorData = await response.json();
-                errorMessage += errorData.detail || errorData.message || 'Unknown error';
+                errorMsg = errorData.detail || errorData.message || errorMsg;
             } catch (e) {
-                errorMessage += await response.text() || 'Unknown error';
+                // If JSON parsing fails, use status text
             }
-            statusDiv.innerHTML = `<div class="status-indicator status-error">❌ ${errorMessage}</div>`;
-            console.error("Playlist creation failed:", errorMessage);
+            throw new Error(errorMsg);
+        }
+        
+        // Handle Server-Sent Events stream
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalResult = null;
+        
+        console.log("Starting to read SSE stream...");
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                console.log("Stream finished");
+                break;
+            }
+            
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // Keep incomplete line in buffer
+            
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (trimmedLine === '') continue; // Skip empty lines
+                
+                if (trimmedLine.startsWith('data: ')) {
+                    try {
+                        const jsonStr = trimmedLine.slice(6);
+                        const data = JSON.parse(jsonStr);
+                        console.log("Received SSE data:", data);
+                        
+                        // Update progress bar
+                        if (data.status === 'progress') {
+                            const progress = data.progress || 0;
+                            if (progressBar) {
+                                progressBar.style.width = `${progress}%`;
+                            }
+                            if (progressPercent) {
+                                progressPercent.textContent = `${progress}%`;
+                            }
+                            if (progressMessage) {
+                                progressMessage.textContent = data.message || '';
+                            }
+                            if (progressStage) {
+                                const stageNames = {
+                                    'querying': 'Querying Messages',
+                                    'extracting': 'Extracting URLs',
+                                    'processing': 'Processing Tracks',
+                                    'adding': 'Adding to Playlist'
+                                };
+                                progressStage.textContent = stageNames[data.stage] || 'Processing...';
+                            }
+                            
+                            // Show current/total if available
+                            if (data.current !== undefined && data.total !== undefined) {
+                                if (progressMessage) {
+                                    progressMessage.textContent = `${data.message} (${data.current}/${data.total})`;
+                                }
+                            }
+                        } else if (data.status === 'completed' && data.result) {
+                            finalResult = data.result;
+                            // Set progress to 100%
+                            if (progressBar) {
+                                progressBar.style.width = "100%";
+                            }
+                            if (progressPercent) {
+                                progressPercent.textContent = "100%";
+                            }
+                            if (progressMessage) {
+                                progressMessage.textContent = "Playlist creation completed!";
+                            }
+                        } else if (data.status === 'error' || data.status === 'warning') {
+                            // Handle errors/warnings - store the data for later processing
+                            finalResult = {
+                                status: data.status,
+                                message: data.message || 'Unknown error',
+                                track_details: data.track_details || [],
+                                statistics: data.statistics || null,
+                                skipped_links: data.skipped_links || [],
+                                other_links: data.other_links || []
+                            };
+                            break;
+                        }
+                    } catch (e) {
+                        console.error("Error parsing SSE data:", e, line);
+                    }
+                }
+            }
+        }
+        
+        // Hide progress bar and show results
+        if (progressContainer) {
+            progressContainer.style.display = "none";
+        }
+        
+        // Process final result (reuse existing result handling code)
+        if (!finalResult) {
+            throw new Error("No result received from server");
+        }
+        
+        const result = finalResult;
+        
+        // Handle result based on status
+        if (result.status === "error" || result.status === "warning") {
+            let errorMessage = result.message || 'Unknown error';
+            let errorDetails = result;
+            let trackDetails = result.track_details || [];
+            let statistics = result.statistics || null;
+            // Get skipped_links and other_links from result if available
+            if (result.skipped_links) {
+                errorDetails = {...errorDetails, skipped_links: result.skipped_links};
+            }
+            if (result.other_links) {
+                errorDetails = {...errorDetails, other_links: result.other_links};
+            }
+            
+            // Build error display with track details table if available
+            let errorHtml = `<div class="status-indicator status-error">❌ ${errorMessage}`;
+            if (statistics) {
+                errorHtml += `<br><strong>Summary:</strong> ${statistics.added || 0} added, ${statistics.skipped || 0} skipped, ${statistics.error || 0} errors (${statistics.total || 0} total)`;
+            }
+            errorHtml += `</div>`;
+            
+            // Add track details table if available
+            if (trackDetails && trackDetails.length > 0) {
+                errorHtml += `<div style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
+                    <h4 style="margin-bottom: 10px;">Track Details:</h4>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                    <thead>
+                        <tr style="background-color: #f2f2f2; position: sticky; top: 0;">
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Status</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Track Name</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Artist</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Sender</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Date</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Message</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Track ID</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">URL / Error</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+                
+                trackDetails.forEach(track => {
+                    let rowClass = "";
+                    let statusText = track.status;
+                    let statusColor = "#333";
+                    
+                    if (track.status === "added") {
+                        rowClass = "background-color: #d4edda;";
+                        statusText = "✅ Added";
+                        statusColor = "#155724";
+                    } else if (track.status === "skipped") {
+                        rowClass = "background-color: #fff3cd;";
+                        statusText = "⏭️ Skipped";
+                        statusColor = "#856404";
+                    } else if (track.status === "error") {
+                        rowClass = "background-color: #f8d7da;";
+                        statusText = "❌ Error";
+                        statusColor = "#721c24";
+                    } else if (track.status === "valid") {
+                        statusText = "✓ Valid";
+                        statusColor = "#0c5460";
+                    }
+                    
+                    const trackName = track.track_name || "—";
+                    const artist = track.artist || "—";
+                    const sender = track.sender_name || "—";
+                    const messageDate = track.message_date || "—";
+                    const messageText = track.message_text || "—";
+                    const trackId = track.track_id || "—";
+                    const urlOrError = track.error || (track.spotify_url ? `<a href="${track.spotify_url}" target="_blank">${track.url}</a>` : track.url || "—");
+                    
+                    // Format date if available
+                    let formattedDate = messageDate;
+                    if (messageDate && messageDate !== "—") {
+                        try {
+                            const date = new Date(messageDate);
+                            if (!isNaN(date.getTime())) {
+                                formattedDate = date.toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit'
+                                });
+                            }
+                        } catch (e) {
+                            // Keep original date string if parsing fails
+                        }
+                    }
+                    
+                    // Create unique ID for message cell to enable expand/collapse
+                    const messageCellId = `msg-${track.track_id || Math.random().toString(36).substr(2, 9)}`;
+                    const isLongMessage = messageText.length > 100;
+                    
+                    errorHtml += `
+                        <tr style="${rowClass}">
+                            <td style="border: 1px solid #ddd; padding: 8px; color: ${statusColor}; font-weight: bold;">${statusText}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(trackName)}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(artist)}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${track.is_from_me ? 'bold' : 'normal'}; color: ${track.is_from_me ? '#007bff' : '#333'};">
+                                ${escapeHtml(sender)}
+                            </td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
+                                <div id="${messageCellId}" style="cursor: ${isLongMessage ? 'pointer' : 'default'};">
+                                    ${isLongMessage 
+                                        ? `<span class="message-preview">${escapeHtml(messageText.substring(0, 100))}... <span style="color: #007bff; text-decoration: underline;">(click to expand)</span></span>
+                                           <span class="message-full" style="display: none;">${escapeHtml(messageText)} <span style="color: #007bff; text-decoration: underline;">(click to collapse)</span></span>`
+                                        : escapeHtml(messageText)
+                                    }
+                                </div>
+                            </td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-family: monospace; font-size: 0.85em;">${escapeHtml(trackId)}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; word-break: break-all;">${urlOrError}</td>
+                        </tr>`;
+                    
+                    // Add click handler for expandable messages
+                    if (isLongMessage) {
+                        setTimeout(() => {
+                            const msgCell = document.getElementById(messageCellId);
+                            if (msgCell) {
+                                msgCell.addEventListener('click', function() {
+                                    const preview = this.querySelector('.message-preview');
+                                    const full = this.querySelector('.message-full');
+                                    if (preview && full) {
+                                        if (preview.style.display !== 'none') {
+                                            preview.style.display = 'none';
+                                            full.style.display = 'inline';
+                                        } else {
+                                            preview.style.display = 'inline';
+                                            full.style.display = 'none';
+                                        }
+                                    }
+                                });
+                            }
+                        }, 100);
+                    }
+                });
+                
+                errorHtml += `</tbody></table></div>`;
+            }
+            
+            // Add skipped non-track links section if available (for error responses too)
+            if (errorDetails && errorDetails.skipped_links && errorDetails.skipped_links.length > 0) {
+                errorHtml += `<div style="margin-top: 30px;">
+                    <h4 style="margin-bottom: 10px;">Skipped Non-Track Spotify Links (${errorDetails.skipped_links.length}):</h4>
+                    <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+                        These Spotify links were found but skipped because they are not individual tracks (e.g., albums, playlists, artists, radio stations).
+                    </p>
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                            <thead>
+                                <tr style="background-color: #f2f2f2; position: sticky; top: 0;">
+                                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Type</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">URL</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Sender</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Date</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Message</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                
+                errorDetails.skipped_links.forEach(link => {
+                    // Format date
+                    let formattedDate = link.date || "—";
+                    if (formattedDate && formattedDate !== "—") {
+                        try {
+                            const date = new Date(formattedDate);
+                            if (!isNaN(date.getTime())) {
+                                formattedDate = date.toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit'
+                                });
+                            }
+                        } catch (e) {
+                            // Keep original date string if parsing fails
+                        }
+                    }
+                    
+                    const entityType = link.entity_type || "unknown";
+                    const entityTypeDisplay = entityType.charAt(0).toUpperCase() + entityType.slice(1);
+                    const sender = link.sender_name || "—";
+                    const messageText = link.message_text || "—";
+                    const messageCellId = `skipped-msg-${Math.random().toString(36).substr(2, 9)}`;
+                    const isLongMessage = messageText.length > 100;
+                    
+                    errorHtml += `
+                        <tr style="background-color: #f8f9fa;">
+                            <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #856404;">${escapeHtml(entityTypeDisplay)}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; word-break: break-all;">
+                                <a href="${escapeHtml(link.url)}" target="_blank" style="color: #007bff;">${escapeHtml(link.url)}</a>
+                            </td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${link.is_from_me ? 'bold' : 'normal'}; color: ${link.is_from_me ? '#007bff' : '#333'};">
+                                ${escapeHtml(sender)}
+                            </td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
+                                <div id="${messageCellId}" style="cursor: ${isLongMessage ? 'pointer' : 'default'};">
+                                    ${isLongMessage 
+                                        ? `<span class="message-preview">${escapeHtml(messageText.substring(0, 100))}... <span style="color: #007bff; text-decoration: underline;">(click to expand)</span></span>
+                                           <span class="message-full" style="display: none;">${escapeHtml(messageText)} <span style="color: #007bff; text-decoration: underline;">(click to collapse)</span></span>`
+                                        : escapeHtml(messageText)
+                                    }
+                                </div>
+                            </td>
+                        </tr>`;
+                    
+                    if (isLongMessage) {
+                        if (!window.expandableMessages) {
+                            window.expandableMessages = [];
+                        }
+                        window.expandableMessages.push(messageCellId);
+                    }
+                });
+                
+                errorHtml += `</tbody></table></div></div>`;
+            }
+            
+            // Add other non-Spotify links section if available (for error responses too)
+            if (errorDetails && errorDetails.other_links && errorDetails.other_links.length > 0) {
+                // Group links by type for better organization
+                const linksByType = {};
+                errorDetails.other_links.forEach(link => {
+                    const type = link.link_type || "other";
+                    if (!linksByType[type]) {
+                        linksByType[type] = [];
+                    }
+                    linksByType[type].push(link);
+                });
+                
+                // Type display names
+                const typeNames = {
+                    "youtube": "YouTube",
+                    "instagram": "Instagram",
+                    "apple_music": "Apple Music",
+                    "tiktok": "TikTok",
+                    "twitter": "Twitter/X",
+                    "facebook": "Facebook",
+                    "soundcloud": "SoundCloud",
+                    "bandcamp": "Bandcamp",
+                    "tidal": "Tidal",
+                    "amazon_music": "Amazon Music",
+                    "deezer": "Deezer",
+                    "pandora": "Pandora",
+                    "iheart": "iHeartRadio",
+                    "tunein": "TuneIn",
+                    "other": "Other Links"
+                };
+                
+                errorHtml += `<div style="margin-top: 30px;">
+                    <h4 style="margin-bottom: 10px;">Other Links Found (${errorDetails.other_links.length}):</h4>
+                    <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+                        These are non-Spotify links found in the selected messages (Instagram, YouTube, Apple Music, etc.).
+                    </p>`;
+                
+                // Display links grouped by type
+                Object.keys(linksByType).sort().forEach(type => {
+                    const links = linksByType[type];
+                    const typeDisplayName = typeNames[type] || type.charAt(0).toUpperCase() + type.slice(1);
+                    
+                    errorHtml += `<div style="margin-bottom: 20px;">
+                        <h5 style="margin-bottom: 8px; color: #495057;">${typeDisplayName} (${links.length})</h5>
+                        <div style="max-height: 300px; overflow-y: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                                <thead>
+                                    <tr style="background-color: #f2f2f2; position: sticky; top: 0;">
+                                        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">URL</th>
+                                        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Sender</th>
+                                        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Date</th>
+                                        <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Message</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+                    
+                    links.forEach(link => {
+                        // Format date
+                        let formattedDate = link.date || "—";
+                        if (formattedDate && formattedDate !== "—") {
+                            try {
+                                const date = new Date(formattedDate);
+                                if (!isNaN(date.getTime())) {
+                                    formattedDate = date.toLocaleString('en-US', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric',
+                                        hour: 'numeric',
+                                        minute: '2-digit'
+                                    });
+                                }
+                            } catch (e) {
+                                // Keep original date string if parsing fails
+                            }
+                        }
+                        
+                        const sender = link.sender_name || "—";
+                        const messageText = link.message_text || "—";
+                        const messageCellId = `other-link-msg-${Math.random().toString(36).substr(2, 9)}`;
+                        const isLongMessage = messageText.length > 100;
+                        
+                        errorHtml += `
+                            <tr style="background-color: #ffffff;">
+                                <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; word-break: break-all;">
+                                    <a href="${escapeHtml(link.url)}" target="_blank" style="color: #007bff;">${escapeHtml(link.url)}</a>
+                                </td>
+                                <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${link.is_from_me ? 'bold' : 'normal'}; color: ${link.is_from_me ? '#007bff' : '#333'};">
+                                    ${escapeHtml(sender)}
+                                </td>
+                                <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
+                                <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
+                                    <div id="${messageCellId}" style="cursor: ${isLongMessage ? 'pointer' : 'default'};">
+                                        ${isLongMessage 
+                                            ? `<span class="message-preview">${escapeHtml(messageText.substring(0, 100))}... <span style="color: #007bff; text-decoration: underline;">(click to expand)</span></span>
+                                               <span class="message-full" style="display: none;">${escapeHtml(messageText)} <span style="color: #007bff; text-decoration: underline;">(click to collapse)</span></span>`
+                                            : escapeHtml(messageText)
+                                        }
+                                    </div>
+                                </td>
+                            </tr>`;
+                        
+                        if (isLongMessage) {
+                            if (!window.expandableMessages) {
+                                window.expandableMessages = [];
+                            }
+                            window.expandableMessages.push(messageCellId);
+                        }
+                    });
+                    
+                    errorHtml += `</tbody></table></div></div>`;
+                });
+                
+                errorHtml += `</div>`;
+            }
+            
+            statusDiv.innerHTML = errorHtml;
             return;
         }
 
-        const result = await response.json();
+        // Build status message with statistics
+        let statusClass = "status-success";
+        let statusIcon = "✅";
+        if (result.status === "warning") {
+            statusClass = "status-warning";
+            statusIcon = "⚠️";
+        } else if (result.status === "error") {
+            statusClass = "status-error";
+            statusIcon = "❌";
+        }
+        
+        let statusHtml = `<div class="status-indicator ${statusClass}">${statusIcon} ${result.message}`;
+        
+        if (result.playlist_url) {
+            statusHtml += `<br><a href="${result.playlist_url}" target="_blank" style="color: #007bff; text-decoration: underline;">Open Playlist on Spotify</a>`;
+        }
+        
+        // Add statistics if available
+        if (result.statistics) {
+            const stats = result.statistics;
+            let statsMsg = `<br><strong>Summary:</strong> ${stats.added || 0} added, ${stats.skipped || 0} skipped, ${stats.error || 0} errors (${stats.total || 0} total)`;
+            if (stats.non_track_links && stats.non_track_links > 0) {
+                statsMsg += `, ${stats.non_track_links} non-track Spotify link(s) skipped`;
+            }
+            if (stats.other_links && stats.other_links > 0) {
+                statsMsg += `, ${stats.other_links} other link(s) found`;
+            }
+            statusHtml += statsMsg;
+        } else {
+            statusHtml += `<br>Added ${result.tracks_added || 0} tracks (found ${result.total_tracks_found || 0} total)`;
+        }
+        
+        statusHtml += `</div>`;
+        
+        // Add track details table if available
+        if (result.track_details && result.track_details.length > 0) {
+            statusHtml += `<div style="margin-top: 20px; max-height: 500px; overflow-y: auto;">
+                <h4 style="margin-bottom: 10px;">Track Details:</h4>
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                    <thead>
+                        <tr style="background-color: #f2f2f2; position: sticky; top: 0;">
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Status</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Track Name</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Artist</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Sender</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Date</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Message</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Track ID</th>
+                            <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">URL / Error</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+            
+            result.track_details.forEach(track => {
+                let rowClass = "";
+                let statusText = track.status;
+                let statusColor = "#333";
+                
+                if (track.status === "added") {
+                    rowClass = "background-color: #d4edda;";
+                    statusText = "✅ Added";
+                    statusColor = "#155724";
+                } else if (track.status === "skipped") {
+                    rowClass = "background-color: #fff3cd;";
+                    statusText = "⏭️ Skipped";
+                    statusColor = "#856404";
+                } else if (track.status === "error") {
+                    rowClass = "background-color: #f8d7da;";
+                    statusText = "❌ Error";
+                    statusColor = "#721c24";
+                } else if (track.status === "valid") {
+                    statusText = "✓ Valid";
+                    statusColor = "#0c5460";
+                }
+                
+                const trackName = track.track_name || "—";
+                const artist = track.artist || "—";
+                const sender = track.sender_name || "—";
+                const messageDate = track.message_date || "—";
+                const messageText = track.message_text || "—";
+                const trackId = track.track_id || "—";
+                const urlOrError = track.error || (track.spotify_url ? `<a href="${track.spotify_url}" target="_blank">${track.url}</a>` : track.url || "—");
+                
+                // Format date if available
+                let formattedDate = messageDate;
+                if (messageDate && messageDate !== "—") {
+                    try {
+                        const date = new Date(messageDate);
+                        if (!isNaN(date.getTime())) {
+                            formattedDate = date.toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                            });
+                        }
+                    } catch (e) {
+                        // Keep original date string if parsing fails
+                    }
+                }
+                
+                // Create unique ID for message cell to enable expand/collapse
+                const messageCellId = `msg-${track.track_id || Math.random().toString(36).substr(2, 9)}`;
+                const isLongMessage = messageText.length > 100;
+                
+                statusHtml += `
+                    <tr style="${rowClass}">
+                        <td style="border: 1px solid #ddd; padding: 8px; color: ${statusColor}; font-weight: bold;">${statusText}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(trackName)}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(artist)}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${track.is_from_me ? 'bold' : 'normal'}; color: ${track.is_from_me ? '#007bff' : '#333'};">
+                            ${escapeHtml(sender)}
+                        </td>
+                        <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
+                            <div id="${messageCellId}" style="cursor: ${isLongMessage ? 'pointer' : 'default'};">
+                                ${isLongMessage 
+                                    ? `<span class="message-preview">${escapeHtml(messageText.substring(0, 100))}... <span style="color: #007bff; text-decoration: underline;">(click to expand)</span></span>
+                                       <span class="message-full" style="display: none;">${escapeHtml(messageText)} <span style="color: #007bff; text-decoration: underline;">(click to collapse)</span></span>`
+                                    : escapeHtml(messageText)
+                                }
+                            </div>
+                        </td>
+                        <td style="border: 1px solid #ddd; padding: 8px; font-family: monospace; font-size: 0.85em;">${escapeHtml(trackId)}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; word-break: break-all;">${urlOrError}</td>
+                    </tr>`;
+                
+                // Add click handler for expandable messages (will be attached after HTML is inserted)
+                if (isLongMessage) {
+                    // Store the messageCellId for later attachment
+                    if (!window.expandableMessages) {
+                        window.expandableMessages = [];
+                    }
+                    window.expandableMessages.push(messageCellId);
+                }
+            });
+            
+            statusHtml += `</tbody></table></div>`;
+        }
+        
+        // Add skipped non-track links section if available
+        if (result.skipped_links && result.skipped_links.length > 0) {
+            statusHtml += `<div style="margin-top: 30px;">
+                <h4 style="margin-bottom: 10px;">Skipped Non-Track Spotify Links (${result.skipped_links.length}):</h4>
+                <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+                    These Spotify links were found but skipped because they are not individual tracks (e.g., albums, playlists, artists, radio stations).
+                </p>
+                <div style="max-height: 400px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                        <thead>
+                            <tr style="background-color: #f2f2f2; position: sticky; top: 0;">
+                                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Type</th>
+                                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">URL</th>
+                                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Sender</th>
+                                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Date</th>
+                                <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+            
+            result.skipped_links.forEach(link => {
+                // Format date
+                let formattedDate = link.date || "—";
+                if (formattedDate && formattedDate !== "—") {
+                    try {
+                        const date = new Date(formattedDate);
+                        if (!isNaN(date.getTime())) {
+                            formattedDate = date.toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit'
+                            });
+                        }
+                    } catch (e) {
+                        // Keep original date string if parsing fails
+                    }
+                }
+                
+                const entityType = link.entity_type || "unknown";
+                const entityTypeDisplay = entityType.charAt(0).toUpperCase() + entityType.slice(1);
+                const sender = link.sender_name || "—";
+                const messageText = link.message_text || "—";
+                const messageCellId = `skipped-msg-${Math.random().toString(36).substr(2, 9)}`;
+                const isLongMessage = messageText.length > 100;
+                
+                statusHtml += `
+                    <tr style="background-color: #f8f9fa;">
+                        <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #856404;">${escapeHtml(entityTypeDisplay)}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; word-break: break-all;">
+                            <a href="${escapeHtml(link.url)}" target="_blank" style="color: #007bff;">${escapeHtml(link.url)}</a>
+                        </td>
+                        <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${link.is_from_me ? 'bold' : 'normal'}; color: ${link.is_from_me ? '#007bff' : '#333'};">
+                            ${escapeHtml(sender)}
+                        </td>
+                        <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
+                        <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
+                            <div id="${messageCellId}" style="cursor: ${isLongMessage ? 'pointer' : 'default'};">
+                                ${isLongMessage 
+                                    ? `<span class="message-preview">${escapeHtml(messageText.substring(0, 100))}... <span style="color: #007bff; text-decoration: underline;">(click to expand)</span></span>
+                                       <span class="message-full" style="display: none;">${escapeHtml(messageText)} <span style="color: #007bff; text-decoration: underline;">(click to collapse)</span></span>`
+                                    : escapeHtml(messageText)
+                                }
+                            </div>
+                        </td>
+                    </tr>`;
+                
+                if (isLongMessage) {
+                    if (!window.expandableMessages) {
+                        window.expandableMessages = [];
+                    }
+                    window.expandableMessages.push(messageCellId);
+                }
+            });
+            
+            statusHtml += `</tbody></table></div></div>`;
+        }
+        
+        // Add other non-Spotify links section if available
+        if (result.other_links && result.other_links.length > 0) {
+            // Group links by type for better organization
+            const linksByType = {};
+            result.other_links.forEach(link => {
+                const type = link.link_type || "other";
+                if (!linksByType[type]) {
+                    linksByType[type] = [];
+                }
+                linksByType[type].push(link);
+            });
+            
+            // Type display names
+            const typeNames = {
+                "youtube": "YouTube",
+                "instagram": "Instagram",
+                "apple_music": "Apple Music",
+                "tiktok": "TikTok",
+                "twitter": "Twitter/X",
+                "facebook": "Facebook",
+                "soundcloud": "SoundCloud",
+                "bandcamp": "Bandcamp",
+                "tidal": "Tidal",
+                "amazon_music": "Amazon Music",
+                "deezer": "Deezer",
+                "pandora": "Pandora",
+                "iheart": "iHeartRadio",
+                "tunein": "TuneIn",
+                "other": "Other Links"
+            };
+            
+            statusHtml += `<div style="margin-top: 30px;">
+                <h4 style="margin-bottom: 10px;">Other Links Found (${result.other_links.length}):</h4>
+                <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+                    These are non-Spotify links found in the selected messages (Instagram, YouTube, Apple Music, etc.).
+                </p>`;
+            
+            // Display links grouped by type
+            Object.keys(linksByType).sort().forEach(type => {
+                const links = linksByType[type];
+                const typeDisplayName = typeNames[type] || type.charAt(0).toUpperCase() + type.slice(1);
+                
+                statusHtml += `<div style="margin-bottom: 20px;">
+                    <h5 style="margin-bottom: 8px; color: #495057;">${typeDisplayName} (${links.length})</h5>
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                            <thead>
+                                <tr style="background-color: #f2f2f2; position: sticky; top: 0;">
+                                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">URL</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Sender</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Date</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Message</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                
+                links.forEach(link => {
+                    // Format date
+                    let formattedDate = link.date || "—";
+                    if (formattedDate && formattedDate !== "—") {
+                        try {
+                            const date = new Date(formattedDate);
+                            if (!isNaN(date.getTime())) {
+                                formattedDate = date.toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    year: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit'
+                                });
+                            }
+                        } catch (e) {
+                            // Keep original date string if parsing fails
+                        }
+                    }
+                    
+                    const sender = link.sender_name || "—";
+                    const messageText = link.message_text || "—";
+                    const messageCellId = `other-link-msg-${Math.random().toString(36).substr(2, 9)}`;
+                    const isLongMessage = messageText.length > 100;
+                    
+                    statusHtml += `
+                        <tr style="background-color: #ffffff;">
+                            <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; word-break: break-all;">
+                                <a href="${escapeHtml(link.url)}" target="_blank" style="color: #007bff;">${escapeHtml(link.url)}</a>
+                            </td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${link.is_from_me ? 'bold' : 'normal'}; color: ${link.is_from_me ? '#007bff' : '#333'};">
+                                ${escapeHtml(sender)}
+                            </td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
+                                <div id="${messageCellId}" style="cursor: ${isLongMessage ? 'pointer' : 'default'};">
+                                    ${isLongMessage 
+                                        ? `<span class="message-preview">${escapeHtml(messageText.substring(0, 100))}... <span style="color: #007bff; text-decoration: underline;">(click to expand)</span></span>
+                                           <span class="message-full" style="display: none;">${escapeHtml(messageText)} <span style="color: #007bff; text-decoration: underline;">(click to collapse)</span></span>`
+                                        : escapeHtml(messageText)
+                                    }
+                                </div>
+                            </td>
+                        </tr>`;
+                    
+                    if (isLongMessage) {
+                        if (!window.expandableMessages) {
+                            window.expandableMessages = [];
+                        }
+                        window.expandableMessages.push(messageCellId);
+                    }
+                });
+                
+                statusHtml += `</tbody></table></div></div>`;
+            });
+            
+            statusHtml += `</div>`;
+        }
+        
+        statusDiv.innerHTML = statusHtml;
+        
+        // Attach click handlers for expandable messages after HTML is inserted
+        if (window.expandableMessages) {
+            window.expandableMessages.forEach(messageCellId => {
+                const msgCell = document.getElementById(messageCellId);
+                if (msgCell) {
+                    msgCell.addEventListener('click', function() {
+                        const preview = this.querySelector('.message-preview');
+                        const full = this.querySelector('.message-full');
+                        if (preview && full) {
+                            if (preview.style.display !== 'none') {
+                                preview.style.display = 'none';
+                                full.style.display = 'inline';
+                            } else {
+                                preview.style.display = 'inline';
+                                full.style.display = 'none';
+                            }
+                        }
+                    });
+                }
+            });
+            window.expandableMessages = []; // Clear the array
+        }
 
+        // Clear form only on success
         if (result.status === "success") {
-            const successMessage = result.playlist_url 
-                ? `${result.message}<br><a href="${result.playlist_url}" target="_blank" style="color: #007bff; text-decoration: underline;">Open Playlist on Spotify</a>`
-                : result.message;
-            statusDiv.innerHTML = `<div class="status-indicator status-success">✅ ${successMessage}<br>Added ${result.tracks_added || 0} tracks (found ${result.total_tracks_found || 0} total)</div>`;
-
-            // Clear form
-            document.getElementById("playlistName").value = "";
-            document.getElementById("startDate").value = "";
-            document.getElementById("endDate").value = "";
-
             // Optionally clear selected chats
+            // Refresh playlist list if user is viewing existing playlists
+            if (playlistTypeExisting && playlistTypeExisting.checked) {
+                // Refresh the playlist list to show the newly created playlist
+                userPlaylists = [];
+                if (playlistSearchInput) {
+                    playlistSearchInput.value = "";
+                }
+                loadPlaylists();
+            }
+            
             if (confirm("Playlist created successfully! Would you like to clear your selected chats for the next playlist?")) {
                 selectedChats.clear();
                 updateSelectedChatsDisplay();
                 const checkboxes = document.querySelectorAll('.chat-checkbox');
                 checkboxes.forEach(checkbox => checkbox.checked = false);
             }
-        } else if (result.status === "warning") {
-            statusDiv.innerHTML = `<div class="status-indicator status-warning" style="background-color: #fff3cd; color: #856404; border-color: #ffeaa7;">⚠️ ${result.message}</div>`;
-        } else {
-            statusDiv.innerHTML = `<div class="status-indicator status-error">❌ ${result.message || result.detail || 'Unknown error occurred'}</div>`;
         }
     } catch (error) {
         console.error("Error creating playlist:", error);
@@ -1882,7 +2915,9 @@ document.getElementById("playlistForm").addEventListener("submit", async (event)
         createButton.disabled = false;
         createButton.textContent = "Create Playlist";
     }
-});
+    });
+    }
+}
 
 ///////////////////////////////////////////////////////////////
 //////// Initialization
@@ -1906,92 +2941,197 @@ function cleanupAndReset() {
     console.log("Page state cleaned up and reset");
 }
 
-// Generate Summary Statistics
-const generateStatsButton = document.getElementById("generateStatsButton");
-if (generateStatsButton) {
-    generateStatsButton.addEventListener("click", async () => {
-        if (selectedChats.size === 0) {
-            alert("Please select at least one chat first.");
-            return;
+
+// Playlist search functionality
+let userPlaylists = [];
+let selectedPlaylistId = null;
+
+const playlistTypeNew = document.getElementById("playlistTypeNew");
+const playlistTypeExisting = document.getElementById("playlistTypeExisting");
+const newPlaylistSection = document.getElementById("newPlaylistSection");
+const existingPlaylistSection = document.getElementById("existingPlaylistSection");
+const playlistNameInput = document.getElementById("playlistName");
+const playlistSearchResults = document.getElementById("playlistSearchResults");
+const playlistSearchInput = document.getElementById("playlistSearchInput");
+const playlistList = document.getElementById("playlistList");
+const playlistLoadingIndicator = document.getElementById("playlistLoadingIndicator");
+const selectedPlaylistInfo = document.getElementById("selectedPlaylistInfo");
+const clearPlaylistSelection = document.getElementById("clearPlaylistSelection");
+const refreshPlaylistsButton = document.getElementById("refreshPlaylistsButton");
+
+// Handle playlist type selection
+function handlePlaylistTypeChange() {
+    const isNew = playlistTypeNew.checked;
+    
+    if (isNew) {
+        // Show new playlist section, hide existing
+        newPlaylistSection.style.display = "block";
+        existingPlaylistSection.style.display = "none";
+        playlistNameInput.required = true;
+        selectedPlaylistId = null;
+        // Remove hidden input if it exists
+        const hiddenInput = document.getElementById("selectedPlaylistId");
+        if (hiddenInput) {
+            hiddenInput.remove();
         }
-        
-        const startDate = document.getElementById("startDate").value;
-        const endDate = document.getElementById("endDate").value;
-        
-        if (!startDate || !endDate) {
-            alert("Please set start and end dates first (in Playlist Creation section).");
-            return;
+    } else {
+        // Show existing playlist section, hide new
+        newPlaylistSection.style.display = "none";
+        existingPlaylistSection.style.display = "block";
+        playlistNameInput.required = false;
+        // Auto-load playlists when switching to existing
+        if (userPlaylists.length === 0) {
+            loadPlaylists();
+        } else {
+            displayPlaylists(userPlaylists);
         }
+    }
+}
+
+// Add refresh button handler
+if (refreshPlaylistsButton) {
+    refreshPlaylistsButton.addEventListener("click", () => {
+        // Clear current list and reload
+        userPlaylists = [];
+        if (playlistSearchInput) {
+            playlistSearchInput.value = "";
+        }
+        loadPlaylists();
+    });
+}
+
+if (playlistTypeNew) {
+    playlistTypeNew.addEventListener("change", handlePlaylistTypeChange);
+}
+
+if (playlistTypeExisting) {
+    playlistTypeExisting.addEventListener("change", handlePlaylistTypeChange);
+}
+
+// Load playlists from Spotify
+async function loadPlaylists() {
+    if (!playlistList || !playlistLoadingIndicator) return;
+    
+    try {
+        playlistLoadingIndicator.style.display = "block";
+        playlistList.innerHTML = "<div style='padding: 10px; color: #666; text-align: center;'>Loading playlists...</div>";
         
-        const statusDiv = document.getElementById("statsStatus");
-        const resultsDiv = document.getElementById("statsResults");
-        const contentDiv = document.getElementById("statsContent");
+        const response = await apiFetch("/user-playlists");
         
-        try {
-            generateStatsButton.disabled = true;
-            generateStatsButton.textContent = "Generating...";
-            statusDiv.innerHTML = '<div class="status-indicator status-info">Generating statistics...</div>';
-            resultsDiv.style.display = "none";
-            
-            const chatIds = Array.from(selectedChats);
-            const response = await apiFetch("/summary-stats", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    chat_ids: JSON.stringify(chatIds),
-                    start_date: startDate,
-                    end_date: endDate
-                })
-            });
-            
-            const stats = await response.json();
-            
-            if (response.ok && stats) {
-                // Format and display statistics
-                let html = "<h3>📊 Chat Statistics</h3>";
-                
-                if (stats.total_messages) {
-                    html += `<p><strong>Total Messages:</strong> ${stats.total_messages}</p>`;
-                }
-                
-                if (stats.spotify_links && stats.spotify_links.length > 0) {
-                    html += `<p><strong>Total Spotify Links:</strong> ${stats.spotify_links.length}</p>`;
-                }
-                
-                if (stats.top_senders && stats.top_senders.length > 0) {
-                    html += "<h4>🎵 Top Song Senders:</h4><ul>";
-                    stats.top_senders.slice(0, 10).forEach((sender, idx) => {
-                        html += `<li>${idx + 1}. ${sender.name || sender.handle}: ${sender.count} song(s)</li>`;
-                    });
-                    html += "</ul>";
-                }
-                
-                if (stats.most_liked_songs && stats.most_liked_songs.length > 0) {
-                    html += "<h4>❤️ Most Liked Songs:</h4><ul>";
-                    stats.most_liked_songs.slice(0, 10).forEach((song, idx) => {
-                        html += `<li>${idx + 1}. ${song.title || song.url}: ${song.like_count} like(s)</li>`;
-                    });
-                    html += "</ul>";
-                }
-                
-                if (stats.date_range) {
-                    html += `<p><strong>Date Range:</strong> ${stats.date_range.start} to ${stats.date_range.end}</p>`;
-                }
-                
-                contentDiv.innerHTML = html;
-                resultsDiv.style.display = "block";
-                statusDiv.innerHTML = '<div class="status-indicator status-success">✅ Statistics generated successfully!</div>';
-            } else {
-                statusDiv.innerHTML = `<div class="status-indicator status-error">❌ ${stats.detail || 'Error generating statistics'}</div>`;
+        if (!response.ok) {
+            let errorMessage = 'Unknown error';
+            try {
+                const errorData = await response.json();
+                errorMessage = errorData.detail || errorData.message || `HTTP ${response.status}`;
+            } catch (e) {
+                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
             }
-        } catch (error) {
-            console.error("Error generating statistics:", error);
-            statusDiv.innerHTML = '<div class="status-indicator status-error">❌ An error occurred while generating statistics</div>';
-        } finally {
-            generateStatsButton.disabled = false;
-            generateStatsButton.textContent = "Generate Statistics";
+            playlistList.innerHTML = `<div style='padding: 10px; color: #dc3545;'>Error: ${errorMessage}</div>`;
+            return;
+        }
+        
+        const data = await response.json();
+        console.log("Playlists response:", data); // Debug log
+        
+        // Handle different response structures
+        if (data.playlists && Array.isArray(data.playlists)) {
+            userPlaylists = data.playlists;
+            if (userPlaylists.length === 0) {
+                playlistList.innerHTML = "<div style='padding: 10px; color: #666; text-align: center;'>No playlists found in your Spotify account.</div>";
+                return;
+            }
+            displayPlaylists(userPlaylists);
+        } else if (Array.isArray(data)) {
+            userPlaylists = data;
+            if (userPlaylists.length === 0) {
+                playlistList.innerHTML = "<div style='padding: 10px; color: #666; text-align: center;'>No playlists found in your Spotify account.</div>";
+                return;
+            }
+            displayPlaylists(userPlaylists);
+        } else {
+            console.error("Unexpected response structure:", data);
+            playlistList.innerHTML = "<div style='padding: 10px; color: #dc3545;'>Unexpected response format. Check console for details.</div>";
+        }
+    } catch (error) {
+        console.error("Error fetching playlists:", error);
+        playlistList.innerHTML = "<div style='padding: 10px; color: #dc3545;'>Error loading playlists. Please try again.</div>";
+    } finally {
+        playlistLoadingIndicator.style.display = "none";
+    }
+}
+
+if (playlistSearchInput) {
+    playlistSearchInput.addEventListener("input", (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const filtered = userPlaylists.filter(p => 
+            p.name.toLowerCase().includes(searchTerm)
+        );
+        displayPlaylists(filtered);
+    });
+}
+
+function displayPlaylists(playlists) {
+    if (!playlistList) return;
+    
+    if (playlists.length === 0) {
+        playlistList.innerHTML = "<div style='padding: 10px; color: #666;'>No playlists found</div>";
+        return;
+    }
+    
+    playlistList.innerHTML = playlists.map(playlist => {
+        // Escape quotes for onclick attribute
+        const escapedId = playlist.id.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const escapedName = playlist.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        return `
+        <div style="padding: 8px; border-bottom: 1px solid #ddd; cursor: pointer; display: flex; justify-content: space-between; align-items: center;"
+             onclick="selectPlaylist('${escapedId}', '${escapedName}', ${playlist.tracks_count})">
+            <div>
+                <strong>${escapeHtml(playlist.name)}</strong>
+                <div style="font-size: 0.85em; color: #666;">
+                    ${playlist.tracks_count} track(s)${playlist.public ? ' • Public' : ' • Private'}
+                </div>
+            </div>
+            <div style="color: #007bff; font-size: 0.9em;">Select →</div>
+        </div>
+    `;
+    }).join('');
+}
+
+function selectPlaylist(playlistId, playlistName, tracksCount) {
+    selectedPlaylistId = playlistId;
+    
+    // Create or update hidden input
+    let hiddenInput = document.getElementById("selectedPlaylistId");
+    if (!hiddenInput) {
+        hiddenInput = document.createElement("input");
+        hiddenInput.type = "hidden";
+        hiddenInput.id = "selectedPlaylistId";
+        document.getElementById("playlistForm").appendChild(hiddenInput);
+    }
+    hiddenInput.value = playlistId;
+    
+    // Update display - show selected playlist info, hide search results
+    document.getElementById("selectedPlaylistName").textContent = `${playlistName} (${tracksCount} tracks)`;
+    selectedPlaylistInfo.style.display = "block";
+    playlistSearchResults.style.display = "none";
+}
+
+// Make selectPlaylist available globally for onclick handlers
+window.selectPlaylist = selectPlaylist;
+
+if (clearPlaylistSelection) {
+    clearPlaylistSelection.addEventListener("click", () => {
+        selectedPlaylistId = null;
+        const hiddenInput = document.getElementById("selectedPlaylistId");
+        if (hiddenInput) {
+            hiddenInput.remove();
+        }
+        selectedPlaylistInfo.style.display = "none";
+        playlistSearchResults.style.display = "block";
+        // Clear search input
+        if (playlistSearchInput) {
+            playlistSearchInput.value = "";
+            displayPlaylists(userPlaylists);
         }
     });
 }
@@ -2018,8 +3158,15 @@ if (chatSearchSection) {
 }
 
 // Explicitly initialize the login form with forgot password link
-console.log('Initializing login form with forgot password link');
-switchAuthMode('login');
+// This will be called after elements are initialized in initializeApp()
+function initializeLoginForm() {
+    console.log('Initializing login form with forgot password link');
+    if (authSwitchText && loginForm) {
+        switchAuthMode('login');
+    } else {
+        console.warn('Cannot initialize login form - elements not ready yet');
+    }
+}
 
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {
@@ -2090,33 +3237,5 @@ async function refreshPlaylistDropdown() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', async function() {
-    // Playlist dropdown logic
-    const playlistNameInput = document.getElementById('playlistName');
-    const playlistForm = document.getElementById('playlistForm');
-    const refreshButton = document.getElementById('refreshPlaylists');
-    
-    // Create dropdown
-    const playlistDropdown = document.createElement('select');
-    playlistDropdown.id = 'playlistDropdown';
-    playlistDropdown.style.marginLeft = '10px';
-    playlistDropdown.innerHTML = '<option value="">-- Select existing playlist --</option>';
-    playlistNameInput.parentNode.insertBefore(playlistDropdown, playlistNameInput.nextSibling);
-    
-    // Initial fetch and populate playlists
-    await refreshPlaylistDropdown();
-    
-    // Add refresh button click handler
-    refreshButton.addEventListener('click', refreshPlaylistDropdown);
-    
-    // When dropdown changes, update input
-    playlistDropdown.addEventListener('change', function() {
-        if (playlistDropdown.value) {
-            playlistNameInput.value = playlistDropdown.options[playlistDropdown.selectedIndex].text;
-            playlistNameInput.disabled = true;
-        } else {
-            playlistNameInput.value = '';
-            playlistNameInput.disabled = false;
-        }
-    });
-});
+// Make selectPlaylist available globally
+window.selectPlaylist = selectPlaylist;

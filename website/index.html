@@ -191,11 +191,11 @@
         
         /* Hide main content when not authenticated */
         .main-content {
-            display: none;
+            display: none !important;
         }
         
         .main-content.visible {
-            display: block;
+            display: block !important;
         }
         
         /* Floating Progress Indicator */
@@ -623,7 +623,7 @@
             </form>
             
             <div class="auth-switch">
-                <p id="authSwitchText">Don't have an account? <a href="#" data-auth-action="register">Register</a> | <a href="#" data-auth-action="forgot-password">Forgot Password?</a></p>
+                <p id="authSwitchText">Don't have an account? <a href="javascript:void(0)" data-auth-action="register">Register</a> | <a href="javascript:void(0)" data-auth-action="forgot-password">Forgot Password?</a></p>
             </div>
         </div>
     </div>
@@ -752,39 +752,60 @@
             </div>
         </div>
 
-        <!-- Summary Statistics Section -->
-        <section id="summaryStats" class="disabled">
-            <h2><span class="step-number">Step 4:</span> Summary Statistics (Optional)</h2>
-            <div class="section-content">
-                <p><em>View statistics about your selected chats, including who sent the most songs, most liked songs, etc.</em></p>
-                <p><em style="color: #6c757d;">💡 Select chats first, then click "Generate Stats" to see insights</em></p>
-                
-                <button id="generateStatsButton" disabled style="opacity: 0.6; margin-bottom: 15px;">Generate Statistics</button>
-                
-                <div id="statsStatus" style="margin: 10px 0;"></div>
-                <div id="statsResults" style="display: none; margin-top: 20px;">
-                    <div id="statsContent" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px;"></div>
-                </div>
-            </div>
-        </section>
-
         <!-- Playlist Creation Section -->
         <section id="playlistCreation" class="disabled">
-            <h2><span class="step-number">Step 5:</span> Playlist Creation</h2>
+            <h2><span class="step-number">Step 4:</span> Playlist Creation</h2>
             <div class="section-content">
                 <p><em>Create a Spotify playlist from your selected chats and date range.</em></p>
-                <p><em style="color: #dc3545;">⚠️ Please complete previous steps and select at least one chat first</em></p>
+                <p id="playlistWarningMessage" style="color: #dc3545;"><em>⚠️ Please complete previous steps and select at least one chat first</em></p>
 
                 <form id="playlistForm">
-                    <div style="margin-bottom: 15px;">
-                        <label for="playlistName">Playlist Name:</label><br>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <input type="text" id="playlistName" name="playlist_name" required style="width: 300px;">
-                            <button type="button" id="refreshPlaylists" title="Refresh playlist list" style="padding: 5px 10px;">🔄</button>
+                    <div style="margin-bottom: 20px;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 10px;">Playlist Type:</label>
+                        <div style="display: flex; gap: 20px;">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="radio" name="playlistType" value="new" id="playlistTypeNew" checked style="margin-right: 8px;">
+                                <span>Create New Playlist</span>
+                            </label>
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="radio" name="playlistType" value="existing" id="playlistTypeExisting" style="margin-right: 8px;">
+                                <span>Use Existing Playlist</span>
+                            </label>
                         </div>
                     </div>
 
-                    <div style="margin-bottom: 15px;">
+                    <!-- New Playlist Section -->
+                    <div id="newPlaylistSection" style="margin-bottom: 15px;">
+                        <label for="playlistName">Playlist Name:</label><br>
+                        <input type="text" id="playlistName" name="playlist_name" required style="width: 300px; margin-top: 5px;">
+                    </div>
+
+                    <!-- Existing Playlist Section -->
+                    <div id="existingPlaylistSection" style="display: none; margin-bottom: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <label style="font-weight: bold; display: block;">Select Playlist:</label>
+                            <button type="button" id="refreshPlaylistsButton" style="padding: 4px 12px; font-size: 0.85em; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;" title="Refresh playlist list">
+                                🔄 Refresh
+                            </button>
+                        </div>
+                        <div id="playlistSearchResults" style="margin-bottom: 10px; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background-color: #f8f9fa; border-radius: 4px;">
+                            <div style="margin-bottom: 10px; position: relative;">
+                                <input type="text" id="playlistSearchInput" placeholder="Search playlists..." style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                                <div id="playlistLoadingIndicator" style="display: none; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #666; font-size: 0.9em;">Loading...</div>
+                            </div>
+                            <div id="playlistList" style="max-height: 250px; overflow-y: auto;"></div>
+                        </div>
+                        <div id="selectedPlaylistInfo" style="display: none; padding: 10px; background-color: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 4px; margin-top: 10px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong>Selected:</strong> <span id="selectedPlaylistName"></span>
+                                </div>
+                                <button type="button" id="clearPlaylistSelection" style="padding: 4px 12px; font-size: 0.85em; background-color: #fff; border: 1px solid #b3d9ff; border-radius: 3px; cursor: pointer;">Change</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 15px; margin-top: 20px;">
                         <label for="startDate">Start Date:</label>
                         <input type="date" id="startDate" name="start_date" required>
                         
@@ -794,6 +815,20 @@
 
                     <button type="submit" id="createPlaylist" disabled style="opacity: 0.6;">Create Playlist</button>
                 </form>
+
+                <!-- Progress Bar -->
+                <div id="playlistProgressContainer" style="display: none; margin-top: 20px;">
+                    <div style="margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <span id="progressStage" style="font-weight: bold; color: #333;"></span>
+                            <span id="progressPercent" style="font-size: 0.9em; color: #666;">0%</span>
+                        </div>
+                        <div id="progressMessage" style="font-size: 0.85em; color: #666; margin-bottom: 8px;"></div>
+                    </div>
+                    <div style="width: 100%; height: 24px; background-color: #e9ecef; border-radius: 12px; overflow: hidden;">
+                        <div id="progressBar" style="height: 100%; background: linear-gradient(90deg, #007bff 0%, #0056b3 100%); width: 0%; transition: width 0.3s ease; display: flex; align-items: center; justify-content: center; color: white; font-size: 0.75em; font-weight: bold;"></div>
+                    </div>
+                </div>
 
                 <div id="playlistStatus"></div>
             </div>

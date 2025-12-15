@@ -12,7 +12,7 @@ import json
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from dotenv import load_dotenv
 
 # Add the package to Python path for imports
@@ -20,7 +20,7 @@ if __name__ == "__main__":
     package_path = Path(__file__).parent.parent.parent
     sys.path.insert(0, str(package_path))
 
-from fastapi import FastAPI, Depends, HTTPException, Request, Response, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, Request, Response, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -1150,11 +1150,11 @@ async def chat_search_optimized(
 
 @app.post("/create-playlist-optimized")
 async def create_playlist_optimized(
-    playlist_name: str,
-    start_date: str,
-    end_date: str,
-    selected_chat_ids: str,  # JSON string of chat IDs (integers)
-    existing_playlist_id: Optional[str] = None,
+    playlist_name: str = Form(...),
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    selected_chat_ids: str = Form(...),  # JSON string of chat IDs (integers)
+    existing_playlist_id: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -1167,7 +1167,7 @@ async def create_playlist_optimized(
     """
     try:
         from .processing.imessage_data_processing.optimized_queries import (
-            get_user_db_path, query_spotify_messages, extract_spotify_urls
+            get_user_db_path, query_spotify_messages, query_messages_with_urls, extract_spotify_urls, extract_all_urls
         )
         from .processing.spotify_interaction import spotify_db_manager as sdm
         from .processing.spotify_interaction import create_spotify_playlist as csp
@@ -1199,34 +1199,99 @@ async def create_playlist_optimized(
                 detail="No Messages database found. Please validate username or upload database file first."
             )
         
-        # Query messages with Spotify links using chat_ids
-        logger.info(f"Querying Spotify messages from {len(chat_ids)} chats (by ID), {start_date} to {end_date}")
-        messages_df = query_spotify_messages(db_path, chat_ids, start_date, end_date)
+        # Query messages with ANY URLs (not just Spotify) to capture Apple Music, YouTube, etc.
+        logger.info(f"Querying messages with URLs from {len(chat_ids)} chats (by ID), {start_date} to {end_date}")
+        messages_df = query_messages_with_urls(db_path, chat_ids, start_date, end_date)
         
         if messages_df.empty:
             return {
                 "status": "warning",
-                "message": "No messages with Spotify links found for the selected criteria.",
+                "message": "No messages with URLs found for the selected criteria.",
                 "tracks_added": 0
             }
         
-        # Extract Spotify URLs from final_text (which includes parsed attributedBody)
-        all_urls = set()
+        # Extract Spotify URLs from messages and track which message each URL came from
         # Use final_text if available (from query_spotify_messages), otherwise fall back to text
         text_column = 'final_text' if 'final_text' in messages_df.columns else 'text'
-        for text in messages_df[text_column].dropna():
-            if text:  # Skip None/empty
-                urls = extract_spotify_urls(str(text))
-                all_urls.update(urls)
         
-        # Filter to only track URLs
-        track_urls = [url for url in all_urls if '/track/' in url]
+        # Map URLs to their source messages
+        url_to_message = {}  # url -> {message_text, sender_name, is_from_me, date, chat_name, entity_type}
+        skipped_urls = []  # List of non-track Spotify links with their info
+        other_links = []  # List of all non-Spotify links (Instagram, YouTube, Apple Music, etc.)
+        
+        for idx, row in messages_df.iterrows():
+            text = row.get(text_column)
+            if pd.notna(text) and text:
+                # Extract Spotify URLs for processing
+                spotify_urls = extract_spotify_urls(str(text))
+                # Extract all URLs for tracking other links
+                all_urls = extract_all_urls(str(text))
+                
+                # Debug logging
+                if len(all_urls) > 0:
+                    logger.debug(f"Found {len(all_urls)} URLs in message: {[u.get('type') for u in all_urls]}")
+                
+                # Determine sender name
+                if bool(row.get('is_from_me', False)):
+                    sender_name = "You"
+                else:
+                    # Use sender_contact (phone/email) if available, otherwise chat_name
+                    sender_contact = row.get('sender_contact')
+                    if pd.notna(sender_contact) and sender_contact:
+                        sender_name = str(sender_contact)
+                    else:
+                        sender_name = row.get('chat_name', 'Unknown Sender')
+                
+                message_info = {
+                    "message_text": str(text),  # Store full message text (no truncation)
+                    "sender_name": sender_name,
+                    "is_from_me": bool(row.get('is_from_me', False)),
+                    "date": row.get('date_utc', ''),
+                    "chat_name": row.get('chat_name', '')
+                }
+                
+                # Process Spotify URLs
+                for url in spotify_urls:
+                    # Extract entity type from URL
+                    _, spotify_id, entity_type = sdm.normalize_and_extract_id(url)
+                    
+                    if '/track/' in url or entity_type == 'track':
+                        # Track URLs - add to processing list
+                        if url not in url_to_message:
+                            url_to_message[url] = {**message_info, "entity_type": entity_type or "track"}
+                    else:
+                        # Non-track Spotify links (albums, playlists, artists, etc.) - track for reporting
+                        skipped_info = {
+                            "url": url,
+                            "entity_type": entity_type or "unknown",
+                            "spotify_id": spotify_id,
+                            **message_info
+                        }
+                        skipped_urls.append(skipped_info)
+                
+                # Track all non-Spotify links
+                spotify_url_set = set(spotify_urls)
+                for url_info in all_urls:
+                    url = url_info["url"]
+                    url_type = url_info["type"]
+                    # Only track non-Spotify links (exclude Spotify links)
+                    if url_type != "spotify" and url not in spotify_url_set:
+                        other_link_info = {
+                            "url": url,
+                            "link_type": url_type,
+                            **message_info
+                        }
+                        other_links.append(other_link_info)
+                        logger.debug(f"Added {url_type} link: {url[:50]}...")
+        
+        track_urls = list(url_to_message.keys())
         
         if not track_urls:
             return {
                 "status": "warning",
                 "message": "No Spotify track links found in the selected messages.",
-                "tracks_added": 0
+                "tracks_added": 0,
+                "track_details": []
             }
         
         logger.info(f"Found {len(track_urls)} unique Spotify track URLs")
@@ -1245,26 +1310,247 @@ async def create_playlist_optimized(
         
         # Get user ID and create or find playlist
         user_id = csp.get_user_id(sp)
-        playlist = csp.find_or_create_playlist(sp, user_id, playlist_name, public=True)
+        
+        # If existing_playlist_id is provided, use that playlist
+        if existing_playlist_id:
+            try:
+                playlist = sp.playlist(existing_playlist_id)
+                logger.info(f"Using existing playlist: {playlist['name']} (ID: {existing_playlist_id})")
+            except Exception as e:
+                logger.warning(f"Could not access playlist {existing_playlist_id}: {e}")
+                # Fall back to find_or_create by name
+                playlist = csp.find_or_create_playlist(sp, user_id, playlist_name, public=True)
+        else:
+            # Find or create playlist by name
+            playlist = csp.find_or_create_playlist(sp, user_id, playlist_name, public=True)
         
         # Get existing tracks
         existing_tracks = csp.get_all_playlist_items(sp, playlist['id'])
         existing_track_ids = set(csp.get_song_ids_from_spotify_items(existing_tracks))
         
-        # Process URLs to get track IDs
+        # Process URLs to get track IDs and track details
+        track_details = []  # List of dicts with url, track_id, status, error, track_name, artist
         track_ids = []
-        for url in track_urls:
-            _, spotify_id, entity_type = sdm.normalize_and_extract_id(url)
-            if entity_type == 'track' and spotify_id not in existing_track_ids:
-                track_ids.append(spotify_id)
         
-        # Add tracks to playlist
-        if track_ids:
-            added_count = csp.add_tracks_to_playlist(sp, playlist['id'], track_ids)
-            logger.info(f"Added {added_count} tracks to playlist '{playlist_name}'")
+        for url in track_urls:
+            # Get message info for this URL
+            message_info = url_to_message.get(url, {})
+            
+            track_info = {
+                "url": url,
+                "track_id": None,
+                "status": "pending",
+                "error": None,
+                "track_name": None,
+                "artist": None,
+                "spotify_url": None,
+                "message_text": message_info.get("message_text", ""),
+                "sender_name": message_info.get("sender_name", "Unknown"),
+                "is_from_me": message_info.get("is_from_me", False),
+                "message_date": message_info.get("date", ""),
+                "chat_name": message_info.get("chat_name", "")
+            }
+            
+            try:
+                _, spotify_id, entity_type = sdm.normalize_and_extract_id(url)
+                
+                if entity_type != 'track':
+                    track_info["status"] = "skipped"
+                    track_info["error"] = f"Not a track (entity type: {entity_type})"
+                    track_details.append(track_info)
+                    continue
+                
+                if not spotify_id:
+                    track_info["status"] = "error"
+                    track_info["error"] = "Could not extract Spotify ID from URL"
+                    track_details.append(track_info)
+                    continue
+                
+                track_info["track_id"] = spotify_id
+                
+                # Validate format
+                if not (spotify_id.isalnum() and 15 <= len(spotify_id) <= 22):
+                    track_info["status"] = "error"
+                    track_info["error"] = f"Invalid ID format (length: {len(spotify_id)}, must be 15-22 alphanumeric chars)"
+                    track_details.append(track_info)
+                    continue
+                
+                # Check if already in playlist
+                if spotify_id in existing_track_ids:
+                    track_info["status"] = "skipped"
+                    track_info["error"] = "Already in playlist"
+                    # Try to get track info for display
+                    try:
+                        track_data = sp.track(spotify_id)
+                        track_info["track_name"] = track_data.get("name", "Unknown")
+                        track_info["artist"] = ", ".join([a["name"] for a in track_data.get("artists", [])])
+                        track_info["spotify_url"] = track_data.get("external_urls", {}).get("spotify")
+                    except:
+                        pass
+                    track_details.append(track_info)
+                    continue
+                
+                # Validate with Spotify API and get track info
+                try:
+                    track_data = sp.track(spotify_id)
+                    track_info["track_name"] = track_data.get("name", "Unknown")
+                    track_info["artist"] = ", ".join([a["name"] for a in track_data.get("artists", [])])
+                    track_info["spotify_url"] = track_data.get("external_urls", {}).get("spotify")
+                    track_info["status"] = "valid"
+                    track_ids.append(spotify_id)
+                    track_details.append(track_info)
+                except Exception as e:
+                    track_info["status"] = "error"
+                    error_str = str(e)
+                    if "Invalid base62 id" in error_str or "invalid id" in error_str.lower() or "code:-1" in error_str:
+                        track_info["error"] = f"Invalid track ID: {error_str[:200]}"
+                    else:
+                        track_info["error"] = f"Spotify API error: {error_str[:200]}"
+                    track_details.append(track_info)
+                    
+            except Exception as e:
+                track_info["status"] = "error"
+                track_info["error"] = f"Processing error: {str(e)[:200]}"
+                track_details.append(track_info)
+        
+        # Update track_details status for tracks that will be added
+        valid_track_ids = [t["track_id"] for t in track_details if t["status"] == "valid"]
+        
+        # Add tracks to playlist with error handling
+        if valid_track_ids:
+            try:
+                added_count = csp.add_tracks_to_playlist(sp, playlist['id'], valid_track_ids)
+                logger.info(f"Added {added_count} tracks to playlist '{playlist_name}'")
+                
+                # Update status for successfully added tracks
+                added_track_ids = set(valid_track_ids[:added_count] if added_count <= len(valid_track_ids) else valid_track_ids)
+                for track_info in track_details:
+                    if track_info["track_id"] in added_track_ids:
+                        track_info["status"] = "added"
+            except Exception as e:
+                error_msg = str(e)
+                logger.error(f"Error adding tracks to playlist: {error_msg}")
+                
+                # Try to identify which track ID(s) are problematic
+                problematic_ids = []
+                if "Invalid base62 id" in error_msg or "invalid id" in error_msg.lower() or "code:-1" in error_msg:
+                    logger.info(f"Invalid track ID error detected. Testing {len(valid_track_ids)} track IDs to identify problematic ones...")
+                    
+                    # First, validate each ID format before testing with API
+                    for track_id in valid_track_ids:
+                        # Check format: should be base62 alphanumeric, 15-22 chars
+                        if not (track_id and track_id.isalnum() and 15 <= len(track_id) <= 22):
+                            problematic_ids.append(track_id)
+                            logger.warning(f"Invalid track ID format detected: {track_id} (length: {len(track_id) if track_id else 0})")
+                    
+                    # If format validation didn't catch all, test remaining IDs with Spotify API
+                    remaining_ids = [tid for tid in valid_track_ids if tid not in problematic_ids]
+                    if remaining_ids:
+                        logger.info(f"Testing {len(remaining_ids)} track IDs with Spotify API...")
+                        for track_id in remaining_ids:
+                            try:
+                                # Try to get track info - if this fails, the ID is invalid
+                                sp.track(track_id)
+                            except Exception as track_error:
+                                problematic_ids.append(track_id)
+                                error_str = str(track_error)
+                                logger.warning(f"Invalid track ID detected via API: {track_id} - {error_str[:100]}")
+                    
+                    if problematic_ids:
+                        # Update track_details with error status for problematic IDs
+                        for track_info in track_details:
+                            if track_info["track_id"] in problematic_ids:
+                                track_info["status"] = "error"
+                                if not track_info["error"]:
+                                    track_info["error"] = "Invalid track ID detected during batch add"
+                        
+                        # Return error with full track details using JSONResponse to include track_details
+                        error_tracks = [t for t in track_details if t["status"] == "error"]
+                        stats = {
+                            "total": len(track_details),
+                            "added": 0,
+                            "skipped": len([t for t in track_details if t["status"] == "skipped"]),
+                            "error": len(error_tracks),
+                            "valid": 0,
+                            "non_track_links": len(skipped_urls)
+                        }
+                        from fastapi.responses import JSONResponse
+                        return JSONResponse(
+                            status_code=400,
+                            content={
+                                "status": "error",
+                                "message": f"Found {len(problematic_ids)} invalid track ID(s) that could not be added to playlist.",
+                                "track_details": track_details,
+                                "skipped_links": skipped_urls,
+                                "statistics": stats
+                            }
+                        )
+                    else:
+                        # Couldn't identify specific IDs, but we know there's an issue
+                        # Update all valid tracks to error status
+                        for track_info in track_details:
+                            if track_info["status"] == "valid":
+                                track_info["status"] = "error"
+                                track_info["error"] = f"Batch add failed: {error_msg[:200]}"
+                        stats = {
+                            "total": len(track_details),
+                            "added": 0,
+                            "skipped": len([t for t in track_details if t["status"] == "skipped"]),
+                            "error": len([t for t in track_details if t["status"] == "error"]),
+                            "valid": 0,
+                            "non_track_links": len(skipped_urls),
+                            "other_links": len(other_links)
+                        }
+                        from fastapi.responses import JSONResponse
+                        return JSONResponse(
+                            status_code=400,
+                            content={
+                                "status": "error",
+                                "message": f"Error adding tracks to playlist: {error_msg}",
+                                "track_details": track_details,
+                                "skipped_links": skipped_urls,
+                                "other_links": other_links,
+                                "statistics": stats
+                            }
+                        )
+                else:
+                    # Re-raise the original error if it's not about invalid IDs
+                    # Update all valid tracks to error status
+                    for track_info in track_details:
+                        if track_info["status"] == "valid":
+                            track_info["status"] = "error"
+                            track_info["error"] = f"Batch add failed: {error_msg[:200]}"
+                    stats = {
+                        "total": len(track_details),
+                        "added": 0,
+                        "skipped": len([t for t in track_details if t["status"] == "skipped"]),
+                        "error": len([t for t in track_details if t["status"] == "error"]),
+                        "valid": 0
+                    }
+                    from fastapi.responses import JSONResponse
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "status": "error",
+                            "message": f"Error adding tracks to playlist: {error_msg}",
+                            "track_details": track_details,
+                            "statistics": stats
+                        }
+                    )
         else:
             added_count = 0
             logger.info("No new tracks to add (all tracks already in playlist)")
+        
+        # Count statistics
+        stats = {
+            "total": len(track_details),
+            "added": len([t for t in track_details if t["status"] == "added"]),
+            "skipped": len([t for t in track_details if t["status"] == "skipped"]),
+            "error": len([t for t in track_details if t["status"] == "error"]),
+            "valid": len([t for t in track_details if t["status"] == "valid"]),
+            "non_track_links": len(skipped_urls),
+            "other_links": len(other_links)
+        }
         
         # Store playlist record
         from .database.models import UserPlaylist
@@ -1280,13 +1566,38 @@ async def create_playlist_optimized(
         db.add(playlist_record)
         db.commit()
         
+        # Determine response status
+        skipped_links_msg = ""
+        if stats.get("non_track_links", 0) > 0:
+            skipped_links_msg = f" ({stats['non_track_links']} non-track Spotify link(s) were skipped - see details below)"
+        if stats.get("other_links", 0) > 0:
+            other_links_msg = f" ({stats['other_links']} other link(s) found - see details below)"
+            skipped_links_msg += other_links_msg
+        
+        if stats["error"] > 0 and stats["added"] == 0:
+            response_status = "error"
+            message = f"Failed to add tracks to playlist. {stats['error']} error(s) encountered.{skipped_links_msg}"
+        elif stats["error"] > 0:
+            response_status = "warning"
+            message = f"Playlist '{playlist_name}' created/updated with {stats['added']} track(s), but {stats['error']} track(s) had errors.{skipped_links_msg}"
+        elif stats["added"] == 0:
+            response_status = "warning"
+            message = f"No new tracks added to playlist '{playlist_name}'. {stats['skipped']} track(s) were already in playlist.{skipped_links_msg}"
+        else:
+            response_status = "success"
+            message = f"Playlist '{playlist_name}' created/updated successfully with {stats['added']} track(s).{skipped_links_msg}"
+        
         return {
-            "status": "success",
-            "message": f"Playlist '{playlist_name}' created/updated successfully.",
+            "status": response_status,
+            "message": message,
             "playlist_id": playlist['id'],
             "playlist_url": playlist.get('external_urls', {}).get('spotify'),
             "tracks_added": added_count,
-            "total_tracks_found": len(track_urls)
+            "total_tracks_found": len(track_urls),
+            "track_details": track_details,
+            "skipped_links": skipped_urls,  # Non-track Spotify links (albums, playlists, etc.)
+            "other_links": other_links,  # All non-Spotify links (Instagram, YouTube, Apple Music, etc.)
+            "statistics": stats
         }
         
     except HTTPException:
@@ -1297,6 +1608,423 @@ async def create_playlist_optimized(
             status_code=500,
             detail=f"Error creating playlist: {str(e)}"
         )
+
+@app.post("/create-playlist-optimized-stream")
+async def create_playlist_optimized_stream(
+    playlist_name: str = Form(...),
+    start_date: str = Form(...),
+    end_date: str = Form(...),
+    selected_chat_ids: str = Form(...),
+    existing_playlist_id: Optional[str] = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Create playlist with Server-Sent Events for progress updates.
+    Streams progress updates as the playlist is being created.
+    """
+    async def generate_progress():
+        try:
+            from .processing.imessage_data_processing.optimized_queries import (
+                get_user_db_path, query_messages_with_urls, extract_spotify_urls, extract_all_urls
+            )
+            from .processing.spotify_interaction import spotify_db_manager as sdm
+            from .processing.spotify_interaction import create_spotify_playlist as csp
+            import spotipy
+            
+            # Parse selected chat IDs
+            try:
+                chat_ids = json.loads(selected_chat_ids) if selected_chat_ids else []
+                chat_ids = [int(cid) for cid in chat_ids]
+            except (json.JSONDecodeError, ValueError, TypeError):
+                yield f"data: {json.dumps({'status': 'error', 'message': 'Invalid chat selection format'})}\n\n"
+                await asyncio.sleep(0)
+                return
+            
+            if not chat_ids:
+                yield f"data: {json.dumps({'status': 'error', 'message': 'Please select at least one chat'})}\n\n"
+                await asyncio.sleep(0)
+                return
+            
+            # Get user's database path
+            user_data_service = get_user_data_service(db, current_user)
+            db_path = get_user_db_path(user_data_service)
+            
+            if not db_path:
+                yield f"data: {json.dumps({'status': 'error', 'message': 'No Messages database found'})}\n\n"
+                await asyncio.sleep(0)
+                return
+            
+            # Stage 1: Query messages
+            yield f"data: {json.dumps({'status': 'progress', 'stage': 'querying', 'message': 'Querying messages from database...', 'progress': 0})}\n\n"
+            await asyncio.sleep(0)  # Allow stream to flush
+            messages_df = query_messages_with_urls(db_path, chat_ids, start_date, end_date)
+            
+            if messages_df.empty:
+                yield f"data: {json.dumps({'status': 'warning', 'message': 'No messages with URLs found'})}\n\n"
+                await asyncio.sleep(0)
+                return
+            
+            total_messages = len(messages_df)
+            yield f"data: {json.dumps({'status': 'progress', 'stage': 'extracting', 'message': f'Found {total_messages} messages. Extracting URLs...', 'progress': 10})}\n\n"
+            await asyncio.sleep(0)  # Allow stream to flush
+            
+            # Stage 2: Extract URLs
+            text_column = 'final_text' if 'final_text' in messages_df.columns else 'text'
+            url_to_message = {}
+            skipped_urls = []
+            other_links = []
+            
+            processed_messages = 0
+            update_interval = max(1, total_messages // 20)  # Update ~20 times during extraction
+            for idx, row in messages_df.iterrows():
+                text = row.get(text_column)
+                if pd.notna(text) and text:
+                    spotify_urls = extract_spotify_urls(str(text))
+                    all_urls = extract_all_urls(str(text))
+                    
+                    if bool(row.get('is_from_me', False)):
+                        sender_name = "You"
+                    else:
+                        sender_contact = row.get('sender_contact')
+                        if pd.notna(sender_contact) and sender_contact:
+                            sender_name = str(sender_contact)
+                        else:
+                            sender_name = row.get('chat_name', 'Unknown Sender')
+                    
+                    message_info = {
+                        "message_text": str(text),
+                        "sender_name": sender_name,
+                        "is_from_me": bool(row.get('is_from_me', False)),
+                        "date": row.get('date_utc', ''),
+                        "chat_name": row.get('chat_name', '')
+                    }
+                    
+                    for url in spotify_urls:
+                        _, spotify_id, entity_type = sdm.normalize_and_extract_id(url)
+                        if '/track/' in url or entity_type == 'track':
+                            if url not in url_to_message:
+                                url_to_message[url] = {**message_info, "entity_type": entity_type or "track"}
+                        else:
+                            skipped_info = {
+                                "url": url,
+                                "entity_type": entity_type or "unknown",
+                                "spotify_id": spotify_id,
+                                **message_info
+                            }
+                            skipped_urls.append(skipped_info)
+                    
+                    spotify_url_set = set(spotify_urls)
+                    for url_info in all_urls:
+                        url = url_info["url"]
+                        url_type = url_info["type"]
+                        if url_type != "spotify" and url not in spotify_url_set:
+                            other_link_info = {
+                                "url": url,
+                                "link_type": url_type,
+                                **message_info
+                            }
+                            other_links.append(other_link_info)
+                
+                processed_messages += 1
+                if processed_messages % update_interval == 0 or processed_messages == total_messages:
+                    progress = 10 + int((processed_messages / total_messages) * 20)
+                    yield f"data: {json.dumps({'status': 'progress', 'stage': 'extracting', 'message': f'Processed {processed_messages}/{total_messages} messages', 'progress': progress, 'current': processed_messages, 'total': total_messages})}\n\n"
+                    await asyncio.sleep(0)  # Allow stream to flush
+            
+            track_urls = list(url_to_message.keys())
+            if not track_urls:
+                yield f"data: {json.dumps({'status': 'warning', 'message': 'No Spotify track links found'})}\n\n"
+                await asyncio.sleep(0)
+                return
+            
+            yield f"data: {json.dumps({'status': 'progress', 'stage': 'processing', 'message': f'Found {len(track_urls)} track URLs. Processing tracks...', 'progress': 30})}\n\n"
+            await asyncio.sleep(0)  # Allow stream to flush
+            
+            # Get Spotify tokens
+            spotify_tokens = user_data_service.get_spotify_tokens()
+            if not spotify_tokens:
+                yield f"data: {json.dumps({'status': 'error', 'message': 'Spotify not authorized'})}\n\n"
+                await asyncio.sleep(0)
+                return
+            
+            sp = spotipy.Spotify(auth=spotify_tokens.access_token)
+            user_id = csp.get_user_id(sp)
+            
+            # Get or create playlist
+            if existing_playlist_id:
+                try:
+                    playlist = sp.playlist(existing_playlist_id)
+                except Exception as e:
+                    playlist = csp.find_or_create_playlist(sp, user_id, playlist_name, public=True)
+            else:
+                playlist = csp.find_or_create_playlist(sp, user_id, playlist_name, public=True)
+            
+            existing_tracks = csp.get_all_playlist_items(sp, playlist['id'])
+            existing_track_ids = set(csp.get_song_ids_from_spotify_items(existing_tracks))
+            
+            # Stage 3: Process each track
+            track_details = []
+            track_ids = []
+            processed_tracks = 0
+            
+            for url in track_urls:
+                message_info = url_to_message.get(url, {})
+                track_info = {
+                    "url": url,
+                    "track_id": None,
+                    "status": "pending",
+                    "error": None,
+                    "track_name": None,
+                    "artist": None,
+                    "spotify_url": None,
+                    "message_text": message_info.get("message_text", ""),
+                    "sender_name": message_info.get("sender_name", "Unknown"),
+                    "is_from_me": message_info.get("is_from_me", False),
+                    "message_date": message_info.get("date", ""),
+                    "chat_name": message_info.get("chat_name", "")
+                }
+                
+                try:
+                    _, spotify_id, entity_type = sdm.normalize_and_extract_id(url)
+                    
+                    if entity_type != 'track':
+                        track_info["status"] = "skipped"
+                        track_info["error"] = f"Not a track (entity type: {entity_type})"
+                        track_details.append(track_info)
+                        processed_tracks += 1
+                        continue
+                    
+                    if not spotify_id:
+                        track_info["status"] = "error"
+                        track_info["error"] = "Could not extract Spotify ID from URL"
+                        track_details.append(track_info)
+                        processed_tracks += 1
+                        continue
+                    
+                    track_info["track_id"] = spotify_id
+                    
+                    if not (spotify_id.isalnum() and 15 <= len(spotify_id) <= 22):
+                        track_info["status"] = "error"
+                        track_info["error"] = f"Invalid ID format"
+                        track_details.append(track_info)
+                        processed_tracks += 1
+                        continue
+                    
+                    if spotify_id in existing_track_ids:
+                        track_info["status"] = "skipped"
+                        track_info["error"] = "Already in playlist"
+                        try:
+                            track_data = sp.track(spotify_id)
+                            track_info["track_name"] = track_data.get("name", "Unknown")
+                            track_info["artist"] = ", ".join([a["name"] for a in track_data.get("artists", [])])
+                            track_info["spotify_url"] = track_data.get("external_urls", {}).get("spotify")
+                        except:
+                            pass
+                        track_details.append(track_info)
+                        processed_tracks += 1
+                        continue
+                    
+                    try:
+                        track_data = sp.track(spotify_id)
+                        track_info["track_name"] = track_data.get("name", "Unknown")
+                        track_info["artist"] = ", ".join([a["name"] for a in track_data.get("artists", [])])
+                        track_info["spotify_url"] = track_data.get("external_urls", {}).get("spotify")
+                        track_info["status"] = "valid"
+                        track_ids.append(spotify_id)
+                        track_details.append(track_info)
+                    except Exception as e:
+                        track_info["status"] = "error"
+                        error_str = str(e)
+                        if "Invalid base62 id" in error_str or "invalid id" in error_str.lower():
+                            track_info["error"] = f"Invalid track ID"
+                        else:
+                            track_info["error"] = f"Spotify API error"
+                        track_details.append(track_info)
+                    
+                    processed_tracks += 1
+                    progress = 30 + int((processed_tracks / len(track_urls)) * 50)
+                    yield f"data: {json.dumps({'status': 'progress', 'stage': 'processing', 'message': f'Processed {processed_tracks}/{len(track_urls)} tracks', 'progress': progress, 'current': processed_tracks, 'total': len(track_urls)})}\n\n"
+                    await asyncio.sleep(0)  # Allow stream to flush
+                    
+                except Exception as e:
+                    track_info["status"] = "error"
+                    track_info["error"] = f"Processing error"
+                    track_details.append(track_info)
+                    processed_tracks += 1
+            
+            # Stage 4: Add tracks to playlist
+            valid_track_ids = [t["track_id"] for t in track_details if t["status"] == "valid"]
+            if valid_track_ids:
+                yield f"data: {json.dumps({'status': 'progress', 'stage': 'adding', 'message': f'Adding {len(valid_track_ids)} tracks to playlist...', 'progress': 80})}\n\n"
+                await asyncio.sleep(0)  # Allow stream to flush
+                
+                try:
+                    # Add in batches
+                    batch_size = 100
+                    added_count = 0
+                    for i in range(0, len(valid_track_ids), batch_size):
+                        batch = valid_track_ids[i:i+batch_size]
+                        sp.playlist_add_items(playlist['id'], batch)
+                        added_count += len(batch)
+                        
+                        for track_info in track_details:
+                            if track_info["track_id"] in batch:
+                                track_info["status"] = "added"
+                        
+                        progress = 80 + int((added_count / len(valid_track_ids)) * 15)
+                        yield f"data: {json.dumps({'status': 'progress', 'stage': 'adding', 'message': f'Added {added_count}/{len(valid_track_ids)} tracks', 'progress': progress})}\n\n"
+                        await asyncio.sleep(0)  # Allow stream to flush
+                    
+                    # Count statistics
+                    stats = {
+                        "total": len(track_details),
+                        "added": len([t for t in track_details if t["status"] == "added"]),
+                        "skipped": len([t for t in track_details if t["status"] == "skipped"]),
+                        "error": len([t for t in track_details if t["status"] == "error"]),
+                        "valid": len([t for t in track_details if t["status"] == "valid"]),
+                        "non_track_links": len(skipped_urls),
+                        "other_links": len(other_links)
+                    }
+                    
+                    # Determine response status
+                    skipped_links_msg = ""
+                    if stats.get("non_track_links", 0) > 0:
+                        skipped_links_msg = f" ({stats['non_track_links']} non-track Spotify link(s) were skipped)"
+                    if stats.get("other_links", 0) > 0:
+                        skipped_links_msg += f" ({stats['other_links']} other link(s) found)"
+                    
+                    if stats["error"] > 0 and stats["added"] == 0:
+                        response_status = "error"
+                        message = f"Failed to add tracks. {stats['error']} error(s) encountered.{skipped_links_msg}"
+                    elif stats["error"] > 0:
+                        response_status = "warning"
+                        message = f"Playlist '{playlist_name}' updated with {stats['added']} track(s), but {stats['error']} track(s) had errors.{skipped_links_msg}"
+                    elif stats["added"] == 0:
+                        response_status = "warning"
+                        message = f"No new tracks added. {stats['skipped']} track(s) were already in playlist.{skipped_links_msg}"
+                    else:
+                        response_status = "success"
+                        message = f"Playlist '{playlist_name}' created/updated successfully with {stats['added']} track(s).{skipped_links_msg}"
+                    
+                    yield f"data: {json.dumps({'status': 'completed', 'result': {'status': response_status, 'message': message, 'playlist_id': playlist['id'], 'playlist_url': playlist.get('external_urls', {}).get('spotify'), 'tracks_added': stats['added'], 'total_tracks_found': len(track_urls), 'track_details': track_details, 'skipped_links': skipped_urls, 'other_links': other_links, 'statistics': stats}})}\n\n"
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    yield f"data: {json.dumps({'status': 'error', 'message': f'Error adding tracks: {error_msg[:200]}', 'track_details': track_details})}\n\n"
+            else:
+                yield f"data: {json.dumps({'status': 'warning', 'message': 'No valid tracks to add', 'track_details': track_details})}\n\n"
+                
+        except Exception as e:
+            logger.error(f"Error in playlist creation stream: {e}", exc_info=True)
+            yield f"data: {json.dumps({'status': 'error', 'message': f'Error: {str(e)[:200]}'})}\n\n"
+    
+    return StreamingResponse(generate_progress(), media_type="text/event-stream")
+
+@app.get("/user-playlists")
+async def get_user_playlists(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get list of user's Spotify playlists for selection.
+    """
+    try:
+        from .processing.spotify_interaction import create_spotify_playlist as csp
+        import spotipy
+        
+        # Get Spotify tokens
+        user_data_service = get_user_data_service(db, current_user)
+        spotify_tokens = user_data_service.get_spotify_tokens()
+        if not spotify_tokens:
+            raise HTTPException(
+                status_code=401,
+                detail="Spotify not authorized. Please authorize Spotify first."
+            )
+        
+        # Create Spotify client
+        sp = spotipy.Spotify(auth=spotify_tokens.access_token)
+        
+        # Get all playlists (user_playlists can be called without user parameter for current user)
+        playlists = []
+        try:
+            results = sp.current_user_playlists(limit=50)
+            logger.info(f"Fetched playlists from Spotify, initial count: {len(results.get('items', []))}")
+        except Exception as e:
+            logger.error(f"Error fetching playlists from Spotify API: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error fetching playlists from Spotify: {str(e)}"
+            )
+        
+        if not results or 'items' not in results:
+            logger.warning("No playlists returned from Spotify API or unexpected response structure")
+            return {
+                "status": "success",
+                "playlists": [],
+                "total": 0
+            }
+        
+        while results:
+            items = results.get('items', [])
+            logger.info(f"Processing {len(items)} playlists from this page")
+            
+            for playlist in items:
+                try:
+                    playlists.append({
+                        "id": playlist.get('id', ''),
+                        "name": playlist.get('name', 'Unnamed Playlist'),
+                        "description": playlist.get('description', ''),
+                        "tracks_count": playlist.get('tracks', {}).get('total', 0),
+                        "public": playlist.get('public', False),
+                        "external_url": playlist.get('external_urls', {}).get('spotify', '')
+                    })
+                except Exception as e:
+                    logger.warning(f"Error processing playlist item: {e}")
+                    continue
+            
+            # Handle pagination
+            if results.get('next'):
+                try:
+                    results = sp.next(results)
+                except Exception as e:
+                    logger.warning(f"Error fetching next page of playlists: {e}")
+                    break
+            else:
+                break
+        
+        logger.info(f"Total playlists collected: {len(playlists)}")
+        
+        # Sort by name
+        playlists.sort(key=lambda x: x['name'].lower())
+        
+        return {
+            "status": "success",
+            "playlists": playlists,
+            "total": len(playlists)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching user playlists: {e}", exc_info=True)
+        error_msg = str(e)
+        # Provide more detailed error message
+        if "401" in error_msg or "Unauthorized" in error_msg:
+            raise HTTPException(
+                status_code=401,
+                detail="Spotify authorization expired. Please re-authorize Spotify."
+            )
+        elif "403" in error_msg or "Forbidden" in error_msg:
+            raise HTTPException(
+                status_code=403,
+                detail="Spotify access denied. Please check your Spotify permissions."
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error fetching playlists: {error_msg}"
+            )
 
 @app.post("/summary-stats")
 async def get_summary_stats(

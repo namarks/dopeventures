@@ -190,6 +190,188 @@ def extract_spotify_urls(text: str) -> List[str]:
         full_urls.append(match.group(0))
     return full_urls
 
+def extract_all_urls(text: str) -> List[Dict[str, str]]:
+    """
+    Extract all URLs from text and categorize them by type.
+    Returns a list of dicts with 'url' and 'type' keys.
+    """
+    if not text:
+        return []
+    
+    from urllib.parse import urlparse
+    
+    # More comprehensive URL pattern that handles:
+    # - Standard URLs
+    # - URLs with query parameters (?key=value)
+    # - URLs with fragments (#section)
+    # - URLs ending with punctuation (which we'll strip)
+    # This pattern matches URLs until whitespace or common punctuation that typically ends a sentence
+    url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
+    matches = list(re.finditer(url_pattern, text))
+    
+    categorized_urls = []
+    for match in matches:
+        url = match.group(0)
+        # Strip trailing punctuation that might have been captured (but keep it if it's part of the URL)
+        # Only strip if it's clearly sentence-ending punctuation
+        url = url.rstrip('.,;!?)')
+        
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            
+            # Helper function to check if domain matches (handles subdomains and avoids false positives)
+            def domain_matches(domain, pattern):
+                """Check if domain matches pattern, handling subdomains correctly."""
+                # Remove 'www.' prefix if present
+                domain_clean = domain.replace('www.', '')
+                pattern_clean = pattern.replace('www.', '')
+                
+                # Check exact match or subdomain match (e.g., 'api.spotify.com' matches 'spotify.com')
+                return (domain_clean == pattern_clean or 
+                        domain_clean.endswith('.' + pattern_clean))
+            
+            # Categorize by domain (using precise matching to avoid false positives like 'dopdx.com' matching 'x.com')
+            url_type = "other"
+            if domain_matches(domain, 'spotify.com') or domain_matches(domain, 'spotify.link'):
+                url_type = "spotify"
+            elif domain_matches(domain, 'youtube.com') or domain_matches(domain, 'youtu.be'):
+                url_type = "youtube"
+            elif domain_matches(domain, 'instagram.com') or domain_matches(domain, 'instagr.am'):
+                url_type = "instagram"
+            elif domain_matches(domain, 'music.apple.com') or domain_matches(domain, 'itunes.apple.com'):
+                url_type = "apple_music"
+            elif domain_matches(domain, 'tiktok.com'):
+                url_type = "tiktok"
+            elif domain_matches(domain, 'twitter.com') or domain_matches(domain, 'x.com'):
+                url_type = "twitter"
+            elif domain_matches(domain, 'facebook.com') or domain_matches(domain, 'fb.com'):
+                url_type = "facebook"
+            elif domain_matches(domain, 'soundcloud.com'):
+                url_type = "soundcloud"
+            elif domain_matches(domain, 'bandcamp.com'):
+                url_type = "bandcamp"
+            elif domain_matches(domain, 'tidal.com'):
+                url_type = "tidal"
+            elif domain_matches(domain, 'amazon.com') and ('music' in domain or '/music' in parsed.path):
+                url_type = "amazon_music"
+            elif domain_matches(domain, 'deezer.com'):
+                url_type = "deezer"
+            elif domain_matches(domain, 'pandora.com'):
+                url_type = "pandora"
+            elif domain_matches(domain, 'iheart.com'):
+                url_type = "iheart"
+            elif domain_matches(domain, 'tunein.com'):
+                url_type = "tunein"
+            
+            categorized_urls.append({
+                "url": url,
+                "type": url_type
+            })
+        except Exception as e:
+            # If URL parsing fails, still add it as "other" type
+            logger.warning(f"Failed to parse URL: {url} - {e}")
+            categorized_urls.append({
+                "url": url,
+                "type": "other"
+            })
+    
+    return categorized_urls
+
+def query_messages_with_urls(
+    db_path: str,
+    chat_ids: List[int],
+    start_date: str,
+    end_date: str
+) -> pd.DataFrame:
+    """
+    Query ALL messages with ANY URLs (not just Spotify) from selected chats (by chat_id) and date range.
+    This is used to find Apple Music, YouTube, Instagram, and other links in addition to Spotify.
+    
+    This function handles both text and attributedBody fields:
+    - For messages with text field: uses SQL LIKE
+    - For messages with attributedBody (binary): loads into memory and parses using typedstream
+    
+    Args:
+        chat_ids: List of chat ROWIDs (not names) - more precise than names
+    """
+    from . import data_enrichment as de
+    
+    start_ts = convert_to_apple_timestamp(start_date)
+    end_ts = convert_to_apple_timestamp(end_date)
+    
+    conn = sqlite3.connect(db_path)
+    
+    placeholders = ','.join(['?'] * len(chat_ids))
+    # Query ALL messages in date range (not just those with text field)
+    # We need to check attributedBody too, which requires parsing
+    query = f"""
+        SELECT 
+            message.ROWID as message_id,
+            message.text,
+            message.attributedBody,
+            message.date,
+            message.is_from_me,
+            message.handle_id,
+            message.associated_message_type,
+            handle.id as sender_contact,
+            chat.display_name as chat_name,
+            chat.ROWID as chat_id,
+            datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime") as date_utc
+        FROM message
+        JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
+        JOIN chat ON chat_message_join.chat_id = chat.ROWID
+        LEFT JOIN handle ON message.handle_id = handle.ROWID
+        WHERE 
+            message.date BETWEEN ? AND ?
+            AND chat.ROWID IN ({placeholders})
+            AND (
+                message.text IS NOT NULL 
+                OR message.attributedBody IS NOT NULL
+            )
+            AND (
+                message.associated_message_type IS NULL 
+                OR message.associated_message_type = 0
+            )
+        ORDER BY message.date DESC
+    """
+    
+    params = [start_ts, end_ts] + chat_ids
+    df = pd.read_sql_query(query, conn, params=params)
+    conn.close()
+    
+    if df.empty:
+        return df
+    
+    # Filter out reactions before processing (reactions don't have meaningful text)
+    # associated_message_type is NULL or 0 for regular messages, non-zero for reactions
+    if 'associated_message_type' in df.columns:
+        df = df[df['associated_message_type'].isna() | (df['associated_message_type'] == 0)].copy()
+    
+    # Parse attributedBody for messages that have it
+    # This extracts text from the binary field
+    df['extracted_text'] = df['attributedBody'].apply(de.parse_AttributeBody)
+    
+    # Create final_text column (text field OR extracted from attributedBody)
+    df['final_text'] = df.apply(
+        lambda row: row['text'] if pd.notna(row['text']) and row['text'] != ''
+        else row['extracted_text'].get('text', None) if isinstance(row['extracted_text'], dict) 
+        else None,
+        axis=1
+    )
+    
+    # Filter to only messages with ANY URLs (http or https)
+    url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
+    df['has_url'] = df['final_text'].astype(str).str.contains(url_pattern, case=False, na=False, regex=True)
+    
+    # Return only messages with URLs
+    df_filtered = df[df['has_url']].copy()
+    
+    # Clean up temporary columns
+    df_filtered = df_filtered.drop(columns=['extracted_text', 'has_url'])
+    
+    return df_filtered
+
 def query_spotify_messages(
     db_path: str,
     chat_ids: List[int],
@@ -224,18 +406,26 @@ def query_spotify_messages(
             message.attributedBody,
             message.date,
             message.is_from_me,
+            message.handle_id,
+            message.associated_message_type,
+            handle.id as sender_contact,
             chat.display_name as chat_name,
             chat.ROWID as chat_id,
             datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime") as date_utc
         FROM message
         JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
         JOIN chat ON chat_message_join.chat_id = chat.ROWID
+        LEFT JOIN handle ON message.handle_id = handle.ROWID
         WHERE 
             message.date BETWEEN ? AND ?
             AND chat.ROWID IN ({placeholders})
             AND (
                 message.text IS NOT NULL 
                 OR message.attributedBody IS NOT NULL
+            )
+            AND (
+                message.associated_message_type IS NULL 
+                OR message.associated_message_type = 0
             )
         ORDER BY message.date DESC
     """
@@ -246,6 +436,11 @@ def query_spotify_messages(
     
     if df.empty:
         return df
+    
+    # Filter out reactions before processing (reactions don't have meaningful text)
+    # associated_message_type is NULL or 0 for regular messages, non-zero for reactions
+    if 'associated_message_type' in df.columns:
+        df = df[df['associated_message_type'].isna() | (df['associated_message_type'] == 0)].copy()
     
     # Parse attributedBody for messages that have it
     # This extracts text from the binary field
