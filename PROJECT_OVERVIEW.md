@@ -223,10 +223,10 @@ dopeventures/
 - **`requirements.txt`**: Python package dependencies
 
 ### Migration Scripts
-- **`migrate_password_reset.py`**: Added password reset functionality
-- **`migrate_roles.py`**: Added user roles (user, admin, super_admin)
-- **`promote_admin.py`**: Utility to promote users to admin
-- **`reset_password.py`**: Utility script for password resets
+- **`scripts/utils/migrate_password_reset.py`**: Added password reset functionality
+- **`scripts/utils/migrate_roles.py`**: Added user roles (user, admin, super_admin)
+- **`scripts/utils/promote_admin.py`**: Utility to promote users to admin
+- **`scripts/utils/reset_password.py`**: Utility script for password resets
 
 ---
 
@@ -623,12 +623,12 @@ chat.db (input)
 
 #### Promote User to Admin
 ```bash
-python promote_admin.py <username>
+python scripts/utils/promote_admin.py <username>
 ```
 
 #### Reset User Password
 ```bash
-python reset_password.py <username>
+python scripts/utils/reset_password.py <username>
 ```
 
 #### Check Database Health
