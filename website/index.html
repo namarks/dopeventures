@@ -524,6 +524,53 @@
             left: 50px;
             z-index: 2;
         }
+        
+        /* Sortable columns */
+        .sortable {
+            user-select: none;
+            position: relative;
+        }
+        .sortable:hover {
+            background-color: #e9ecef;
+        }
+        .sort-indicator {
+            font-size: 0.7em;
+            color: #6c757d;
+            margin-left: 5px;
+        }
+        .sortable.sort-asc .sort-indicator::after {
+            content: " ↑";
+            color: #007bff;
+        }
+        .sortable.sort-desc .sort-indicator::after {
+            content: " ↓";
+            color: #007bff;
+        }
+        
+        /* Chat details modal */
+        #chatDetailsModal {
+            animation: fadeIn 0.2s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .chat-details-messages {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        .chat-details-message {
+            padding: 10px;
+            margin-bottom: 8px;
+            border-left: 4px solid #ddd;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+        .chat-details-message.from-me {
+            border-left-color: #007bff;
+            background-color: #e7f3ff;
+        }
     </style>
 </head>
 <body>
@@ -635,35 +682,20 @@
             </div>
         </section>
 
-        <!-- Data Preparation Section -->
-        <section id="dataPreparation" class="disabled">
-            <h2><span class="step-number">Step 3:</span> Data Preparation</h2>
-            <div class="section-content">
-                <p><em>Process your iMessage data for searching and playlist creation (~45 seconds).</em></p>
-                
-                <div id="dataStatus" style="margin: 10px 0; padding: 10px; border-radius: 5px; font-weight: bold;">
-                    <span id="dataStatusText">Data not prepared</span>
-                </div>
-                
-                <button id="prepareDataButton">Prepare Data</button>
-                
-                <div id="dataPreparationProgress" style="margin-top: 15px; display: none;">
-                    <div><strong>Data Preparation Progress:</strong></div>
-                    <div id="progressMessages" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 14px; line-height: 1.4; margin-top: 10px;"></div>
-                </div>
-            </div>
-        </section>
-
         <!-- Chat Search Section -->
         <section id="chatSearch" class="disabled">
-            <h2><span class="step-number">Step 4:</span> Chat Search & Selection</h2>
+            <h2><span class="step-number">Step 3:</span> Chat Search & Selection</h2>
             <div class="section-content">
                 <p><em>Search for chats by name or participant names, then select which ones to include in your playlist.</em></p>
                 
-                <div class="search-container">
-                    <input type="text" id="searchInput" placeholder="Search chats by name or participant...">
+                <div class="search-container" style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                    <input type="text" id="searchInput" placeholder="Search by chat name, member name, phone number, or email..." style="flex: 1; padding: 10px; font-size: 14px;">
                     <button id="searchButton">Search Chats</button>
+                    <button id="viewAllChatsButton" style="background-color: #6c757d;">View All Chats</button>
                 </div>
+                <p style="font-size: 0.85em; color: #666; margin-top: 5px; margin-bottom: 15px;">
+                    💡 <strong>Search tips:</strong> You can search by chat name, participant name, phone number, or email address
+                </p>
 
                 <div id="searchResults" style="margin-top: 20px; overflow-x: auto;">
                     <div style="width: 100%; overflow-x: auto;">
@@ -671,12 +703,21 @@
                         <thead>
                             <tr>
                                     <th class="sticky-col left-col" style="width: 50px;">Select</th>
-                                    <th class="sticky-col" style="min-width: 180px;">Chat Name</th>
-                                <th style="width: 80px;">Members</th>
-                                <th style="width: 100px;">Total Messages</th>
+                                    <th class="sticky-col sortable" data-sort="name" style="min-width: 180px; cursor: pointer;">
+                                        Chat Name <span class="sort-indicator">⇅</span>
+                                    </th>
+                                    <th style="width: 100px;">Chat ID</th>
+                                <th class="sortable" data-sort="members" style="width: 100px; cursor: pointer;">
+                                    Members <span class="sort-indicator">⇅</span>
+                                </th>
+                                <th class="sortable" data-sort="total_messages" style="width: 120px; cursor: pointer;">
+                                    Total Messages <span class="sort-indicator">⇅</span>
+                                </th>
                                 <th style="width: 100px;">My Messages</th>
-                                <th style="width: 80px;">Spotify URLs</th>
-                                    <th style="width: 140px;">Most Recent Song Date</th>
+                                    <th class="sortable" data-sort="last_message_date" style="width: 150px; cursor: pointer;">
+                                        Most Recent <span class="sort-indicator">⇅</span>
+                                    </th>
+                                    <th style="width: 80px;">Details</th>
                             </tr>
                         </thead>
                         <tbody id="chatTableBody">
@@ -686,11 +727,43 @@
                 </div>
 
                 <div id="selectedChatsSection" style="margin-top: 25px;">
-                    <h3>Selected Chats:</h3>
+                    <h3>Selected Chats (<span id="selectedChatCount">0</span>):</h3>
+                    <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+                        💡 <strong>Tip:</strong> You can select multiple chats (including duplicate names) to combine them into one playlist!
+                    </p>
                     <div id="selectedChatsDisplay">
                         <p style="color: #666; font-style: italic;">No chats selected</p>
                     </div>
                     <button id="clearSelectedChats" style="display: none; background-color: #dc3545;">Clear All</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chat Details Modal -->
+        <div id="chatDetailsModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); z-index: 2000; overflow-y: auto;">
+            <div style="background: white; margin: 50px auto; max-width: 800px; padding: 30px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 id="chatDetailsTitle" style="margin: 0;">Chat Details</h2>
+                    <button id="closeChatDetails" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; font-size: 16px;">✕ Close</button>
+                </div>
+                <div id="chatDetailsContent">
+                    <!-- Content will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Statistics Section -->
+        <section id="summaryStats" class="disabled">
+            <h2><span class="step-number">Step 4:</span> Summary Statistics (Optional)</h2>
+            <div class="section-content">
+                <p><em>View statistics about your selected chats, including who sent the most songs, most liked songs, etc.</em></p>
+                <p><em style="color: #6c757d;">💡 Select chats first, then click "Generate Stats" to see insights</em></p>
+                
+                <button id="generateStatsButton" disabled style="opacity: 0.6; margin-bottom: 15px;">Generate Statistics</button>
+                
+                <div id="statsStatus" style="margin: 10px 0;"></div>
+                <div id="statsResults" style="display: none; margin-top: 20px;">
+                    <div id="statsContent" style="background-color: #f8f9fa; padding: 15px; border-radius: 5px;"></div>
                 </div>
             </div>
         </section>

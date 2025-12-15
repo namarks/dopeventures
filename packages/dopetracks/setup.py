@@ -7,7 +7,7 @@ setup(
     author_email="nmarkspdx@gmail.com",
     url="https://github.com/namarks/dopeventures",  # GitHub repo URL
     packages=find_packages(where="."),
-    package_dir={"": "."},
+    package_dir={"": "."},  # Package is at packages/dopetracks/
     install_requires=[
         "fastapi>=0.104.0",
         "uvicorn[standard]>=0.24.0",
@@ -31,9 +31,5 @@ setup(
         ]
     },
     python_requires=">=3.9",
-    entry_points={
-        "console_scripts": [
-            "dopetracks=dopetracks.frontend_interface.main:main",
-        ],
-    },
+    # Entry point removed - use start_multiuser.py instead
 )
