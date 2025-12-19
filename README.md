@@ -6,7 +6,17 @@ Create Spotify playlists from songs shared in your iMessage chats.
 
 **New to Dopetracks?** Start here: **[QUICK_START.md](./QUICK_START.md)** - Get running in 5 minutes!
 
-Or use the automated setup:
+### 🎯 No-Code Option (Easiest!)
+
+**Don't want to use the command line?** Use the GUI Launcher:
+1. Clone the repo: `git clone https://github.com/namarks/dopeventures.git`
+2. Double-click `launch.py` 
+3. Click "Setup (First Time)" then "Launch App"
+4. That's it! See [README_LAUNCHER.md](./README_LAUNCHER.md) for details.
+
+### Command Line Option
+
+Or use the automated setup script:
 ```bash
 git clone https://github.com/namarks/dopeventures.git
 cd dopeventures

@@ -2,6 +2,10 @@
 
 Get Dopetracks running in 5 minutes!
 
+> **🎯 No-Code Option**: Don't want to use the command line? Use the **GUI Launcher** instead!  
+> Just double-click `launch.py` and follow the on-screen instructions.  
+> See [README_LAUNCHER.md](./README_LAUNCHER.md) for details.
+
 ## Prerequisites
 
 - **macOS** (required for Messages database access)
