@@ -97,7 +97,7 @@ If you prefer not to grant full disk access, you can:
    # source /Users/yourusername/root_code_repo/venvs/dopetracks_env/bin/activate  # If using external venv
    
    # Start the FastAPI backend (use python3 on macOS)
-   python3 start_multiuser.py
+   python3 start.py
    ```
 
 2. **Start the Frontend Server** (in a separate terminal):

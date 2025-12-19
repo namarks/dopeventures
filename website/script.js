@@ -1,4 +1,5 @@
 console.log("script.js loaded!");
+console.log("BASE_URL:", typeof BASE_URL !== 'undefined' ? BASE_URL : 'NOT DEFINED');
 
 // Global variables for authentication
 let isAuthenticated = false;
@@ -40,12 +41,54 @@ async function checkAuthStatus() {
         return;
     }
     
+    // First, check if we're in local mode (no auth endpoints)
+    try {
+        const healthResponse = await fetch(`${BASE_URL}/health`);
+        if (healthResponse.ok) {
+            const healthData = await healthResponse.json();
+            // If health endpoint indicates local mode, skip auth
+            if (healthData.environment === "local" || !healthData.hasOwnProperty("environment")) {
+                console.log("Local mode detected - skipping authentication");
+                isAuthenticated = true; // Set to true for local mode
+                console.log("Calling showMainApp()...");
+                showMainApp();
+                console.log("showMainApp() called");
+                // Enable Spotify button
+                const spotifyButton = document.getElementById("authorizeSpotify");
+                if (spotifyButton) {
+                    spotifyButton.disabled = false;
+                    spotifyButton.title = "Authorize Spotify to create playlists";
+                    spotifyButton.style.opacity = "1";
+                    spotifyButton.style.cursor = "pointer";
+                }
+                return; // Skip auth check
+            }
+        }
+    } catch (error) {
+        console.log("Health check failed, will try auth check:", error);
+    }
+    
+    // Try auth endpoint (for multi-user mode)
     try {
         const response = await fetch(`${AUTH_BASE_URL}/status`, {
             credentials: 'include'  // Ensure cookies are sent
         });
         
         if (!response.ok) {
+            // If 404, auth endpoint doesn't exist - assume local mode
+            if (response.status === 404) {
+                console.log("Auth endpoint not found - assuming local mode");
+                isAuthenticated = true;
+                showMainApp();
+                const spotifyButton = document.getElementById("authorizeSpotify");
+                if (spotifyButton) {
+                    spotifyButton.disabled = false;
+                    spotifyButton.title = "Authorize Spotify to create playlists";
+                    spotifyButton.style.opacity = "1";
+                    spotifyButton.style.cursor = "pointer";
+                }
+                return;
+            }
             console.warn(`Auth status check failed: ${response.status} ${response.statusText}`);
             showAuthModal();
             return;
@@ -78,8 +121,17 @@ async function checkAuthStatus() {
             }
         }
     } catch (error) {
-        console.error('Error checking auth status:', error);
-        showAuthModal();
+        // If auth endpoint doesn't exist (network error), assume local mode
+        console.log("Auth check failed - assuming local mode:", error);
+        isAuthenticated = true;
+        showMainApp();
+        const spotifyButton = document.getElementById("authorizeSpotify");
+        if (spotifyButton) {
+            spotifyButton.disabled = false;
+            spotifyButton.title = "Authorize Spotify to create playlists";
+            spotifyButton.style.opacity = "1";
+            spotifyButton.style.cursor = "pointer";
+        }
     }
 }
 
@@ -128,17 +180,32 @@ function showMainApp() {
     }
     
     if (authOverlay) authOverlay.style.display = 'none';
-    if (userBar) userBar.style.display = 'flex';
+    
+    // In local mode (no currentUser), hide the user bar
+    if (userBar) {
+        if (currentUser) {
+            userBar.style.display = 'flex';
+        } else {
+            // Local mode - hide user bar
+            userBar.style.display = 'none';
+        }
+    }
+    
     if (mainContent) {
         mainContent.classList.add('visible');
-        console.log('Main content should now be visible');
+        // Also set display style directly as fallback
+        mainContent.style.display = 'block';
+        console.log('Main content should now be visible, class:', mainContent.className);
     } else {
         console.error('mainContent element not found!');
         // Try to get it directly
         mainContent = document.getElementById('mainContent');
         if (mainContent) {
             mainContent.classList.add('visible');
+            mainContent.style.display = 'block';
             console.log('Main content found and made visible');
+        } else {
+            console.error('Could not find mainContent element at all!');
         }
     }
     document.body.classList.add('authenticated');
@@ -155,9 +222,10 @@ function showMainApp() {
     }
     
     // Update Spotify button state based on authentication
+    // In local mode (isAuthenticated but no currentUser), enable the button
     const spotifyButton = document.getElementById("authorizeSpotify");
     if (spotifyButton) {
-        if (isAuthenticated && currentUser) {
+        if (isAuthenticated && (currentUser || !currentUser)) {  // Allow local mode
             spotifyButton.disabled = false;
             spotifyButton.title = "Authorize Spotify to create playlists";
             spotifyButton.style.opacity = "1";
@@ -199,12 +267,18 @@ async function checkSpotifyAuthStatus() {
             );
             
             // Update profile display
-            document.getElementById('userProfile').innerHTML = `
-                <strong>Name:</strong> ${profile.display_name}<br>
-                <strong>Email:</strong> ${profile.email}<br>
-                <strong>Country:</strong> ${profile.country}
-            `;
-            document.getElementById('userProfileContainer').style.display = 'block';
+            const userProfileEl = document.getElementById('userProfile');
+            const userProfileContainer = document.getElementById('userProfileContainer');
+            if (userProfileEl) {
+                userProfileEl.innerHTML = `
+                    <strong>Name:</strong> ${profile.display_name}<br>
+                    <strong>Email:</strong> ${profile.email || 'N/A'}<br>
+                    <strong>Country:</strong> ${profile.country || 'N/A'}
+                `;
+            }
+            if (userProfileContainer) {
+                userProfileContainer.style.display = 'block';
+            }
             
             // Update button text
             const spotifyButton = document.getElementById("authorizeSpotify");
@@ -215,6 +289,7 @@ async function checkSpotifyAuthStatus() {
             // Enable next steps
             isSpotifyAuthorized = true;
             completeCurrentStep();
+            console.log("Spotify authorization confirmed - step completed");
         } else {
             // User doesn't have valid Spotify tokens
             updateStatus(
@@ -223,9 +298,11 @@ async function checkSpotifyAuthStatus() {
                 "Not connected to Spotify",
                 "pending"
             );
+            isSpotifyAuthorized = false;
         }
     } catch (error) {
         console.log('Spotify not connected yet:', error);
+        isSpotifyAuthorized = false;
         updateStatus(
             document.getElementById("spotifyStatus"),
             document.getElementById("spotifyStatusText"),
@@ -820,14 +897,33 @@ function initializeApp() {
     initializeDOMElements();
     initializeAuthElements();
     
-    // Make sure authOverlay is visible if user is not authenticated
-    // This ensures the modal shows even if checkAuthStatus hasn't run yet
-    if (authOverlay && !isAuthenticated) {
-        console.log('User not authenticated, showing auth modal');
-        showAuthModal();
+    // Hide auth overlay initially - checkAuthStatus will show it if needed
+    // This prevents showing login modal in local mode
+    if (authOverlay) {
+        authOverlay.style.display = 'none';
+    }
+    
+    // Show main content initially (will be hidden if auth is needed)
+    if (mainContent) {
+        mainContent.style.display = 'block';
+        mainContent.classList.add('visible');
+        document.body.classList.add('authenticated');
+        console.log('Main content shown initially, will be hidden if auth needed');
+    }
+    
+    // Enable Spotify button initially (will be disabled if auth check fails)
+    const spotifyButton = document.getElementById("authorizeSpotify");
+    if (spotifyButton) {
+        spotifyButton.disabled = false;
+        spotifyButton.style.opacity = "1";
+        spotifyButton.style.cursor = "pointer";
+        spotifyButton.title = "Authorize Spotify to create playlists";
+        console.log('Spotify button enabled initially');
     }
     
     initializeLoginForm(); // Initialize login form after elements are ready
+    
+    // Check authentication status - this will determine if we show auth modal or main app
     checkAuthStatus();
     
     // Initialize other app features
@@ -1135,15 +1231,12 @@ const authCode = urlParams.get('code');
 
 if (authCode) {
     // User returned from Spotify authorization
-    updateStatus(
-        document.getElementById("spotifyStatus"),
-        document.getElementById("spotifyStatusText"),
-        "✅ Spotify authorization successful!",
-        "success"
-    );
-    isSpotifyAuthorized = true;
-    fetchUserProfile();
-    completeCurrentStep();
+    console.log("Detected Spotify callback - checking authorization status...");
+    // Clear the code from URL for cleaner navigation
+    window.history.replaceState({}, document.title, window.location.pathname);
+    
+    // Check Spotify status and update UI
+    checkSpotifyAuthStatus();
 }
 
 async function fetchUserProfile() {
@@ -1176,7 +1269,9 @@ function setupSpotifyHandlers() {
     // Function to update button state based on authentication
     function updateSpotifyButtonState() {
         if (spotifyButton) {
-            if (!isAuthenticated || !currentUser) {
+            // In local mode, isAuthenticated is true but currentUser is null
+            // Allow button if authenticated (either with user or in local mode)
+            if (!isAuthenticated || (!currentUser && !isAuthenticated)) {
                 spotifyButton.disabled = true;
                 spotifyButton.title = "Please log in first to authorize Spotify";
                 spotifyButton.style.opacity = "0.6";
@@ -1187,7 +1282,11 @@ function setupSpotifyHandlers() {
                 spotifyButton.title = "Authorize Spotify to create playlists";
                 spotifyButton.style.opacity = "1";
                 spotifyButton.style.cursor = "pointer";
-                console.log("Spotify button enabled - user authenticated:", currentUser.username);
+                if (currentUser) {
+                    console.log("Spotify button enabled - user authenticated:", currentUser.username);
+                } else {
+                    console.log("Spotify button enabled - local mode (no user required)");
+                }
             }
         }
     }
@@ -1203,36 +1302,86 @@ function setupSpotifyHandlers() {
         console.log("Event object:", event);
         console.log("Current auth state - isAuthenticated:", isAuthenticated, "currentUser:", currentUser);
         
-        // Double-check authentication before proceeding - re-check if needed
-        if (!isAuthenticated || !currentUser) {
-            console.warn("Auth state appears invalid, re-checking authentication status...");
-            // Try to re-check auth status
+        // In local mode, isAuthenticated is true but currentUser is null - that's OK, proceed
+        // Only check auth if not authenticated
+        if (!isAuthenticated) {
+            console.warn("Not authenticated, checking if we're in local mode...");
+            // Check if we're in local mode first
             try {
-                const authCheck = await fetch(`${AUTH_BASE_URL}/status`, {
-                    credentials: 'include'
-                });
-                const authData = await authCheck.json();
-                console.log("Re-check auth response:", authData);
-                
-                if (authData.authenticated && authData.user) {
-                    // Update auth state
-                    isAuthenticated = true;
-                    currentUser = authData.user;
-                    console.log("Auth state updated - proceeding with Spotify authorization");
-                    // Continue with the flow below
-                } else {
-                    console.error("User not authenticated - showing login modal");
-                    alert("You must be logged in to authorize Spotify. Please log in first.");
-                    showAuthModal();
-                    return;
+                const healthResponse = await fetch(`${BASE_URL}/health`);
+                if (healthResponse.ok) {
+                    const healthData = await healthResponse.json();
+                    if (healthData.environment === "local") {
+                        console.log("Local mode detected - proceeding without auth");
+                        isAuthenticated = true;
+                        // Continue with the flow below
+                    } else {
+                        // Not local mode, need auth
+                        console.warn("Not in local mode, checking auth status...");
+                        try {
+                            const authCheck = await fetch(`${AUTH_BASE_URL}/status`, {
+                                credentials: 'include'
+                            });
+                            const authData = await authCheck.json();
+                            console.log("Re-check auth response:", authData);
+                            
+                            if (authData.authenticated) {
+                                isAuthenticated = true;
+                                currentUser = authData.user || null;
+                                console.log("Auth state updated - proceeding with Spotify authorization");
+                                // Continue with the flow below
+                            } else {
+                                console.error("User not authenticated - showing login modal");
+                                alert("You must be logged in to authorize Spotify. Please log in first.");
+                                showAuthModal();
+                                return;
+                            }
+                        } catch (authError) {
+                            console.error("Error checking auth:", authError);
+                            alert("You must be logged in to authorize Spotify. Please log in first.");
+                            showAuthModal();
+                            return;
+                        }
+                    }
                 }
             } catch (error) {
-                console.error("Error re-checking auth:", error);
-                alert("You must be logged in to authorize Spotify. Please log in first.");
-                showAuthModal();
-                return;
+                console.error("Error checking health/local mode:", error);
+                // If health check fails, try auth endpoint
+                try {
+                    const authCheck = await fetch(`${AUTH_BASE_URL}/status`, {
+                        credentials: 'include'
+                    });
+                    if (authCheck.ok) {
+                        const authData = await authCheck.json();
+                        if (authData.authenticated) {
+                            isAuthenticated = true;
+                            currentUser = authData.user || null;
+                            // Continue
+                        } else {
+                            alert("You must be logged in to authorize Spotify. Please log in first.");
+                            showAuthModal();
+                            return;
+                        }
+                    } else if (authCheck.status === 404) {
+                        // Auth endpoint doesn't exist - assume local mode
+                        console.log("Auth endpoint not found - assuming local mode");
+                        isAuthenticated = true;
+                        // Continue
+                    } else {
+                        alert("You must be logged in to authorize Spotify. Please log in first.");
+                        showAuthModal();
+                        return;
+                    }
+                } catch (authError) {
+                    // If auth endpoint doesn't exist (network error), assume local mode
+                    console.log("Auth endpoint not accessible - assuming local mode, proceeding");
+                    isAuthenticated = true;
+                    // Continue with the flow below
+                }
             }
         }
+        
+        // If we get here, we're authenticated (either with user or in local mode) - proceed
         
         try {
             console.log("Fetching client ID...");
@@ -1264,7 +1413,9 @@ function setupSpotifyHandlers() {
                 }
                 
                 // Check authentication status
-                if (!data.authenticated || !data.session_id) {
+                // In local mode, these fields won't exist - that's OK
+                // Only check if the fields exist (multi-user mode)
+                if (data.hasOwnProperty('authenticated') && (!data.authenticated || !data.session_id)) {
                     console.error("ERROR: User not authenticated or no session ID");
                     console.error("Auth status:", data.authenticated, "Session ID:", data.session_id ? "present" : "missing");
                     alert("Error: You must be logged in to authorize Spotify. Please log in and try again.");
@@ -1273,17 +1424,20 @@ function setupSpotifyHandlers() {
                     return;
                 }
                 
+                // If we're in local mode (no authenticated/session_id fields), proceed
+                console.log("Proceeding with Spotify authorization (local mode or authenticated)");
+                
                 const scope = 'playlist-modify-public playlist-modify-private';
                 
-                // Get session ID from backend response (cookie is httponly, so JS can't read it)
-                // This ensures we can identify the user even if cookies aren't sent on redirect
-                const sessionId = data.session_id;
+                // Get session ID from backend response (only in multi-user mode)
+                // In local mode, there's no session_id - that's OK
+                const sessionId = data.session_id || null;
                 
                 console.log("Client ID:", clientId);
                 console.log("Redirect URI (from backend):", redirectUri);
                 console.log("Current window.location.origin:", window.location.origin);
                 console.log("Scope:", scope);
-                console.log("Session ID (from backend):", sessionId ? sessionId.substring(0, 10) + '...' : 'NOT FOUND');
+                console.log("Session ID (from backend):", sessionId ? sessionId.substring(0, 10) + '...' : 'NOT FOUND (local mode)');
                 
                 // Double-check the redirect URI before sending
                 const expectedUri = "http://127.0.0.1:8888/callback";
@@ -1295,11 +1449,18 @@ function setupSpotifyHandlers() {
                     return;
                 }
                 
-                // Build auth URL with state parameter containing session ID
-                // CRITICAL: Always include state parameter with session ID
-                const authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${clientId}&scope=${encodeURIComponent(scope)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(sessionId)}`;
+                // Build auth URL
+                // In local mode, state parameter is optional (no session_id needed)
+                let authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${clientId}&scope=${encodeURIComponent(scope)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
                 
-                console.log("Including session ID in state parameter");
+                // Only add state parameter if we have a session ID (multi-user mode)
+                if (sessionId) {
+                    authUrl += `&state=${encodeURIComponent(sessionId)}`;
+                    console.log("Including session ID in state parameter (multi-user mode)");
+                } else {
+                    console.log("No session ID - local mode, proceeding without state parameter");
+                }
+                
                 console.log("Full Auth URL (first 200 chars):", authUrl.substring(0, 200) + '...');
                 console.log("===========================");
                 
@@ -1563,6 +1724,48 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function renderSenderCell(senderInfo) {
+    /**
+     * Render a sender cell with photo and name.
+     * @param {Object} senderInfo - Object with sender_full_name, sender_name, sender_unique_id, is_from_me
+     * @returns {string} HTML string for the sender cell
+     */
+    const sender = senderInfo.sender_full_name || senderInfo.sender_name || "—";
+    const uniqueId = senderInfo.sender_unique_id;
+    const isFromMe = senderInfo.is_from_me || false;
+    
+    if (uniqueId && !isFromMe) {
+        const photoUrl = `${BASE_URL}/contact-photo/${encodeURIComponent(uniqueId)}`;
+        return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <img src="${photoUrl}" 
+                     alt="${escapeHtml(sender)}" 
+                     style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1px solid #ddd;"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div style="display: none; width: 32px; height: 32px; border-radius: 50%; background-color: #007bff; color: white; align-items: center; justify-content: center; font-weight: bold; font-size: 0.9em;">
+                    ${sender !== "—" ? sender.charAt(0).toUpperCase() : "?"}
+                </div>
+                <span style="font-weight: ${isFromMe ? 'bold' : 'normal'}; color: ${isFromMe ? '#007bff' : '#333'};">
+                    ${escapeHtml(sender)}
+                </span>
+            </div>
+        `;
+    } else {
+        // Fallback: show initial in circle if no photo
+        const initial = sender !== "—" ? (isFromMe ? 'Y' : sender.charAt(0).toUpperCase()) : "?";
+        return `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="width: 32px; height: 32px; border-radius: 50%; background-color: ${isFromMe ? '#007bff' : '#6c757d'}; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.9em;">
+                    ${initial}
+                </div>
+                <span style="font-weight: ${isFromMe ? 'bold' : 'normal'}; color: ${isFromMe ? '#007bff' : '#333'};">
+                    ${escapeHtml(sender)}
+                </span>
+            </div>
+        `;
+    }
+}
+
 // Global variables for sorting
 let currentSortColumn = null;
 let currentSortDirection = 'asc'; // 'asc' or 'desc'
@@ -1771,18 +1974,25 @@ function showChatDetails(chat) {
             }
             const isFromMe = msg.is_from_me;
             const messageClass = isFromMe ? 'from-me' : '';
-            // Use sender_name from backend (name, phone number, or email)
-            const senderName = msg.sender_name || (isFromMe ? 'You' : 'Unknown');
-            const senderLabel = isFromMe 
-                ? '<strong style="color: #007bff;">You</strong>' 
-                : `<strong style="color: #6c757d;">${escapeHtml(senderName)}</strong>`;
+            
+            // Debug: log message data
+            console.log('Recent message data:', msg);
+            
+            // Use renderSenderCell for consistent display with photos
+            const senderCell = renderSenderCell({
+                sender_full_name: msg.sender_full_name || msg.sender_name,
+                sender_name: msg.sender_name,
+                sender_unique_id: msg.sender_unique_id,
+                is_from_me: isFromMe
+            });
             
             html += `
-                <div class="chat-details-message ${messageClass}">
-                    <div style="margin-bottom: 5px;">
-                        ${senderLabel} <span style="color: #999; font-size: 0.85em;">${dateStr}</span>
+                <div class="chat-details-message ${messageClass}" style="margin-bottom: 15px; padding: 10px; background-color: ${isFromMe ? '#e3f2fd' : '#f5f5f5'}; border-radius: 8px;">
+                    <div style="margin-bottom: 5px; display: flex; align-items: center; gap: 8px;">
+                        ${senderCell}
+                        <span style="color: #999; font-size: 0.85em; margin-left: auto;">${dateStr}</span>
                     </div>
-                    <div style="color: #333; line-height: 1.5;">${escapeHtml(text)}</div>
+                    <div style="color: #333; line-height: 1.5; margin-top: 5px;">${escapeHtml(text)}</div>
                 </div>
             `;
         });
@@ -2145,8 +2355,19 @@ function setupPlaylistHandlers() {
                                     progressMessage.textContent = `${data.message} (${data.current}/${data.total})`;
                                 }
                             }
-                        } else if (data.status === 'completed' && data.result) {
-                            finalResult = data.result;
+                        } else if (data.status === 'complete' || data.status === 'completed') {
+                            // Backend sends 'complete' with data directly (not wrapped in 'result')
+                            finalResult = {
+                                status: 'success',
+                                message: data.message || 'Playlist created successfully',
+                                tracks_added: data.tracks_added || 0,
+                                playlist_id: data.playlist_id,
+                                playlist_name: data.playlist_name,
+                                playlist_url: data.playlist_url,
+                                track_details: data.track_details || [],
+                                skipped_urls: data.skipped_urls || [],
+                                other_links: data.other_links || []
+                            };
                             // Set progress to 100%
                             if (progressBar) {
                                 progressBar.style.width = "100%";
@@ -2157,14 +2378,15 @@ function setupPlaylistHandlers() {
                             if (progressMessage) {
                                 progressMessage.textContent = "Playlist creation completed!";
                             }
+                            break; // Stream is complete
                         } else if (data.status === 'error' || data.status === 'warning') {
                             // Handle errors/warnings - store the data for later processing
                             finalResult = {
                                 status: data.status,
                                 message: data.message || 'Unknown error',
+                                tracks_added: data.tracks_added || 0,
                                 track_details: data.track_details || [],
-                                statistics: data.statistics || null,
-                                skipped_links: data.skipped_links || [],
+                                skipped_urls: data.skipped_urls || [],
                                 other_links: data.other_links || []
                             };
                             break;
@@ -2252,7 +2474,6 @@ function setupPlaylistHandlers() {
                     
                     const trackName = track.track_name || "—";
                     const artist = track.artist || "—";
-                    const sender = track.sender_name || "—";
                     const messageDate = track.message_date || "—";
                     const messageText = track.message_text || "—";
                     const trackId = track.track_id || "—";
@@ -2286,8 +2507,8 @@ function setupPlaylistHandlers() {
                             <td style="border: 1px solid #ddd; padding: 8px; color: ${statusColor}; font-weight: bold;">${statusText}</td>
                             <td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(trackName)}</td>
                             <td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(artist)}</td>
-                            <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${track.is_from_me ? 'bold' : 'normal'}; color: ${track.is_from_me ? '#007bff' : '#333'};">
-                                ${escapeHtml(sender)}
+                            <td style="border: 1px solid #ddd; padding: 8px;">
+                                ${renderSenderCell(track)}
                             </td>
                             <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
                             <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
@@ -2371,7 +2592,6 @@ function setupPlaylistHandlers() {
                     
                     const entityType = link.entity_type || "unknown";
                     const entityTypeDisplay = entityType.charAt(0).toUpperCase() + entityType.slice(1);
-                    const sender = link.sender_name || "—";
                     const messageText = link.message_text || "—";
                     const messageCellId = `skipped-msg-${Math.random().toString(36).substr(2, 9)}`;
                     const isLongMessage = messageText.length > 100;
@@ -2382,8 +2602,8 @@ function setupPlaylistHandlers() {
                             <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; word-break: break-all;">
                                 <a href="${escapeHtml(link.url)}" target="_blank" style="color: #007bff;">${escapeHtml(link.url)}</a>
                             </td>
-                            <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${link.is_from_me ? 'bold' : 'normal'}; color: ${link.is_from_me ? '#007bff' : '#333'};">
-                                ${escapeHtml(sender)}
+                            <td style="border: 1px solid #ddd; padding: 8px;">
+                                ${renderSenderCell(link)}
                             </td>
                             <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
                             <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
@@ -2484,7 +2704,6 @@ function setupPlaylistHandlers() {
                             }
                         }
                         
-                        const sender = link.sender_name || "—";
                         const messageText = link.message_text || "—";
                         const messageCellId = `other-link-msg-${Math.random().toString(36).substr(2, 9)}`;
                         const isLongMessage = messageText.length > 100;
@@ -2494,8 +2713,8 @@ function setupPlaylistHandlers() {
                                 <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; word-break: break-all;">
                                     <a href="${escapeHtml(link.url)}" target="_blank" style="color: #007bff;">${escapeHtml(link.url)}</a>
                                 </td>
-                                <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${link.is_from_me ? 'bold' : 'normal'}; color: ${link.is_from_me ? '#007bff' : '#333'};">
-                                    ${escapeHtml(sender)}
+                                <td style="border: 1px solid #ddd; padding: 8px;">
+                                    ${renderSenderCell(link)}
                                 </td>
                                 <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
                                 <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
@@ -2604,7 +2823,6 @@ function setupPlaylistHandlers() {
                 
                 const trackName = track.track_name || "—";
                 const artist = track.artist || "—";
-                const sender = track.sender_name || "—";
                 const messageDate = track.message_date || "—";
                 const messageText = track.message_text || "—";
                 const trackId = track.track_id || "—";
@@ -2638,8 +2856,8 @@ function setupPlaylistHandlers() {
                         <td style="border: 1px solid #ddd; padding: 8px; color: ${statusColor}; font-weight: bold;">${statusText}</td>
                         <td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(trackName)}</td>
                         <td style="border: 1px solid #ddd; padding: 8px;">${escapeHtml(artist)}</td>
-                        <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${track.is_from_me ? 'bold' : 'normal'}; color: ${track.is_from_me ? '#007bff' : '#333'};">
-                            ${escapeHtml(sender)}
+                        <td style="border: 1px solid #ddd; padding: 8px;">
+                            ${renderSenderCell(track)}
                         </td>
                         <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
                         <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
@@ -2710,19 +2928,18 @@ function setupPlaylistHandlers() {
                 
                 const entityType = link.entity_type || "unknown";
                 const entityTypeDisplay = entityType.charAt(0).toUpperCase() + entityType.slice(1);
-                const sender = link.sender_name || "—";
                 const messageText = link.message_text || "—";
                 const messageCellId = `skipped-msg-${Math.random().toString(36).substr(2, 9)}`;
                 const isLongMessage = messageText.length > 100;
-                
+
                 statusHtml += `
                     <tr style="background-color: #f8f9fa;">
                         <td style="border: 1px solid #ddd; padding: 8px; font-weight: bold; color: #856404;">${escapeHtml(entityTypeDisplay)}</td>
                         <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; word-break: break-all;">
                             <a href="${escapeHtml(link.url)}" target="_blank" style="color: #007bff;">${escapeHtml(link.url)}</a>
                         </td>
-                        <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${link.is_from_me ? 'bold' : 'normal'}; color: ${link.is_from_me ? '#007bff' : '#333'};">
-                            ${escapeHtml(sender)}
+                        <td style="border: 1px solid #ddd; padding: 8px;">
+                            ${renderSenderCell(link)}
                         </td>
                         <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
                         <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">
@@ -2823,7 +3040,6 @@ function setupPlaylistHandlers() {
                         }
                     }
                     
-                    const sender = link.sender_name || "—";
                     const messageText = link.message_text || "—";
                     const messageCellId = `other-link-msg-${Math.random().toString(36).substr(2, 9)}`;
                     const isLongMessage = messageText.length > 100;
@@ -2833,8 +3049,8 @@ function setupPlaylistHandlers() {
                             <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; word-break: break-all;">
                                 <a href="${escapeHtml(link.url)}" target="_blank" style="color: #007bff;">${escapeHtml(link.url)}</a>
                             </td>
-                            <td style="border: 1px solid #ddd; padding: 8px; font-weight: ${link.is_from_me ? 'bold' : 'normal'}; color: ${link.is_from_me ? '#007bff' : '#333'};">
-                                ${escapeHtml(sender)}
+                            <td style="border: 1px solid #ddd; padding: 8px;">
+                                ${renderSenderCell(link)}
                             </td>
                             <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; white-space: nowrap;">${escapeHtml(formattedDate)}</td>
                             <td style="border: 1px solid #ddd; padding: 8px; font-size: 0.85em; max-width: 400px; word-wrap: break-word;">

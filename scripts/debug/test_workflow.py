@@ -119,7 +119,7 @@ def main():
     print("  DOPETRACKS WORKFLOW TEST")
     print("="*60)
     print(f"\nTesting application at: {BASE_URL}")
-    print("Make sure the server is running: python start_multiuser.py\n")
+    print("Make sure the server is running: python start.py\n")
     
     results = []
     
@@ -155,7 +155,7 @@ def main():
         return 0
     else:
         print("⚠️  Some tests failed. Check the errors above.")
-        print("   Make sure the server is running: python start_multiuser.py")
+        print("   Make sure the server is running: python start.py")
         return 1
 
 if __name__ == "__main__":
@@ -167,5 +167,5 @@ if __name__ == "__main__":
     except requests.exceptions.ConnectionError:
         print("\n❌ Cannot connect to server!")
         print("   Make sure the server is running:")
-        print("   python start_multiuser.py")
+        print("   python start.py")
         sys.exit(1)

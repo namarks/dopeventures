@@ -1,14 +1,13 @@
 """
-Configuration management for Dopetracks multi-user application.
-Supports both local development and production hosting.
+Configuration management for Dopetracks application.
 """
 import os
+from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file (for local development)
 # Find .env file relative to project root (not package directory)
-from pathlib import Path
 env_path = Path(__file__).parent.parent.parent / ".env"
 if env_path.exists():
     load_dotenv(env_path, override=True)  # override=True ensures .env takes precedence over shell env vars
@@ -22,7 +21,7 @@ class Settings:
     # Database Configuration
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL", 
-        "sqlite:///./dopetracks_multiuser.db"
+        f"sqlite:///{Path.home() / '.dopetracks' / 'local.db'}"
     )
     
     # Security

@@ -16,7 +16,7 @@ else
 fi
 
 # Also kill any uvicorn processes
-UVICORN_PIDS=$(pgrep -f "uvicorn.*multiuser_app" 2>/dev/null)
+UVICORN_PIDS=$(pgrep -f "uvicorn.*app" 2>/dev/null)
 if [ ! -z "$UVICORN_PIDS" ]; then
     echo "⚠️  Found uvicorn processes: $UVICORN_PIDS"
     kill -9 $UVICORN_PIDS 2>/dev/null
@@ -28,4 +28,4 @@ sleep 1
 
 echo ""
 echo "✅ Port 8888 should now be free"
-echo "   You can now run: python3 start_multiuser.py"
+echo "   You can now run: python3 start.py"

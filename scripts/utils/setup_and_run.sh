@@ -35,4 +35,4 @@ fi
 echo ""
 echo "🚀 Starting Dopetracks application..."
 echo ""
-python3 start_multiuser.py
+python3 start.py

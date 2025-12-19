@@ -2,7 +2,7 @@
 # Script to ensure server is fully restarted with new environment variables
 
 echo "🛑 Stopping any running server processes..."
-pkill -f "uvicorn.*multiuser_app" || echo "No server process found"
+pkill -f "uvicorn.*app" || echo "No server process found"
 
 echo ""
 echo "⏳ Waiting 2 seconds for processes to stop..."
@@ -23,4 +23,4 @@ echo ""
 echo "🚀 Starting server with new configuration..."
 echo "   (Make sure you're in the project root directory)"
 echo ""
-python3 start_multiuser.py
+python3 start.py

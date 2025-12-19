@@ -102,18 +102,61 @@ def get_recent_messages_for_chat(db_path: str, chat_id: int, limit: int = 5) -> 
     )
     
     messages = []
+    # Import contact info function
+    try:
+        from ...contacts_data_processing.import_contact_info import get_contact_info_by_handle
+        use_contact_info = True
+        logger.debug("Contact info import successful")
+    except ImportError as e:
+        logger.warning(f"Could not import contact info function: {e}")
+        use_contact_info = False
+    
     for _, row in df.iterrows():
         text = row['final_text']
         if not text:  # Skip if no text found
             continue
         
         # Get sender name/contact info
-        sender_name = None
         if bool(row['is_from_me']):
             sender_name = "You"
+            sender_full_name = "You"
+            sender_first_name = None
+            sender_last_name = None
+            sender_unique_id = None
         else:
-            # Use handle.id (phone number or email) as sender identifier
-            sender_name = row['sender_contact'] if pd.notna(row['sender_contact']) else "Unknown"
+            sender_contact = row['sender_contact'] if pd.notna(row['sender_contact']) else None
+            if use_contact_info and sender_contact:
+                # Try to get contact info from AddressBook
+                try:
+                    contact_info = get_contact_info_by_handle(str(sender_contact))
+                    if contact_info and contact_info.get('full_name'):
+                        sender_name = contact_info['full_name']
+                        sender_full_name = contact_info['full_name']
+                        sender_first_name = contact_info.get('first_name')
+                        sender_last_name = contact_info.get('last_name')
+                        sender_unique_id = contact_info.get('unique_id')
+                        logger.debug(f"Found contact info for {sender_contact}: {sender_full_name} (unique_id: {sender_unique_id})")
+                    else:
+                        # Fallback to handle ID (phone/email)
+                        sender_name = str(sender_contact)
+                        sender_full_name = str(sender_contact)
+                        sender_first_name = None
+                        sender_last_name = None
+                        sender_unique_id = None
+                        logger.debug(f"No contact info found for {sender_contact}")
+                except Exception as e:
+                    logger.warning(f"Error getting contact info for {sender_contact}: {e}")
+                    sender_name = str(sender_contact)
+                    sender_full_name = str(sender_contact)
+                    sender_first_name = None
+                    sender_last_name = None
+                    sender_unique_id = None
+            else:
+                sender_name = str(sender_contact) if sender_contact else "Unknown"
+                sender_full_name = sender_name
+                sender_first_name = None
+                sender_last_name = None
+                sender_unique_id = None
         
         # Don't truncate - let frontend handle display formatting
         # Frontend will show preview with proper styling
@@ -121,6 +164,10 @@ def get_recent_messages_for_chat(db_path: str, chat_id: int, limit: int = 5) -> 
             "text": text,
             "is_from_me": bool(row['is_from_me']),
             "sender_name": sender_name,
+            "sender_full_name": sender_full_name,
+            "sender_first_name": sender_first_name,
+            "sender_last_name": sender_last_name,
+            "sender_unique_id": sender_unique_id,
             "date": row['date_utc']
         })
     

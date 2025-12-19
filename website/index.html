@@ -23,7 +23,7 @@
             height: 100%;
             background-color: rgba(0, 0, 0, 0.8);
             z-index: 2000;
-            display: flex;
+            display: none; /* Hidden by default - JavaScript will show if needed */
             align-items: center;
             justify-content: center;
         }
@@ -191,10 +191,19 @@
         
         /* Hide main content when not authenticated */
         .main-content {
+            display: block; /* Show by default - will be hidden if auth needed */
+        }
+        
+        .main-content.hidden {
             display: none !important;
         }
         
         .main-content.visible {
+            display: block !important;
+        }
+        
+        /* Ensure main content is visible when authenticated */
+        body.authenticated .main-content {
             display: block !important;
         }
         
@@ -835,7 +844,7 @@
         </section>
     </div>
 
-    <script src="config.js?v=20250601-2100"></script>
-    <script src="script.js?v=20250601-2100"></script>
+    <script src="/static/config.js?v=20250601-2100"></script>
+    <script src="/static/script.js?v=20250601-2100"></script>
 </body>
 </html>
