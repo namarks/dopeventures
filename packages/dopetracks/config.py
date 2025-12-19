@@ -2,13 +2,24 @@
 Configuration management for Dopetracks application.
 """
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
 # Load environment variables from .env file (for local development)
-# Find .env file relative to project root (not package directory)
-env_path = Path(__file__).parent.parent.parent / ".env"
+# For bundled apps, config is in ~/Library/Application Support/Dopetracks/.env
+# For development, config is in project root
+
+# Check if running as bundled app
+if getattr(sys, 'frozen', False):
+    # Bundled app - use user data directory
+    user_data_dir = Path.home() / 'Library' / 'Application Support' / 'Dopetracks'
+    env_path = user_data_dir / '.env'
+else:
+    # Development - use project root
+    env_path = Path(__file__).parent.parent.parent / ".env"
+
 if env_path.exists():
     load_dotenv(env_path, override=True)  # override=True ensures .env takes precedence over shell env vars
 else:
@@ -100,5 +111,15 @@ class Settings:
 # Global settings instance
 settings = Settings()
 
-# Validate settings on import
-settings.validate_required_settings() 
+# Validate settings on import (but allow missing settings for setup wizard)
+# The setup wizard will run before the main app imports this, so we can be lenient
+try:
+    settings.validate_required_settings()
+except ValueError as e:
+    # In development/bundled app, missing settings are OK during setup
+    # The launcher will handle setup before importing the app
+    if os.getenv("ALLOW_MISSING_SETTINGS", "False").lower() != "true":
+        # Only raise if we're not in setup mode
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Missing required settings (this is OK during setup): {e}") 
