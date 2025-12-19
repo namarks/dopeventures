@@ -112,14 +112,14 @@ Dopetracks.app/
 
 ### Phase 2: PyInstaller Configuration
 
-**File: `build_app.spec`**
+**File: `build/build_app.spec`**
 ```python
 # -*- mode: python ; coding: utf-8 -*-
 
 block_cipher = None
 
 a = Analysis(
-    ['launch_bundled.py'],  # Entry point
+    ['scripts/launch/launch_bundled.py'],  # Entry point
     pathex=[],
     binaries=[],
     datas=[
@@ -196,7 +196,7 @@ app = BUNDLE(
 
 ### Phase 3: Bundled Launcher Script
 
-**File: `launch_bundled.py`** (replaces start.py for bundled app)
+**File: `scripts/launch/launch_bundled.py`** (replaces start.py for bundled app)
 ```python
 #!/usr/bin/env python3
 """
@@ -386,7 +386,7 @@ async def setup_wizard():
 
 ### Phase 5: Build Script
 
-**File: `build_mac_app.sh`**
+**File: `build/build_mac_app.sh`**
 ```bash
 #!/bin/bash
 # Build macOS app bundle
@@ -402,7 +402,7 @@ rm -rf build/ dist/ Dopetracks.app
 pip install pyinstaller
 
 # Build app
-pyinstaller build_app.spec
+pyinstaller build/build_app.spec
 
 # Create .dmg
 echo "📦 Creating DMG..."
@@ -487,7 +487,7 @@ echo "✅ Build complete! DMG: dist/Dopetracks.dmg"
 ## Implementation Checklist
 
 - [ ] Create setup wizard web interface
-- [ ] Create bundled launcher script (`launch_bundled.py`)
+- [ ] Create bundled launcher script (`scripts/launch/launch_bundled.py`)
 - [ ] Create PyInstaller spec file
 - [ ] Test PyInstaller build locally
 - [ ] Create app icon (`.icns` file)

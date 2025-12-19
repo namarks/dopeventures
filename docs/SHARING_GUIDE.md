@@ -69,7 +69,7 @@ Your friend needs:
 If you need to rebuild the app with the latest changes:
 
 ```bash
-./build_mac_app.sh
+./build/build_mac_app.sh
 ```
 
 This will:

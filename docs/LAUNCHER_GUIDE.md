@@ -10,8 +10,8 @@ Simple command-line launcher that checks setup and launches the app.
 
 **Usage:**
 ```bash
-python3 launch.py          # Check setup and launch
-python3 launch.py --setup  # Run setup only
+python3 scripts/launch/launch.py          # Check setup and launch
+python3 scripts/launch/launch.py --setup  # Run setup only
 ```
 
 **Features:**
@@ -28,7 +28,7 @@ python3 launch.py --setup  # Run setup only
 
 1. **Run the launcher**:
    ```bash
-   python3 launch.py
+   python3 scripts/launch/launch.py
    ```
 
 2. **Setup**:
@@ -64,7 +64,7 @@ python3 start.py
 
 Run:
 ```bash
-python3 launch.py
+python3 scripts/launch/launch.py
 ```
 
 Press Enter when prompted - no setup needed if already configured!
@@ -151,11 +151,11 @@ For detailed testing instructions, see the testing section in **[DEVELOPER_GUIDE
 
 ## Creating a macOS App Bundle
 
-Dopetracks can be packaged as a standalone macOS app using PyInstaller. See **[PACKAGING.md](../PACKAGING.md)** for complete instructions.
+Dopetracks can be packaged as a standalone macOS app using PyInstaller. See **[PACKAGING.md](./PACKAGING.md)** for complete instructions.
 
 **Quick build:**
 ```bash
-./build_mac_app.sh
+./build/build_mac_app.sh
 ```
 
 This creates `dist/Dopetracks.app` - a self-contained app bundle that doesn't require Python installation.
@@ -166,7 +166,7 @@ This creates `dist/Dopetracks.app` - a self-contained app bundle that doesn't re
 
 ### Custom Port
 
-Edit `start.py` or `launch.py` to change the port:
+Edit `start.py` or `scripts/launch/launch.py` to change the port:
 ```python
 uvicorn.run(app, host="0.0.0.0", port=8889)
 ```
@@ -184,7 +184,7 @@ python3 start.py
 ## Summary
 
 **Easiest Method:**
-1. Run `python3 launch.py`
+1. Run `python3 scripts/launch/launch.py`
 2. Press Enter when prompted
 3. Use the app!
 

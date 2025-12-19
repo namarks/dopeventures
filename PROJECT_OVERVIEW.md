@@ -95,7 +95,7 @@ dopeventures/
 ├── user_uploads/                      # Per-user uploaded files
 ├── .env                               # Environment variables (not in repo)
 ├── start.py                           # Application entry point
-├── launch_bundled.py                 # Bundled app launcher (for packaging)
+├── scripts/launch/launch_bundled.py  # Bundled app launcher (for packaging)
 └── requirements.txt                   # Python dependencies
 ```
 
@@ -643,7 +643,7 @@ tail -f backend.log
 
 - **Main Application**: `start.py`
 - **Direct FastAPI**: `packages/dopetracks/app.py`
-- **Bundled App**: `launch_bundled.py` (for packaged macOS app)
+- **Bundled App**: `scripts/launch/launch_bundled.py` (for packaged macOS app)
 - **Legacy Interface**: `packages/dopetracks/dopetracks/frontend_interface/web_interface.py`
 
 ---

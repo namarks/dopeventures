@@ -13,7 +13,7 @@ from pathlib import Path
 # Check if running as bundled app (PyInstaller)
 if getattr(sys, 'frozen', False):
     print("⚠️  This launcher is for development mode only.")
-    print("   For bundled app, use launch_bundled.py")
+    print("   For bundled app, use scripts/launch/launch_bundled.py")
     sys.exit(1)
 
 project_root = Path(__file__).parent
@@ -98,7 +98,7 @@ def launch_app():
     python_exe = venv_path / "bin" / "python3"
     if not python_exe.exists():
         print("❌ Python not found in virtual environment!")
-        print("Run setup first: python3 launch.py --setup")
+        print("Run setup first: python3 scripts/launch/launch.py --setup")
         sys.exit(1)
     
     print("Starting server...")

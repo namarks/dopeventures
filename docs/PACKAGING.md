@@ -23,13 +23,13 @@ The resulting app bundle (`Dopetracks.app`) can be distributed as a `.dmg` file.
 ### Quick Build
 
 ```bash
-./build_mac_app.sh
+./build/build_mac_app.sh
 ```
 
 This will:
 1. Check prerequisites
 2. Install PyInstaller if needed
-3. Build the app bundle using `build_app.spec`
+3. Build the app bundle using `build/build_app.spec`
 4. Optionally create a `.dmg` file
 
 ### Output
@@ -64,7 +64,7 @@ To verify the app works without external dependencies:
 ### Launch Flow
 
 1. **First Launch**:
-   - `launch_bundled.py` checks for config file
+   - `scripts/launch/launch_bundled.py` checks for config file
    - If missing, launches setup wizard on port 8889
    - User completes setup in browser
    - Config saved to `~/Library/Application Support/Dopetracks/.env`
@@ -96,21 +96,21 @@ The setup wizard is a web-based interface that:
 ### App Icon
 
 1. Create an icon file: `resources/icon.icns`
-2. Update `build_app.spec`:
+2. Update `build/build_app.spec`:
    ```python
    icon='resources/icon.icns',
    ```
 
 ### App Metadata
 
-Edit `build_app.spec` to change:
+Edit `build/build_app.spec` to change:
 - Bundle identifier: `bundle_identifier='com.dopetracks.app'`
 - Version: `CFBundleVersion` and `CFBundleShortVersionString`
 - Minimum macOS version: `LSMinimumSystemVersion`
 
 ### Console Output
 
-For debugging, set `console=True` in `build_app.spec`:
+For debugging, set `console=True` in `build/build_app.spec`:
 ```python
 console=True,  # Show terminal window
 ```
@@ -152,13 +152,13 @@ xcrun notarytool submit dist/Dopetracks.dmg \
 ### Build Fails
 
 - **Missing dependencies**: Ensure virtual environment is active and all packages installed
-- **PyInstaller errors**: Check `build_app.spec` for correct paths
-- **Import errors**: Add missing modules to `hiddenimports` in `build_app.spec`
+- **PyInstaller errors**: Check `build/build_app.spec` for correct paths
+- **Import errors**: Add missing modules to `hiddenimports` in `build/build_app.spec`
 
 ### App Won't Launch
 
 - **Check logs**: `~/Library/Logs/Dopetracks/launcher.log`
-- **Run with console**: Set `console=True` in `build_app.spec` to see errors
+- **Run with console**: Set `console=True` in `build/build_app.spec` to see errors
 - **Check permissions**: Ensure app has Full Disk Access if needed
 
 ### Setup Wizard Issues

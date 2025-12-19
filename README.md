@@ -35,7 +35,7 @@ Dopetracks automatically creates Spotify playlists from songs your friends have 
 
 Download the `.dmg` file, drag to Applications, and launch. No Python installation required!
 
-See **[PACKAGING.md](./PACKAGING.md)** for building the app yourself.
+See **[docs/PACKAGING.md](./docs/PACKAGING.md)** for building the app yourself.
 
 ### Option 2: Developer Setup (Command Line)
 
