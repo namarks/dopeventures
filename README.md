@@ -1,41 +1,49 @@
-# Dopetracks Project Repo 
+# Dopetracks
 
-> **For Developers**: 
-> - See [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md) for architecture, database schema, and technical details
-> - See [docs/](./docs/) for additional guides and analysis documents
+Create Spotify playlists from songs shared in your iMessage chats.
 
-The impetus for this project was a desire to automatically create a Spotify playlist that contained all the songs my friends had sent to eachother in the Dopetracks chat group. 
+## 🚀 Quick Start
 
-The solution to this problem turns out to be relatively straightforward once you figure things out: 
-1. Extract Apple Messages data from the `chat.db` database stored on your Macbook (/Users/{yourusername}/Library/Messages/chat.db)
-2. Find messages containing Spotify links
-2. Generate Spotify playlist and populate with identified songs
+**New to Dopetracks?** Start here: **[QUICK_START.md](./QUICK_START.md)** - Get running in 5 minutes!
+
+Or use the automated setup:
+```bash
+git clone https://github.com/namarks/dopeventures.git
+cd dopeventures
+./setup.sh
+```
+
+## What is Dopetracks?
+
+Dopetracks automatically creates Spotify playlists from songs your friends have shared in iMessage chats. It:
+1. Extracts messages from your Messages database (`~/Library/Messages/chat.db`)
+2. Finds messages containing Spotify links
+3. Creates a Spotify playlist with all the identified songs
 
 ## Prerequisites
 
-- **macOS only** (requires access to Messages database)
+- **macOS** (required for Messages database access)
 - **Python 3.11+**
 - **Spotify Premium account** (required for playlist creation)
+- **Spotify Developer App** (free, 2-minute setup)
 
-## Setup Instructions
+## Manual Setup Instructions
 
 ### 1. Clone and Install Dependencies
 
 ```bash
-git clone https://github.com/yourusername/dopeventures.git
+git clone https://github.com/namarks/dopeventures.git
 cd dopeventures
 
-# Option A: Create local virtual environment
+# Create virtual environment
 python3 -m venv venv
-source venv/bin/activate  # On macOS/Linux
-
-# Option B: Use external virtual environment (like the author uses)
-# python3 -m venv /Users/yourusername/root_code_repo/venvs/dopetracks_env
-# source /Users/yourusername/root_code_repo/venvs/dopetracks_env/bin/activate
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+> **Tip**: Use `./setup.sh` to automate this step!
 
 ### 2. Spotify API Setup
 
@@ -44,7 +52,7 @@ pip install -r requirements.txt
    - Click "Create App"
    - App Name: "Dopetracks" (or any name)
    - App Description: "Personal playlist creator"
-   - Redirect URI: `http://localhost:8888/callback`
+   - Redirect URI: `http://127.0.0.1:8888/callback` (⚠️ use 127.0.0.1, not localhost)
    - Check the boxes for Terms of Service
    - Click "Save"
 
@@ -52,12 +60,14 @@ pip install -r requirements.txt
    - Copy your **Client ID** and **Client Secret**
 
 3. **Create Environment File**:
-   Create a `.env` file in the project root:
+   The setup script creates a `.env` template, or create it manually:
    ```bash
    SPOTIFY_CLIENT_ID=your_client_id_here
    SPOTIFY_CLIENT_SECRET=your_client_secret_here
-   SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
+   SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
    ```
+   
+   > **Note**: The setup script (`./setup.sh`) creates this file automatically.
 
 ### 3. Grant System Permissions (macOS)
 
@@ -72,10 +82,9 @@ pip install -r requirements.txt
 
 ### 4. Configure Frontend
 
-Ensure the frontend is configured to connect to the backend:
+The setup script creates `website/config.js` automatically. If you need to create it manually:
 ```bash
-# Check that website/config.js contains the correct backend URL:
-echo 'const BASE_URL = "http://localhost:8888";' > website/config.js
+echo 'const BASE_URL = "http://127.0.0.1:8888";' > website/config.js
 ```
 
 ### 5. Alternative: Upload Database File
@@ -87,34 +96,28 @@ If you prefer not to grant full disk access, you can:
    ```
 2. Use the file upload feature in the web interface
 
-## Local Usage
+## Running the App
 
-1. **Start the Backend Server**:
+1. **Activate virtual environment** (if not already active):
    ```bash
-   # Activate your virtual environment
-   source venv/bin/activate  # If using local venv
-   # OR
-   # source /Users/yourusername/root_code_repo/venvs/dopetracks_env/bin/activate  # If using external venv
-   
-   # Start the FastAPI backend (use python3 on macOS)
+   source venv/bin/activate
+   ```
+
+2. **Start the app**:
+   ```bash
    python3 start.py
    ```
 
-2. **Start the Frontend Server** (in a separate terminal):
-   ```bash
-   cd website
-   python3 -m http.server 8889
-   ```
+3. **Open your browser**:
+   - Go to: **http://127.0.0.1:8888**
+   - The app serves both frontend and backend from the same port
 
-3. **Open Your Browser**:
-   - Go to: **http://localhost:8889** (frontend)
-   - The backend API runs on http://localhost:8888
-   - Follow the setup steps in the interface:
-     1. Authorize Spotify
-     2. Validate username OR upload database file
-     3. Prepare data (processes your message history)
-     4. Search for chats and select ones for your playlist
-     5. Create playlist with your chosen date range
+4. **Follow the steps**:
+   1. **Authorize Spotify** - Click "Connect to Spotify" and complete OAuth
+   2. **Verify System Access** - App will auto-detect your Messages database
+   3. **Search Chats** - Search for chat names or participant names
+   4. **Select Chats** - Choose which chats to include
+   5. **Create Playlist** - Select date range and create your playlist!
 
 ## Troubleshooting
 
@@ -130,17 +133,16 @@ If you prefer not to grant full disk access, you can:
 
 3. **Spotify Authorization Fails**:
    - Check your `.env` file has correct credentials
-   - Ensure redirect URI in Spotify app matches: `http://localhost:8888/callback`
-   - Make sure you're using `localhost:8888`, not `127.0.0.1:8888`
+   - Ensure redirect URI in Spotify app matches: `http://127.0.0.1:8888/callback`
+   - ⚠️ **Important**: Use `127.0.0.1`, not `localhost` (Spotify requirement)
 
 4. **"Address already in use" Error**:
    - Kill existing process: `pkill -f uvicorn`
    - Or use a different port: `--port 8889`
 
 5. **Frontend/Backend Connection Issues**:
-   - Ensure frontend is running on port 8889 and backend on port 8888
-   - Check that `website/config.js` has the correct `BASE_URL`
-   - Verify CORS settings allow requests from localhost:8889
+   - The app serves both frontend and backend from port 8888
+   - Check that `website/config.js` has: `const BASE_URL = "http://127.0.0.1:8888";`
 
 ## Security Notes
 
@@ -156,7 +158,21 @@ To initialize the cache, simply run the script. The cache directory will be crea
 
 The cache file is not included in this repository to ensure user privacy and prevent unnecessary commits.
 
-## Useful resources
+## Documentation
+
+- **[QUICK_START.md](./QUICK_START.md)** - Get started in 5 minutes
+- **[TESTING_LOCAL_APP.md](./TESTING_LOCAL_APP.md)** - Testing guide
+- **[PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md)** - Architecture and technical details
+- **[docs/](./docs/)** - Additional guides and documentation
+
+## For Developers
+
+> **For Developers**: 
+> - See [PROJECT_OVERVIEW.md](./PROJECT_OVERVIEW.md) for architecture, database schema, and technical details
+> - See [docs/](./docs/) for additional guides and analysis documents
+
+## Useful Resources
+
 - typedstream library to parse Apple-formatted binary https://github.com/dgelessus/python-typedstream
 - Other projects that parse iMessage data
     - https://github.com/yortos/imessage-analysis/blob/master/notebooks/imessages-analysis.ipynb
