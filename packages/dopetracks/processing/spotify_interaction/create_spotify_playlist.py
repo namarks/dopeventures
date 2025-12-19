@@ -4,6 +4,7 @@ import os
 import spotipy as sp
 import pandas as pd
 import logging
+from typing import List, Dict
 from . import spotify_db_manager as sdm
 from spotipy.oauth2 import SpotifyOAuth
 
@@ -118,7 +119,7 @@ def add_tracks_to_playlist(sp, playlist_id, track_ids):
     logging.info(f"Added {len(unique_track_ids)} new tracks to the playlist.")
     return len(unique_track_ids)  # Return the count of new tracks added
 
-def get_all_playlist_items(sp, playlist_id: str) -> list[dict]:
+def get_all_playlist_items(sp, playlist_id: str) -> List[Dict]:
     """
     Return *all* items from a given playlist, handling Spotify's pagination
     behind the scenes.
@@ -156,7 +157,7 @@ def get_all_playlist_items(sp, playlist_id: str) -> list[dict]:
     return all_items
 
 
-def get_song_ids_from_spotify_items(playlist_items: list[dict]) -> list[str]:
+def get_song_ids_from_spotify_items(playlist_items: List[Dict]) -> List[str]:
     """
     Extract Spotify track IDs from a list of playlist items.
     
@@ -218,7 +219,7 @@ def main(PLAYLIST_NAME, TRACKS_TO_ADD):
     
     Args:
         PLAYLIST_NAME (str): Name of the Spotify playlist.
-        tracks_list (list[str]): A list of Spotify track IDs (e.g., "spotify:track:...").
+        tracks_list (List[str]): A list of Spotify track IDs (e.g., "spotify:track:...").
     """
 
     logging.info(

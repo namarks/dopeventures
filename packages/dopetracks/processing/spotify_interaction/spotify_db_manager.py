@@ -5,6 +5,7 @@ import time
 import re
 import sqlite3
 import traceback
+from typing import Optional, Tuple, List, Dict
 from urllib.parse import urlparse, urlunparse
 
 import requests
@@ -25,13 +26,13 @@ REDIRECT_URI = os.getenv("SPOTIFY_REDIRECT_URI")
 SCOPE = "playlist-modify-public playlist-modify-private"
 
 
-def get_spotify_credentials() -> tuple[str, str, str]:
+def get_spotify_credentials() -> Tuple[str, str, str]:
     """
     Fetch Spotify credentials from environment variables 
     or raise an error if not found.
 
     Returns:
-        tuple[str, str, str]: (client_id, client_secret, redirect_uri)
+        Tuple[str, str, str]: (client_id, client_secret, redirect_uri)
     """
     if not CLIENT_ID or not CLIENT_SECRET or not REDIRECT_URI:
         raise EnvironmentError("Spotify environment variables not set properly.")
@@ -59,7 +60,7 @@ def authenticate_spotify(client_id: str, client_secret: str, redirect_uri: str, 
     ))
 
 
-def initialize_cache(db_path: str | None = None) -> str:
+def initialize_cache(db_path: Optional[str] = None) -> str:
     """
     Initialize the Spotify cache by ensuring the directory,
     creating the database file if needed, and ensuring the
@@ -109,7 +110,7 @@ def drop_spotify_url_cache_table(db_path: str) -> None:
         logging.error("Traceback:\n" + traceback.format_exc())
 
 
-def normalize_and_extract_id(url: str) -> tuple[str | None, str | None, str | None]:
+def normalize_and_extract_id(url: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Given a Spotify URL (including possibly a shortened URL),
     return a 3-tuple of (normalized_url, spotify_id, entity_type).
@@ -205,8 +206,8 @@ def is_valid_spotify_id(spotify_id):
 def fetch_metadata_in_batches(
     spotify_client: spotipy.Spotify,
     entity_type: str,
-    url_triplets: list[tuple[str, str, str]],
-) -> list[tuple[dict, str, str, str]]:
+    url_triplets: List[Tuple[str, str, str]],
+) -> List[Tuple[Dict, str, str, str]]:
     """
     Given a Spotify client, an entity type (track, album, etc.),
     and a list of (original_url, normalized_url, spotify_id) tuples,
@@ -215,10 +216,10 @@ def fetch_metadata_in_batches(
     Args:
         spotify_client (spotipy.Spotify): Authenticated Spotify client.
         entity_type (str): One of 'track', 'album', 'artist', 'show', or 'episode'.
-        url_triplets (list[tuple[str, str, str]]): Each tuple is (original_url, normalized_url, spotify_id).
+        url_triplets (List[Tuple[str, str, str]]): Each tuple is (original_url, normalized_url, spotify_id).
 
     Returns:
-        list[tuple[dict, str, str, str]]:
+        List[Tuple[Dict, str, str, str]]:
             Each element is (metadata_item, original_url, normalized_url, spotify_id).
     """
     if not url_triplets:
@@ -264,7 +265,7 @@ def fetch_metadata_in_batches(
 
 def add_urls_metadata_to_cache_batched(
     spotify_client: spotipy.Spotify,
-    input_urls: list[str],
+    input_urls: List[str],
     db_path: str
 ) -> None:
     start_time = time.time()
@@ -351,7 +352,7 @@ def add_urls_metadata_to_cache_batched(
 
 
 
-def main(df: pd.DataFrame, data_spotify_links_column_name: str, db_path: str | None = None) -> None:
+def main(df: pd.DataFrame, data_spotify_links_column_name: str, db_path: Optional[str] = None) -> None:
     """
     Main entry point:
     1. Initializes the cache (if not already).
@@ -362,7 +363,7 @@ def main(df: pd.DataFrame, data_spotify_links_column_name: str, db_path: str | N
     Args:
         df (pd.DataFrame): A DataFrame that contains a column with Spotify links.
         data_spotify_links_column_name (str): Name of the column containing Spotify links.
-        db_path (str | None): Optional path to the SQLite database file.
+        db_path (Optional[str]): Optional path to the SQLite database file.
     """
     logging.info(
 "\n" + "-" * 100 + "\n"

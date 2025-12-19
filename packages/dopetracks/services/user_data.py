@@ -303,7 +303,7 @@ class UserDataService:
             self.db.rollback()
             return False
 
-    def get_preferred_db_path(self) -> str | None:
+    def get_preferred_db_path(self) -> Optional[str]:
         """Get the preferred Messages database path for the user, if set."""
         cache_entry = self.db.query(UserDataCache).filter(
             UserDataCache.user_id == self.user.id,
