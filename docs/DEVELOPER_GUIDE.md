@@ -98,13 +98,15 @@ python3 start.py
 
 The application will start on **http://127.0.0.1:8888**
 
-### Using the Launcher
+### Using the Launcher (Optional)
+
+For development, you can use the launcher:
 
 ```bash
 python3 launch.py
 ```
 
-Or double-click `Launch Dopetracks.command`
+See [LAUNCHER_GUIDE.md](./LAUNCHER_GUIDE.md) for more details.
 
 ### API Documentation
 

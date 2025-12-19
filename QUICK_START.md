@@ -2,9 +2,8 @@
 
 Get Dopetracks running in 5 minutes!
 
-> **🎯 No-Code Option**: Don't want to use the command line? Use the **GUI Launcher** instead!  
-> Just double-click `Launch Dopetracks.command` and follow the on-screen instructions.  
-> See [docs/LAUNCHER_GUIDE.md](./docs/LAUNCHER_GUIDE.md) for details.
+> **For end users**: Use the packaged macOS app (see [USER_GUIDE.md](./USER_GUIDE.md))  
+> **For developers**: Follow this guide to set up from source code
 
 ## Prerequisites
 

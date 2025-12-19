@@ -23,9 +23,11 @@ Dopetracks automatically creates Spotify playlists from songs your friends have 
 ## Prerequisites
 
 - **macOS** (required for Messages database access)
-- **Python 3.11+**
 - **Spotify Premium account** (required for playlist creation)
 - **Spotify Developer App** (free, 2-minute setup)
+
+**For Developer Setup:**
+- **Python 3.11+**
 
 ## Quick Start (5 Minutes)
 
@@ -35,17 +37,7 @@ Download the `.dmg` file, drag to Applications, and launch. No Python installati
 
 See **[PACKAGING.md](./PACKAGING.md)** for building the app yourself.
 
-### Option 2: No-Code Setup
-
-1. **Download**: Go to [GitHub](https://github.com/namarks/dopeventures) → Code → Download ZIP
-2. **Extract** the ZIP file
-3. **Double-click** `Launch Dopetracks.command`
-4. **Follow the prompts** to set up Spotify credentials
-5. **Launch and use!**
-
-See **[USER_GUIDE.md](./USER_GUIDE.md)** for detailed instructions.
-
-### Option 3: Command Line Setup
+### Option 2: Developer Setup (Command Line)
 
 ```bash
 git clone https://github.com/namarks/dopeventures.git
@@ -89,10 +81,12 @@ See **[QUICK_START.md](./QUICK_START.md)** for step-by-step instructions.
 
 Common issues and solutions:
 
-- **"No module named 'httpx'"** - Run `pip install -r requirements.txt` in your virtual environment
 - **"Permission denied" for Messages** - Grant Full Disk Access in System Preferences
-- **"Spotify authorization fails"** - Check `.env` file and ensure redirect URI uses `127.0.0.1` (not `localhost`)
+- **"Spotify authorization fails"** - Check redirect URI uses `127.0.0.1` (not `localhost`)
 - **"Port already in use"** - Kill existing process: `pkill -f uvicorn`
+
+**For Developer Setup:**
+- **"No module named 'httpx'"** - Run `pip install -r requirements.txt` in your virtual environment
 
 For more help, see:
 - **[USER_GUIDE.md](./USER_GUIDE.md)** - User troubleshooting section
