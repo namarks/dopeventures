@@ -19,6 +19,6 @@ fi
 # Activate virtual environment and launch
 source venv/bin/activate
 
-# Launch the GUI launcher
-python3 launch.py
+# Try GUI launcher, automatically falls back to simple launcher if GUI fails
+python3 launch_simple.py
 

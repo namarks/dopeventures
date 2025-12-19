@@ -10,8 +10,26 @@ import webbrowser
 import threading
 import time
 from pathlib import Path
-import tkinter as tk
-from tkinter import scrolledtext, messagebox
+
+# Try to import tkinter with better error handling
+TKINTER_AVAILABLE = False
+try:
+    import tkinter as tk
+    from tkinter import scrolledtext, messagebox
+    # Test if tkinter actually works (some macOS versions have issues)
+    test_root = tk.Tk()
+    test_root.destroy()
+    TKINTER_AVAILABLE = True
+except Exception as e:
+    # tkinter not available or crashes
+    TKINTER_AVAILABLE = False
+    if __name__ == "__main__":
+        print(f"⚠️  GUI launcher not available: {e}")
+        print("Using simple launcher instead...")
+        simple_launcher = Path(__file__).parent / "launch_simple.py"
+        if simple_launcher.exists():
+            subprocess.run([sys.executable, str(simple_launcher)])
+        sys.exit(0)
 
 class DopetracksLauncher:
     def __init__(self, root):
@@ -288,10 +306,39 @@ class DopetracksLauncher:
         self.stop_btn.config(state=tk.DISABLED)
 
 def main():
-    root = tk.Tk()
-    app = DopetracksLauncher(root)
-    root.mainloop()
+    if not TKINTER_AVAILABLE:
+        print("⚠️  GUI launcher is not available (tkinter issue).")
+        print("\nUsing simple launcher instead...")
+        print("="*50)
+        # Fall back to simple launcher
+        simple_launcher = Path(__file__).parent / "launch_simple.py"
+        if simple_launcher.exists():
+            subprocess.run([sys.executable, str(simple_launcher)])
+        else:
+            print("You can run the app with: python3 start.py")
+        sys.exit(0)
+    
+    try:
+        root = tk.Tk()
+        app = DopetracksLauncher(root)
+        root.mainloop()
+    except Exception as e:
+        print(f"Error launching GUI: {e}")
+        print("\nFalling back to command-line mode...")
+        print("You can still run the app with: python3 start.py")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nExiting...")
+        sys.exit(0)
+    except Exception as e:
+        print(f"Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
