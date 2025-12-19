@@ -28,12 +28,22 @@ from .database.models import SpotifyToken, LocalCache
 from .utils.helpers import get_db_path, validate_db_path
 from .services.session_storage import session_storage
 
+# Determine log file path (use proper directory for bundled apps)
+if getattr(sys, 'frozen', False):
+    # Bundled app - use user log directory
+    log_dir = Path.home() / 'Library' / 'Logs' / 'Dopetracks'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / 'backend.log'
+else:
+    # Development - use project root
+    log_file = Path("backend.log")
+
 # Set up logging
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("backend.log"),
+        logging.FileHandler(str(log_file)),
         logging.StreamHandler()
     ]
 )
@@ -44,24 +54,39 @@ async def lifespan(app: FastAPI):
     """Application lifespan management."""
     logger.info("Starting Dopetracks Application")
     
-    # Initialize database
-    try:
-        init_database()
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise
+    # Initialize database asynchronously (non-blocking)
+    # This allows the app to start serving requests while DB initializes
+    async def init_db_async():
+        """Initialize database in background."""
+        try:
+            # Run blocking DB init in thread pool
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, init_database)
+            logger.info("Database initialized successfully")
+            
+            # Check database health
+            health_ok = await loop.run_in_executor(None, check_database_health)
+            if not health_ok:
+                logger.error("Database health check failed")
+                raise RuntimeError("Database is not accessible")
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
+            # Don't raise - allow app to start, but endpoints will handle errors
     
-    # Check database health
-    if not check_database_health():
-        logger.error("Database health check failed")
-        raise RuntimeError("Database is not accessible")
+    # Start database initialization in background
+    db_init_task = asyncio.create_task(init_db_async())
     
     # Start session storage cleanup task
     session_storage.start_cleanup_task()
     
-    logger.info("Application startup complete")
+    logger.info("Application startup complete (database initializing in background)")
     yield
+    
+    # Wait for DB init to complete (if still running)
+    try:
+        await db_init_task
+    except Exception as e:
+        logger.warning(f"Database initialization had errors: {e}")
     
     # Stop session storage cleanup task
     session_storage.stop_cleanup_task()
@@ -106,6 +131,14 @@ if website_path.exists():
         if config_path.exists():
             return Response(content=config_path.read_text(), media_type="application/javascript")
         raise HTTPException(status_code=404, detail="config.js not found")
+    
+    # Serve loading.html
+    @app.get("/loading.html", response_class=HTMLResponse)
+    async def serve_loading():
+        loading_path = website_path / "loading.html"
+        if loading_path.exists():
+            return loading_path.read_text()
+        return "<h1>Dopetracks</h1><p>Starting up...</p>"
     
     # Serve index.html at root
     @app.get("/", response_class=HTMLResponse)
@@ -396,18 +429,22 @@ async def chat_search_optimized(
         
         db_path = get_db_path()
         if not db_path:
+            logger.error("chat_search_optimized: get_db_path() returned None - check logs for details")
             raise HTTPException(
                 status_code=400,
-                detail="No Messages database found. Please grant Full Disk Access or specify database path."
+                detail="No Messages database found. Please grant Full Disk Access in System Preferences > Security & Privacy > Privacy > Full Disk Access, or upload your Messages database file manually."
             )
         
         if not os.path.exists(db_path):
+            logger.error(f"chat_search_optimized: Database path does not exist: {db_path}")
             raise HTTPException(
                 status_code=404,
                 detail=f"Messages database not found at {db_path}"
             )
         
+        logger.info(f"chat_search_optimized: Searching chats with query '{query}' in database {db_path}")
         results = search_chats_by_name(db_path, query)
+        logger.info(f"chat_search_optimized: Found {len(results)} results")
         return results
         
     except HTTPException:
@@ -437,6 +474,32 @@ async def validate_username(username: str):
             "path": db_path,
             "message": "Database not found or not accessible"
         }
+
+# Open System Settings to Full Disk Access
+@app.get("/open-full-disk-access")
+async def open_full_disk_access():
+    """Open macOS System Settings to Full Disk Access section."""
+    import subprocess
+    import platform
+    
+    if platform.system() != "Darwin":
+        raise HTTPException(status_code=400, detail="This feature is only available on macOS")
+    
+    try:
+        # Open System Settings to Full Disk Access
+        # For macOS Ventura+ (13.0+), use the new URL scheme
+        # For older macOS, use the old System Preferences path
+        subprocess.run([
+            "open",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+        ], check=True)
+        return {"success": True, "message": "Opening System Settings to Full Disk Access"}
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to open System Settings: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to open System Settings. Please open it manually: System Settings > Privacy & Security > Full Disk Access"
+        )
 
 # Playlist creation endpoint (streaming)
 @app.post("/create-playlist-optimized-stream")

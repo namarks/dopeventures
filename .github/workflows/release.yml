@@ -1,0 +1,54 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Build macOS app
+        run: |
+          chmod +x build/build_mac_app.sh
+          # Install PyInstaller
+          pip install pyinstaller
+          # Clean previous builds
+          rm -rf build/ dist/ *.spec.bak
+          # Build app bundle
+          pyinstaller build/build_app.spec --clean --noconfirm
+          # Create DMG
+          DMG_DIR="dist/dmg"
+          rm -rf "$DMG_DIR"
+          mkdir -p "$DMG_DIR"
+          cp -R "dist/Dopetracks.app" "$DMG_DIR/"
+          hdiutil create -volname "Dopetracks" \
+            -srcfolder "$DMG_DIR" \
+            -ov -format UDZO \
+            "dist/Dopetracks.dmg"
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/Dopetracks.dmg
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

@@ -1,15 +1,30 @@
 import os
-from IPython.core.display import display, HTML
 import requests
 from itertools import islice
 
+# Optional IPython import (only needed for Jupyter notebooks)
+try:
+    from IPython.core.display import display, HTML
+    IPYTHON_AVAILABLE = True
+except ImportError:
+    IPYTHON_AVAILABLE = False
+    # Dummy functions for when IPython is not available
+    def display(*args, **kwargs):
+        pass
+    def HTML(*args, **kwargs):
+        return ""
     
 def display_scrollable(df, height=300):
-    display(HTML(f"""
-    <div style="height:{height}px; overflow:auto; border:1px solid lightgray;">
-        {df.to_html(escape=False, index=False)}
-    </div>
-    """))
+    """Display a scrollable DataFrame. Only works in Jupyter notebooks."""
+    if IPYTHON_AVAILABLE:
+        display(HTML(f"""
+        <div style="height:{height}px; overflow:auto; border:1px solid lightgray;">
+            {df.to_html(escape=False, index=False)}
+        </div>
+        """))
+    else:
+        # In non-Jupyter environments, just print the DataFrame
+        print(df.to_string())
 
 def get_messages_db_path():
     """

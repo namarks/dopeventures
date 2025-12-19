@@ -653,11 +653,11 @@ function setupSystemSetupHandlers() {
         const response = await apiFetch(`/validate-username?username=${encodeURIComponent(username)}`);
         const data = await response.json();
 
-        if (response.ok) {
+        if (response.ok && data.valid) {
             updateStatus(
                 document.getElementById("systemStatus"),
                 document.getElementById("systemStatusText"),
-                `✅ Messages database found: ${data.filepath}`,
+                `✅ Messages database found: ${data.path}`,
                 "success"
             );
             isSystemSetup = true;
@@ -666,19 +666,50 @@ function setupSystemSetupHandlers() {
             updateStatus(
                 document.getElementById("systemStatus"),
                 document.getElementById("systemStatusText"),
-                `❌ ${data.error}`,
+                `❌ ${data.message || data.error || 'Database not found or not accessible. Please grant Full Disk Access or upload the database file manually.'}`,
                 "error"
             );
+            // Show the Full Disk Access help section when validation fails
+            const helpSection = document.querySelector('#systemSetup .section-content > div[style*="background-color: #fff3cd"]');
+            if (helpSection) {
+                helpSection.style.display = 'block';
+            }
         }
     } catch (error) {
         updateStatus(
             document.getElementById("systemStatus"),
             document.getElementById("systemStatusText"),
-            "❌ Error validating username",
+            `❌ Error validating username: ${error.message}`,
             "error"
         );
     }
     });
+    }
+    
+    // Open System Settings button
+    const openSystemSettingsBtn = document.getElementById("openSystemSettings");
+    if (openSystemSettingsBtn) {
+        openSystemSettingsBtn.addEventListener("click", async () => {
+            try {
+                const response = await apiFetch('/open-full-disk-access');
+                const data = await response.json();
+                if (response.ok && data.success) {
+                    updateStatus(
+                        document.getElementById("systemStatus"),
+                        document.getElementById("systemStatusText"),
+                        "✅ Opening System Settings... Please grant Full Disk Access and then verify again.",
+                        "success"
+                    );
+                }
+            } catch (error) {
+                updateStatus(
+                    document.getElementById("systemStatus"),
+                    document.getElementById("systemStatusText"),
+                    `❌ Could not open System Settings automatically. Please open it manually: System Settings > Privacy & Security > Full Disk Access`,
+                    "error"
+                );
+            }
+        });
     }
     
     const validateChatFileBtn = document.getElementById("validateChatFile");

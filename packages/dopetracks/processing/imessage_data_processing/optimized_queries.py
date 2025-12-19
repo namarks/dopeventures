@@ -571,14 +571,15 @@ def search_chats_by_name(db_path: str, query: str) -> List[Dict[str, Any]]:
     Searches across:
     - Chat display name
     - Chat identifier (phone numbers, email addresses)
-    - Member names (via handle table)
+    - Member phone numbers/emails (via handle table)
+    - Member contact names (via Contacts database)
     """
     conn = sqlite3.connect(db_path)
     
     # Search pattern for SQL LIKE
     search_pattern = f'%{query}%'
     
-    # First, find handle IDs that match the search query (member names)
+    # First, find handle IDs that match the search query (phone numbers/emails)
     handle_query = """
         SELECT DISTINCT handle.ROWID as handle_id
         FROM handle
@@ -586,6 +587,84 @@ def search_chats_by_name(db_path: str, query: str) -> List[Dict[str, Any]]:
     """
     handle_matches = pd.read_sql_query(handle_query, conn, params=[search_pattern, search_pattern])
     handle_ids = handle_matches['handle_id'].tolist() if not handle_matches.empty else []
+    
+    # Also search Contacts database for contact names, then find matching handles
+    try:
+        from ...contacts_data_processing.import_contact_info import get_contacts_db_path, clean_phone_number
+        
+        contacts_db_path = get_contacts_db_path()
+        contacts_conn = sqlite3.connect(contacts_db_path)
+        
+        # Search for contacts by name
+        contact_name_query = """
+            SELECT DISTINCT
+                ZABCDRECORD.ZFIRSTNAME as first_name,
+                ZABCDRECORD.ZLASTNAME as last_name,
+                ZABCDPHONENUMBER.ZFULLNUMBER as phone_number,
+                ZABCDEMAILADDRESS.ZADDRESS as email
+            FROM ZABCDRECORD
+            LEFT JOIN ZABCDPHONENUMBER ON ZABCDRECORD.Z_PK = ZABCDPHONENUMBER.ZOWNER
+            LEFT JOIN ZABCDEMAILADDRESS ON ZABCDRECORD.Z_PK = ZABCDEMAILADDRESS.ZOWNER
+            WHERE (
+                (ZABCDRECORD.ZFIRSTNAME IS NOT NULL AND ZABCDRECORD.ZFIRSTNAME LIKE ?)
+                OR (ZABCDRECORD.ZLASTNAME IS NOT NULL AND ZABCDRECORD.ZLASTNAME LIKE ?)
+                OR (ZABCDRECORD.ZFIRSTNAME || ' ' || ZABCDRECORD.ZLASTNAME LIKE ?)
+            )
+        """
+        contact_matches = pd.read_sql_query(
+            contact_name_query, 
+            contacts_conn, 
+            params=[search_pattern, search_pattern, search_pattern]
+        )
+        contacts_conn.close()
+        
+        # Get phone numbers and emails from matching contacts
+        contact_phones = []
+        contact_emails = []
+        for _, row in contact_matches.iterrows():
+            if pd.notna(row['phone_number']):
+                # Clean phone number for matching
+                cleaned_phone = clean_phone_number(str(row['phone_number']))
+                if cleaned_phone:
+                    contact_phones.append(cleaned_phone)
+            if pd.notna(row['email']):
+                contact_emails.append(str(row['email']).lower())
+        
+        # Find handles in Messages database that match these contact phone numbers/emails
+        if contact_phones or contact_emails:
+            handle_search_conditions = []
+            handle_search_params = []
+            
+            # Search for handles matching contact phone numbers
+            for phone in contact_phones:
+                # Try different phone number formats
+                handle_search_conditions.append("(handle.id LIKE ? OR handle.uncanonicalized_id LIKE ?)")
+                handle_search_params.extend([f'%{phone}%', f'%{phone}%'])
+            
+            # Search for handles matching contact emails
+            for email in contact_emails:
+                handle_search_conditions.append("(LOWER(handle.id) = ? OR LOWER(handle.uncanonicalized_id) = ?)")
+                handle_search_params.extend([email, email])
+            
+            if handle_search_conditions:
+                contact_handle_query = f"""
+                    SELECT DISTINCT handle.ROWID as handle_id
+                    FROM handle
+                    WHERE {' OR '.join(handle_search_conditions)}
+                """
+                contact_handle_matches = pd.read_sql_query(
+                    contact_handle_query, 
+                    conn, 
+                    params=handle_search_params
+                )
+                contact_handle_ids = contact_handle_matches['handle_id'].tolist() if not contact_handle_matches.empty else []
+                # Add to existing handle_ids (avoid duplicates)
+                handle_ids = list(set(handle_ids + contact_handle_ids))
+        
+    except Exception as e:
+        # If Contacts database access fails, just continue with phone/email search
+        logger.debug(f"Could not search Contacts database: {e}")
+        pass
     
     # Build the main search query
     # Search in: chat.display_name, chat.chat_identifier, and member handles

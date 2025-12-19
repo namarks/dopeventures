@@ -36,6 +36,7 @@ This folder contains all project documentation, guides, and technical references
 #### Deployment & Distribution
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Deployment instructions
 - **[PACKAGING.md](./PACKAGING.md)** - macOS app packaging guide
+- **[RELEASES.md](./RELEASES.md)** - Creating GitHub Releases
 - **[SHARING_GUIDE.md](./SHARING_GUIDE.md)** - How to share the app with others
 
 #### Troubleshooting
