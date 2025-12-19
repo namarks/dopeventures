@@ -236,7 +236,7 @@ Look for:
 ```bash
 # 1. Clear browser cookies for localhost
 # 2. Restart server
-python3 start_multiuser.py
+python3 start.py
 
 # 3. Register/login again
 # 4. Try Spotify auth again

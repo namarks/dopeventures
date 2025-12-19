@@ -1,4 +1,4 @@
-# Documentation
+# Documentation Index
 
 This folder contains all project documentation, guides, and technical references.
 
@@ -19,7 +19,7 @@ This folder contains all project documentation, guides, and technical references
 
 #### Getting Started
 - **[DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)** - Development setup and architecture
-- **[QUICK_START.md](./QUICK_START.md)** - Quick start for developers
+- **[../QUICK_START.md](../QUICK_START.md)** - Quick start guide
 
 #### Testing
 - **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Complete testing workflow
@@ -33,10 +33,10 @@ This folder contains all project documentation, guides, and technical references
 - **[VIRTUAL_ENV_GUIDE.md](./VIRTUAL_ENV_GUIDE.md)** - Virtual environment setup
 - **[LAUNCHER_GUIDE.md](./LAUNCHER_GUIDE.md)** - Launcher usage
 
-#### Deployment
+#### Deployment & Distribution
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Deployment instructions
-- **[LOCAL_DEPLOYMENT.md](./LOCAL_DEPLOYMENT.md)** - Local deployment guide
-- **[LOCAL_APP_MIGRATION.md](./LOCAL_APP_MIGRATION.md)** - Migration to local app
+- **[../PACKAGING.md](../PACKAGING.md)** - macOS app packaging guide
+- **[SHARING_GUIDE.md](./SHARING_GUIDE.md)** - How to share the app with others
 
 #### Troubleshooting
 - **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
@@ -50,10 +50,6 @@ This folder contains all project documentation, guides, and technical references
 - **[CHAT_DUPLICATES_EXPLANATION.md](./CHAT_DUPLICATES_EXPLANATION.md)** - Duplicate chat handling
 - **[MULTI_CHAT_PLAYLISTS.md](./MULTI_CHAT_PLAYLISTS.md)** - Multi-chat playlists
 
-#### Technical Documentation
-- **[REFACTOR_MIGRATION_GUIDE.md](./REFACTOR_MIGRATION_GUIDE.md)** - Refactoring guide
-- **[STRUCTURE_REORGANIZATION.md](./STRUCTURE_REORGANIZATION.md)** - Project structure
-- **[CLEANUP_SUMMARY.md](./CLEANUP_SUMMARY.md)** - Cleanup documentation
 
 ## Main Documentation (in project root)
 

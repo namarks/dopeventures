@@ -4,7 +4,7 @@
 
 1. **Start the server:**
    ```bash
-   python3 start_multiuser.py
+   python3 start.py
    ```
 
 2. **Open your browser to:**

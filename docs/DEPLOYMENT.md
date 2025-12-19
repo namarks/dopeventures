@@ -1,6 +1,8 @@
-# Dopetracks Multi-User Deployment Guide
+# Dopetracks Deployment Guide
 
-This guide covers deploying the multi-user Dopetracks application to various hosting platforms.
+> **Note**: Dopetracks is designed as a local macOS application. This deployment guide is for developers who want to run it on a server (not recommended for end users).
+
+This guide covers deploying Dopetracks to various hosting platforms for development/testing purposes.
 
 ## 🚀 Quick Deploy to Railway/Heroku
 
@@ -31,7 +33,7 @@ SECRET_KEY=your-super-secure-secret-key-minimum-32-chars
 ### Database Configuration
 ```bash
 # Development (SQLite - default)
-DATABASE_URL=sqlite:///./dopetracks_multiuser.db
+DATABASE_URL=sqlite:///./local.db
 
 # Production (PostgreSQL - recommended)
 DATABASE_URL=postgresql://user:pass@host:port/dbname
@@ -73,7 +75,7 @@ heroku addons:create heroku-postgresql:mini
 ```
 
 ### Manual PostgreSQL
-1. Create database: `createdb dopetracks_multiuser`
+1. Create database: `createdb dopetracks`
 2. Set DATABASE_URL environment variable
 3. App automatically creates tables on startup
 
@@ -83,7 +85,7 @@ Your repository is already set up with hosting-ready files:
 - `Procfile` - Tells hosting platform how to run the app
 - `runtime.txt` - Specifies Python version
 - `requirements.txt` - Python dependencies
-- Multi-user FastAPI app with proper configuration
+- FastAPI app with proper configuration
 
 ## 🔒 Security Checklist for Production
 
@@ -116,9 +118,8 @@ Deploy frontend to:
 ## 🧪 Testing Your Deployment
 
 1. **Health Check**: `GET /health`
-2. **Register User**: `POST /auth/register`
-3. **Login**: `POST /auth/login`
-4. **Spotify Auth**: `GET /get-client-id`
+2. **Spotify Auth**: `GET /get-client-id`
+3. **User Profile**: `GET /user-profile` (after Spotify auth)
 
 ## 🔍 Monitoring
 

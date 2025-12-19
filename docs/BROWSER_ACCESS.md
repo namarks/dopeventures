@@ -46,7 +46,7 @@ INFO:     Application startup complete.
 1. **Start server:**
    ```bash
    source /Users/nmarks/root_code_repo/venvs/dopetracks_env/bin/activate
-   python3 start_multiuser.py
+   python3 start.py
    ```
 
 2. **Wait for startup messages** (see above)

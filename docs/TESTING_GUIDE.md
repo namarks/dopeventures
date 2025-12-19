@@ -8,15 +8,14 @@ This guide helps you test the Dopetracks application workflow to ensure everythi
 
 ```bash
 # From project root
-python start_multiuser.py
+python3 start.py
 ```
 
 You should see:
 ```
-🚀 Starting Dopetracks Multi-User Application...
-📍 Health check: http://localhost:8888/health
-🌐 API docs: http://localhost:8888/docs
-🔐 Auth endpoints: http://localhost:8888/auth/
+🚀 Starting Dopetracks Application...
+📍 Health check: http://127.0.0.1:8888/health
+🌐 Application: http://127.0.0.1:8888
 ```
 
 ### 2. Verify Health Check
@@ -354,7 +353,7 @@ Note: A comprehensive test script is already available at `scripts/debug/test_wo
 **Solution:** 
 ```bash
 pkill -f uvicorn
-# Or change port in start_multiuser.py
+# Or change port in start.py
 ```
 
 ---
@@ -390,7 +389,7 @@ curl http://localhost:8888/chats -b cookies.txt
 
 1. **Start backend:**
    ```bash
-   python start_multiuser.py
+   python3 start.py
    ```
 
 2. **Start frontend (if separate):**

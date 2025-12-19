@@ -7,7 +7,7 @@
 The server logs appear **directly in the terminal** where you started the server.
 
 **To see logs:**
-1. Find the terminal window where you ran `python3 start_multiuser.py`
+1. Find the terminal window where you ran `python3 start.py`
 2. Look at the output - logs appear in real-time as things happen
 3. Scroll up to see older logs
 
@@ -16,7 +16,7 @@ The server logs appear **directly in the terminal** where you started the server
 INFO:     Uvicorn running on http://0.0.0.0:8888
 INFO:     Application startup complete
 INFO:     127.0.0.1:49624 - "POST /auth/login HTTP/1.1" 200 OK
-2025-12-14 14:43:48 - dopetracks.multiuser_app - INFO - OAuth request - Client ID: ff64133e29..., Redirect URI: http://127.0.0.1:8888/callback
+2025-12-14 14:43:48 - dopetracks.app - INFO - OAuth request - Client ID: ff64133e29..., Redirect URI: http://127.0.0.1:8888/callback
 ```
 
 ### 2. Log File (If Enabled)

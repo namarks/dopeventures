@@ -17,10 +17,10 @@
 
 ## Project Overview
 
-**Dopetracks** is a multi-user web application that extracts Spotify links from iMessage chat databases (macOS Messages app), processes and organizes shared music links, and automatically creates Spotify playlists from group chat conversations.
+**Dopetracks** is a local macOS application that extracts Spotify links from iMessage chat databases (macOS Messages app), processes and organizes shared music links, and automatically creates Spotify playlists from group chat conversations. All data stays on your Mac - nothing is uploaded to external servers.
 
 ### Core Functionality
-- **Multi-User Support**: Full user authentication and data isolation
+- **Local-First**: All data stays on your Mac, no user accounts needed
 - **iMessage Data Extraction**: Reads from macOS Messages database (`chat.db`)
 - **Spotify Integration**: OAuth-based authentication and playlist creation
 - **Data Processing**: Extracts messages, identifies Spotify links, and organizes by chat
@@ -47,7 +47,7 @@
          │ HTTP Requests
          ▼
 ┌─────────────────┐
-│   FastAPI App   │  (multiuser_app.py)
+│   FastAPI App   │  (app.py)
 │   (Port 8888)   │
 └────────┬────────┘
          │
@@ -62,13 +62,12 @@
 
 ### Application Layers
 
-1. **API Layer** (`multiuser_app.py`)
+1. **API Layer** (`app.py`)
    - FastAPI application with route handlers
-   - Authentication middleware
    - Request/response handling
+   - Local data access (no authentication needed)
 
 2. **Service Layer** (`services/`)
-   - `user_data.py`: Per-user data isolation and management
    - `session_storage.py`: In-memory session data caching
 
 3. **Data Layer** (`database/`)
@@ -80,10 +79,9 @@
    - `spotify_interaction/`: Spotify API integration
    - `prepare_data_main.py`: Main data preparation pipeline
 
-5. **Authentication Layer** (`auth/`, `api/auth.py`)
-   - User registration, login, password reset
-   - Session management
-   - Role-based access control
+5. **Utilities** (`utils/`)
+   - Helper functions for database paths
+   - Configuration management
 
 ---
 
@@ -95,16 +93,16 @@ dopeventures/
 ├── packages/dopetracks/               # Main application package (flattened structure)
 ├── website/                           # Frontend static files
 ├── user_uploads/                      # Per-user uploaded files
-├── dopetracks_multiuser.db            # SQLite database (development)
 ├── .env                               # Environment variables (not in repo)
-├── start_multiuser.py                 # Application entry point
+├── start.py                           # Application entry point
+├── launch_bundled.py                 # Bundled app launcher (for packaging)
 └── requirements.txt                   # Python dependencies
 ```
 
 ### Backend Structure
 
 #### Core Application
-- **`packages/dopetracks/multiuser_app.py`**
+- **`packages/dopetracks/app.py`**
   - Main FastAPI application
   - Route definitions and handlers
   - Static file serving (development)
@@ -178,7 +176,7 @@ dopeventures/
 - **`website/config.js`**: Backend URL configuration
 
 ### Removed/Deprecated
-- ❌ **`frontend_interface/`** - Removed (replaced by `multiuser_app.py`)
+- ❌ **`frontend_interface/`** - Removed (replaced by `app.py`)
   - Old FastAPI implementation
   - No longer used
 - ❌ **`tests/`** - Removed (outdated test files)
@@ -201,8 +199,8 @@ dopeventures/
   - Database: `user_sessions` table (persistent)
 
 #### Database Files
-- **Main DB**: `dopetracks_multiuser.db` (root directory)
-- **WAL Files**: `dopetracks_multiuser.db-wal`, `dopetracks_multiuser.db-shm`
+- **Main DB**: `~/.dopetracks/local.db` (user data directory)
+- **WAL Files**: `local.db-wal`, `local.db-shm` (if using WAL mode)
   - SQLite transaction files (auto-generated)
 
 #### Spotify Cache
@@ -479,7 +477,7 @@ SECRET_KEY=your-secret-key-minimum-32-chars
 #### Database
 ```bash
 # Development (SQLite - default)
-DATABASE_URL=sqlite:///./dopetracks_multiuser.db
+DATABASE_URL=sqlite:///./local.db
 
 # Production (PostgreSQL - recommended)
 DATABASE_URL=postgresql://user:pass@host:port/dbname
@@ -594,7 +592,7 @@ chat.db (input)
 
 3. **Start Application**
    ```bash
-   python start_multiuser.py
+   python3 start.py
    ```
 
 4. **Access Application**
@@ -643,8 +641,9 @@ tail -f backend.log
 
 ### Project Entry Points
 
-- **Main Application**: `start_multiuser.py`
-- **Direct FastAPI**: `packages/dopetracks/dopetracks/multiuser_app.py`
+- **Main Application**: `start.py`
+- **Direct FastAPI**: `packages/dopetracks/app.py`
+- **Bundled App**: `launch_bundled.py` (for packaged macOS app)
 - **Legacy Interface**: `packages/dopetracks/dopetracks/frontend_interface/web_interface.py`
 
 ---
