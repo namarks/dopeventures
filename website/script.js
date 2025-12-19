@@ -1,204 +1,44 @@
 console.log("script.js loaded!");
 console.log("BASE_URL:", typeof BASE_URL !== 'undefined' ? BASE_URL : 'NOT DEFINED');
 
-// Global variables for authentication
-let isAuthenticated = false;
-let currentUser = null;
-let isInResetMode = false; // Track if we're in password reset mode
-let resetToken = null; // Store the reset token from URL
-// BASE_URL is defined in config.js - make sure it's loaded first
-// Since config.js loads before this script, BASE_URL should always be defined
-// Just use it directly - if it's undefined, we'll get a clear error
-const AUTH_BASE_URL = `${BASE_URL}/auth`;
+// Local mode - no authentication needed
+const isAuthenticated = true;
 
 // Cache refresh: 2025-06-01 20:32 - Force reload for forgot password link
 
-// DOM elements for authentication (will be set when DOM is ready)
-let authOverlay, userBar, mainContent, loginForm, registerForm, forgotPasswordForm, resetPasswordForm;
-let authTitle, authError, authSuccess, switchToRegister, authSwitchText;
-let currentUsername, currentUserRole, adminLink, logoutBtn;
+// DOM elements
+let mainContent;
 
-// Check for reset token in URL parameters
-function checkForResetToken() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    
-    if (token) {
-        resetToken = token;
-        isInResetMode = true;
-        // Clear the token from URL for security
-        window.history.replaceState({}, document.title, window.location.pathname);
-        return true;
-    }
-    return false;
-}
 
-// Check authentication status on page load
+// Check authentication status on page load (always authenticated in local mode)
 async function checkAuthStatus() {
-    // Check if we're in password reset mode first
-    if (checkForResetToken()) {
-        await verifyResetToken();
-        return;
-    }
-    
-    // First, check if we're in local mode (no auth endpoints)
-    try {
-        const healthResponse = await fetch(`${BASE_URL}/health`);
-        if (healthResponse.ok) {
-            const healthData = await healthResponse.json();
-            // If health endpoint indicates local mode, skip auth
-            if (healthData.environment === "local" || !healthData.hasOwnProperty("environment")) {
-                console.log("Local mode detected - skipping authentication");
-                isAuthenticated = true; // Set to true for local mode
-                console.log("Calling showMainApp()...");
-                showMainApp();
-                console.log("showMainApp() called");
-                // Enable Spotify button
-                const spotifyButton = document.getElementById("authorizeSpotify");
-                if (spotifyButton) {
-                    spotifyButton.disabled = false;
-                    spotifyButton.title = "Authorize Spotify to create playlists";
-                    spotifyButton.style.opacity = "1";
-                    spotifyButton.style.cursor = "pointer";
-                }
-                return; // Skip auth check
-            }
-        }
-    } catch (error) {
-        console.log("Health check failed, will try auth check:", error);
-    }
-    
-    // Try auth endpoint (legacy - not used in local mode)
-    try {
-        const response = await fetch(`${AUTH_BASE_URL}/status`, {
-            credentials: 'include'  // Ensure cookies are sent
-        });
-        
-        if (!response.ok) {
-            // If 404, auth endpoint doesn't exist - assume local mode
-            if (response.status === 404) {
-                console.log("Auth endpoint not found - assuming local mode");
-                isAuthenticated = true;
-                showMainApp();
-                const spotifyButton = document.getElementById("authorizeSpotify");
-                if (spotifyButton) {
-                    spotifyButton.disabled = false;
-                    spotifyButton.title = "Authorize Spotify to create playlists";
-                    spotifyButton.style.opacity = "1";
-                    spotifyButton.style.cursor = "pointer";
-                }
-                return;
-            }
-            console.warn(`Auth status check failed: ${response.status} ${response.statusText}`);
-            showAuthModal();
-            return;
-        }
-        
-        const data = await response.json();
-        console.log("Auth status check response:", data);
-        
-        if (data.authenticated) {
-            currentUser = data.user;
-            isAuthenticated = true;
-            showMainApp();
-            // Update Spotify button state after authentication is confirmed
-            const spotifyButton = document.getElementById("authorizeSpotify");
-            if (spotifyButton) {
-                spotifyButton.disabled = false;
-                spotifyButton.title = "Authorize Spotify to create playlists";
-                spotifyButton.style.opacity = "1";
-                spotifyButton.style.cursor = "pointer";
-            }
-        } else {
-            showAuthModal();
-            // Ensure button is disabled if not authenticated
-            const spotifyButton = document.getElementById("authorizeSpotify");
-            if (spotifyButton) {
-                spotifyButton.disabled = true;
-                spotifyButton.title = "Please log in first to authorize Spotify";
-                spotifyButton.style.opacity = "0.6";
-                spotifyButton.style.cursor = "not-allowed";
-            }
-        }
-    } catch (error) {
-        // If auth endpoint doesn't exist (network error), assume local mode
-        console.log("Auth check failed - assuming local mode:", error);
-        isAuthenticated = true;
-        showMainApp();
-        const spotifyButton = document.getElementById("authorizeSpotify");
-        if (spotifyButton) {
-            spotifyButton.disabled = false;
-            spotifyButton.title = "Authorize Spotify to create playlists";
-            spotifyButton.style.opacity = "1";
-            spotifyButton.style.cursor = "pointer";
-        }
+    console.log("Local mode - skipping authentication");
+    showMainApp();
+    // Enable Spotify button
+    const spotifyButton = document.getElementById("authorizeSpotify");
+    if (spotifyButton) {
+        spotifyButton.disabled = false;
+        spotifyButton.title = "Authorize Spotify to create playlists";
+        spotifyButton.style.opacity = "1";
+        spotifyButton.style.cursor = "pointer";
     }
 }
 
-// Show authentication modal
-function showAuthModal() {
-    console.log('showAuthModal called, authOverlay:', authOverlay);
-    if (!authOverlay) {
-        console.error('authOverlay not initialized! Trying to initialize now...');
-        initializeAuthElements();
-        if (!authOverlay) {
-            console.error('Failed to initialize authOverlay!');
-            return;
-        }
-    }
-    authOverlay.style.display = 'flex';
-    if (userBar) userBar.style.display = 'none';
-    if (mainContent) {
-        mainContent.classList.remove('visible');
-    }
-    document.body.classList.remove('authenticated');
-    
-    // Make sure login form is visible
-    if (loginForm) {
-        loginForm.style.display = 'block';
-    }
-    if (registerForm) {
-        registerForm.style.display = 'none';
-    }
-    if (forgotPasswordForm) {
-        forgotPasswordForm.style.display = 'none';
-    }
-    if (resetPasswordForm) {
-        resetPasswordForm.style.display = 'none';
-    }
-    
-    console.log('Auth modal should now be visible');
-}
 
 // Show main application
 function showMainApp() {
-    // Ensure all elements are initialized
-    if (!authOverlay || !mainContent || !userBar) {
+    // Ensure main content is initialized
+    if (!mainContent) {
         console.log('Elements not initialized, initializing now...');
         initializeDOMElements();
-        initializeAuthElements();
-    }
-    
-    if (authOverlay) authOverlay.style.display = 'none';
-    
-    // In local mode (no currentUser), hide the user bar
-    if (userBar) {
-        if (currentUser) {
-            userBar.style.display = 'flex';
-        } else {
-            // Local mode - hide user bar
-            userBar.style.display = 'none';
-        }
     }
     
     if (mainContent) {
         mainContent.classList.add('visible');
-        // Also set display style directly as fallback
         mainContent.style.display = 'block';
-        console.log('Main content should now be visible, class:', mainContent.className);
+        console.log('Main content should now be visible');
     } else {
         console.error('mainContent element not found!');
-        // Try to get it directly
         mainContent = document.getElementById('mainContent');
         if (mainContent) {
             mainContent.classList.add('visible');
@@ -208,44 +48,22 @@ function showMainApp() {
             console.error('Could not find mainContent element at all!');
         }
     }
-    document.body.classList.add('authenticated');
     
-    if (currentUser) {
-        currentUsername.textContent = currentUser.username;
-        currentUserRole.textContent = currentUser.role || 'user';
-        currentUserRole.className = `user-role ${currentUser.role || 'user'}`;
-        
-        // Show admin link for admin users
-        if (currentUser.role === 'admin' || currentUser.role === 'super_admin') {
-            adminLink.style.display = 'inline-block';
-        }
-    }
-    
-    // Update Spotify button state based on authentication
-    // In local mode (isAuthenticated but no currentUser), enable the button
+    // Update Spotify button state
     const spotifyButton = document.getElementById("authorizeSpotify");
     if (spotifyButton) {
-        if (isAuthenticated && (currentUser || !currentUser)) {  // Allow local mode
-            spotifyButton.disabled = false;
-            spotifyButton.title = "Authorize Spotify to create playlists";
-            spotifyButton.style.opacity = "1";
-            spotifyButton.style.cursor = "pointer";
-        } else {
-            spotifyButton.disabled = true;
-            spotifyButton.title = "Please log in first to authorize Spotify";
-            spotifyButton.style.opacity = "0.6";
-            spotifyButton.style.cursor = "not-allowed";
-        }
+        spotifyButton.disabled = false;
+        spotifyButton.title = "Authorize Spotify to create playlists";
+        spotifyButton.style.opacity = "1";
+        spotifyButton.style.cursor = "pointer";
     }
     
     // Check Spotify authorization status
     checkSpotifyAuthStatus();
     
     // Also check if we just came back from Spotify callback
-    // Check URL for callback parameters
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.has('code') || window.location.pathname === '/callback') {
-        // We're coming back from Spotify - check status after a brief delay
         setTimeout(() => {
             checkSpotifyAuthStatus();
         }, 1000);
@@ -312,562 +130,11 @@ async function checkSpotifyAuthStatus() {
     }
 }
 
-// Show/hide auth error
-function showAuthError(message) {
-    authError.textContent = message;
-    authError.style.display = 'block';
-    authSuccess.style.display = 'none';
-}
-
-// Show/hide auth success
-function showAuthSuccess(message) {
-    authSuccess.textContent = message;
-    authSuccess.style.display = 'block';
-    authError.style.display = 'none';
-}
-
-// Clear auth messages
-function clearAuthMessages() {
-    authError.style.display = 'none';
-    authSuccess.style.display = 'none';
-}
-
-// Switch between login and register forms
-function switchAuthMode(mode = 'login') {
-    console.log('switchAuthMode called with mode:', mode);
-    clearAuthMessages();
-    
-    // Hide all forms first
-    loginForm.style.display = 'none';
-    registerForm.style.display = 'none';
-    forgotPasswordForm.style.display = 'none';
-    resetPasswordForm.style.display = 'none';
-    
-    switch (mode) {
-        case 'register':
-            authTitle.textContent = 'Create Account';
-            registerForm.style.display = 'block';
-            authSwitchText.innerHTML = 'Already have an account? <a href="javascript:void(0)" data-auth-action="login">Login</a>';
-            // Re-attach event listeners to new links
-            attachAuthLinkListeners();
-            break;
-            
-        case 'forgot-password':
-            authTitle.textContent = 'Reset Password';
-            forgotPasswordForm.style.display = 'block';
-            authSwitchText.innerHTML = 'Remember your password? <a href="javascript:void(0)" data-auth-action="login">Login</a>';
-            // Re-attach event listeners to new links
-            attachAuthLinkListeners();
-            break;
-            
-        case 'reset-password':
-            authTitle.textContent = 'Set New Password';
-            resetPasswordForm.style.display = 'block';
-            authSwitchText.innerHTML = 'Go back to <a href="javascript:void(0)" data-auth-action="login">Login</a>';
-            // Re-attach event listeners to new links
-            attachAuthLinkListeners();
-            break;
-            
-        default: // login
-            authTitle.textContent = 'Welcome Back';
-            loginForm.style.display = 'block';
-            const newHTML = 'Don\'t have an account? <a href="javascript:void(0)" data-auth-action="register">Register</a> | <a href="javascript:void(0)" data-auth-action="forgot-password">Forgot Password?</a>';
-            console.log('Setting authSwitchText innerHTML to:', newHTML);
-            authSwitchText.innerHTML = newHTML;
-            // Re-attach event listeners to new links
-            attachAuthLinkListeners();
-            break;
-    }
-    
-    console.log('switchAuthMode completed, current authSwitchText innerHTML:', authSwitchText.innerHTML);
-}
-
-// Handle login
-async function handleLogin(event) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:267',message:'handleLogin called',data:{eventType:event.type,defaultPrevented:event.defaultPrevented},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
-    
-    event.preventDefault();
-    clearAuthMessages();
-    
-    const username = document.getElementById('loginUsername').value.trim();
-    const password = document.getElementById('loginPassword').value;
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:267',message:'handleLogin entry',data:{username:username,hasPassword:!!password},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
-    if (!username || !password) {
-        showAuthError('Please enter both username and password');
-        return;
-    }
-    
-    const loginBtn = document.getElementById('loginBtn');
-    loginBtn.disabled = true;
-    loginBtn.textContent = 'Logging in...';
-    
-    try {
-        const requestUrl = `${AUTH_BASE_URL}/login`;
-        const requestBody = JSON.stringify({ username, password });
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:284',message:'fetch request start',data:{url:requestUrl,method:'POST',hasBody:!!requestBody},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        
-        const response = await fetch(requestUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: requestBody,
-            credentials: 'include'
-        });
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:293',message:'response received',data:{status:response.status,ok:response.ok,statusText:response.statusText,headers:Object.fromEntries(response.headers.entries())},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        
-        // Check if response is OK before parsing JSON
-        if (!response.ok) {
-            let errorMessage = 'Login failed';
-            try {
-                const errorData = await response.json();
-                if (errorData.detail) {
-                    if (Array.isArray(errorData.detail)) {
-                        // Pydantic validation errors
-                        errorMessage = errorData.detail.map(err => err.msg || err.message || String(err)).join(', ');
-                    } else {
-                        errorMessage = errorData.detail;
-                    }
-                } else if (errorData.message) {
-                    errorMessage = errorData.message;
-                }
-            } catch (e) {
-                // Response is not JSON, try to get text
-                try {
-                    const errorText = await response.text();
-                    errorMessage = errorText || `HTTP ${response.status}: ${response.statusText}`;
-                } catch (e2) {
-                    errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-                }
-            }
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:318',message:'response not ok',data:{errorMessage:errorMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-            // #endregion
-            showAuthError(errorMessage);
-            return;
-        }
-        
-        // Response is OK, parse JSON
-        const data = await response.json();
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:322',message:'response parsed',data:{hasUser:!!data.user,hasMessage:!!data.message,dataKeys:Object.keys(data)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        
-        currentUser = data.user;
-        isAuthenticated = true;
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:327',message:'login success state set',data:{isAuthenticated:isAuthenticated,hasCurrentUser:!!currentUser},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        
-        showAuthSuccess('Login successful!');
-        
-        // Update Spotify button state after login
-        const spotifyButton = document.getElementById("authorizeSpotify");
-        if (spotifyButton) {
-            spotifyButton.disabled = false;
-            spotifyButton.title = "Authorize Spotify to create playlists";
-            spotifyButton.style.opacity = "1";
-            spotifyButton.style.cursor = "pointer";
-        }
-        
-        setTimeout(() => {
-            showMainApp();
-        }, 1000);
-    } catch (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:340',message:'login exception',data:{errorName:error.name,errorMessage:error.message,errorStack:error.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
-        console.error('Login error:', error);
-        showAuthError(`Login failed: ${error.message || 'Please try again.'}`);
-    } finally {
-        loginBtn.disabled = false;
-        loginBtn.textContent = 'Login';
-    }
-}
-
-// Handle registration
-async function handleRegister(event) {
-    event.preventDefault();
-    clearAuthMessages();
-    
-    const username = document.getElementById('registerUsername').value.trim();
-    const email = document.getElementById('registerEmail').value.trim();
-    const password = document.getElementById('registerPassword').value;
-    
-    if (!username || !email || !password) {
-        showAuthError('Please fill in all fields');
-        return;
-    }
-    
-    if (password.length < 8) {
-        showAuthError('Password must be at least 8 characters long');
-        return;
-    }
-    
-    const registerBtn = document.getElementById('registerBtn');
-    registerBtn.disabled = true;
-    registerBtn.textContent = 'Creating account...';
-    
-    try {
-        const response = await fetch(`${AUTH_BASE_URL}/register`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ username, email, password }),
-            credentials: 'include'
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            currentUser = data.user;
-            isAuthenticated = true;
-            showAuthSuccess('Account created successfully!');
-            
-            setTimeout(() => {
-                showMainApp();
-            }, 1000);
-        } else {
-            // Handle different error response formats
-            let errorMessage = 'Registration failed';
-            if (data.detail) {
-                if (Array.isArray(data.detail)) {
-                    // Pydantic validation errors
-                    errorMessage = data.detail.map(err => {
-                        if (err.msg) return err.msg;
-                        if (err.message) return err.message;
-                        if (typeof err === 'string') return err;
-                        return String(err);
-                    }).join(', ');
-                } else {
-                    errorMessage = data.detail;
-                }
-            } else if (data.message) {
-                errorMessage = data.message;
-            }
-            console.log('Registration error details:', data);
-            showAuthError(errorMessage);
-        }
-    } catch (error) {
-        console.error('Registration error:', error);
-        showAuthError('Registration failed. Please try again.');
-    } finally {
-        registerBtn.disabled = false;
-        registerBtn.textContent = 'Register';
-    }
-}
-
-// Handle logout
-async function handleLogout() {
-    try {
-        await fetch(`${AUTH_BASE_URL}/logout`, {
-            method: 'POST',
-            credentials: 'include'
-        });
-    } catch (error) {
-        console.error('Logout error:', error);
-    }
-    
-    currentUser = null;
-    isAuthenticated = false;
-    showAuthModal();
-}
-
-// Verify reset token
-async function verifyResetToken() {
-    if (!resetToken) {
-        showAuthError('Invalid reset link');
-        switchAuthMode('login');
-        return;
-    }
-    
-    try {
-        const response = await fetch(`${AUTH_BASE_URL}/verify-reset-token?token=${encodeURIComponent(resetToken)}`);
-        const data = await response.json();
-        
-        if (response.ok) {
-            showAuthModal();
-            switchAuthMode('reset-password');
-            showAuthSuccess(`Reset password for ${data.user_email}`);
-        } else {
-            showAuthError(data.detail || 'Invalid or expired reset token');
-            switchAuthMode('login');
-            isInResetMode = false;
-            resetToken = null;
-        }
-    } catch (error) {
-        console.error('Token verification error:', error);
-        showAuthError('Error verifying reset token');
-        switchAuthMode('login');
-        isInResetMode = false;
-        resetToken = null;
-    }
-}
-
-// Handle forgot password
-async function handleForgotPassword(event) {
-    event.preventDefault();
-    clearAuthMessages();
-    
-    const email = document.getElementById('forgotPasswordEmail').value.trim();
-    
-    if (!email) {
-        showAuthError('Please enter your email address');
-        return;
-    }
-    
-    const forgotBtn = document.getElementById('forgotPasswordBtn');
-    forgotBtn.disabled = true;
-    forgotBtn.textContent = 'Sending...';
-    
-    try {
-        const response = await fetch(`${AUTH_BASE_URL}/forgot-password`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email }),
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            showAuthSuccess(data.message);
-            // Show additional development info
-            setTimeout(() => {
-                showAuthSuccess(data.message + '\n\nDEV MODE: Check the browser console for the reset link.');
-            }, 100);
-        } else {
-            showAuthError(data.detail || 'Error sending reset email');
-        }
-    } catch (error) {
-        console.error('Forgot password error:', error);
-        showAuthError('Error sending reset email. Please try again.');
-    } finally {
-        forgotBtn.disabled = false;
-        forgotBtn.textContent = 'Send Reset Link';
-    }
-}
-
-// Handle reset password
-async function handleResetPassword(event) {
-    event.preventDefault();
-    clearAuthMessages();
-    
-    if (!resetToken) {
-        showAuthError('Invalid reset session');
-        return;
-    }
-    
-    const newPassword = document.getElementById('resetNewPassword').value;
-    const confirmPassword = document.getElementById('resetConfirmPassword').value;
-    
-    if (!newPassword || !confirmPassword) {
-        showAuthError('Please fill in both password fields');
-        return;
-    }
-    
-    if (newPassword !== confirmPassword) {
-        showAuthError('Passwords do not match');
-        return;
-    }
-    
-    if (newPassword.length < 8) {
-        showAuthError('Password must be at least 8 characters long');
-        return;
-    }
-    
-    const resetBtn = document.getElementById('resetPasswordBtn');
-    resetBtn.disabled = true;
-    resetBtn.textContent = 'Resetting...';
-    
-    try {
-        const response = await fetch(`${AUTH_BASE_URL}/reset-password`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ 
-                token: resetToken, 
-                new_password: newPassword 
-            }),
-        });
-        
-        const data = await response.json();
-        
-        if (response.ok) {
-            showAuthSuccess(data.message);
-            
-            // Reset state and switch to login
-            isInResetMode = false;
-            resetToken = null;
-            
-            setTimeout(() => {
-                switchAuthMode('login');
-            }, 2000);
-        } else {
-            showAuthError(data.detail || 'Error resetting password');
-        }
-    } catch (error) {
-        console.error('Reset password error:', error);
-        showAuthError('Error resetting password. Please try again.');
-    } finally {
-        resetBtn.disabled = false;
-        resetBtn.textContent = 'Reset Password';
-    }
-}
-
-// Helper function to attach listeners to auth links (must be defined before initializeAuthElements)
-function attachAuthLinkListeners() {
-    if (!authSwitchText) return;
-    
-    const authLinks = authSwitchText.querySelectorAll('a[data-auth-action]');
-    authLinks.forEach(link => {
-        // Remove any existing listeners by cloning the node
-        const newLink = link.cloneNode(true);
-        link.parentNode.replaceChild(newLink, link);
-        
-        // Attach new listener
-        newLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            const action = newLink.getAttribute('data-auth-action');
-            console.log('Auth link clicked:', action);
-            if (action === 'login') {
-                isInResetMode = false;
-                resetToken = null;
-                switchAuthMode('login');
-            } else if (action === 'register') {
-                switchAuthMode('register');
-            } else if (action === 'forgot-password') {
-                switchAuthMode('forgot-password');
-            }
-            return false;
-        });
-    });
-}
-
-// Add event listeners for authentication
-// Initialize DOM elements and attach event handlers when DOM is ready
-function initializeAuthElements() {
-    console.log('initializeAuthElements called');
-    authOverlay = document.getElementById('authOverlay');
-    userBar = document.getElementById('userBar');
-    mainContent = document.getElementById('mainContent');
-    loginForm = document.getElementById('loginForm');
-    registerForm = document.getElementById('registerForm');
-    forgotPasswordForm = document.getElementById('forgotPasswordForm');
-    resetPasswordForm = document.getElementById('resetPasswordForm');
-    authTitle = document.getElementById('authTitle');
-    authError = document.getElementById('authError');
-    authSuccess = document.getElementById('authSuccess');
-    switchToRegister = document.getElementById('switchToRegister');
-    authSwitchText = document.getElementById('authSwitchText');
-    currentUsername = document.getElementById('currentUsername');
-    currentUserRole = document.getElementById('currentUserRole');
-    adminLink = document.getElementById('adminLink');
-    logoutBtn = document.getElementById('logoutBtn');
-    
-    console.log('Elements found:', {
-        loginForm: !!loginForm,
-        registerForm: !!registerForm,
-        authSwitchText: !!authSwitchText,
-        authOverlay: !!authOverlay
-    });
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:620',message:'initializing auth elements',data:{loginFormExists:!!loginForm,registerFormExists:!!registerForm},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
-    
-    if (loginForm) {
-        console.log('Attaching submit listener to loginForm');
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:640',message:'attaching loginForm listener',data:{loginFormId:loginForm.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-        loginForm.addEventListener('submit', handleLogin);
-        console.log('Submit listener attached to loginForm');
-    } else {
-        console.error('loginForm element not found during initialization!');
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/d321815d-44ec-4859-8309-98b45104f79c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'script.js:645',message:'loginForm not found during init',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run3',hypothesisId:'E'})}).catch(()=>{});
-        // #endregion
-    }
-    
-    if (registerForm) {
-        registerForm.addEventListener('submit', handleRegister);
-    }
-    if (forgotPasswordForm) {
-        forgotPasswordForm.addEventListener('submit', handleForgotPassword);
-    }
-    if (resetPasswordForm) {
-        resetPasswordForm.addEventListener('submit', handleResetPassword);
-    }
-    
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
-    }
-    if (switchToRegister) {
-        switchToRegister.addEventListener('click', () => switchAuthMode('register'));
-    }
-    
-    // Event delegation for auth switch links (register, forgot password, etc.)
-    // Use event delegation on the parent container to catch all clicks
-    if (authSwitchText) {
-        console.log('Setting up event listener on authSwitchText');
-        authSwitchText.addEventListener('click', (e) => {
-            console.log('Click detected on authSwitchText, target:', e.target, 'tagName:', e.target.tagName);
-            // Find the closest <a> tag (handles clicks on text inside links)
-            const link = e.target.closest('a[data-auth-action]');
-            console.log('Closest link found:', link);
-            if (link) {
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                const action = link.getAttribute('data-auth-action');
-                console.log('Auth switch link clicked:', action);
-                
-                if (action === 'login') {
-                    isInResetMode = false;
-                    resetToken = null;
-                    switchAuthMode('login');
-                } else if (action === 'register') {
-                    switchAuthMode('register');
-                } else if (action === 'forgot-password') {
-                    switchAuthMode('forgot-password');
-                }
-                return false;
-            }
-        }, true); // Use capture phase to catch events earlier
-        console.log('Event listener attached to authSwitchText');
-        
-        // Also attach directly to each link as a backup
-        attachAuthLinkListeners();
-    } else {
-        console.error('authSwitchText element not found!');
-    }
-}
 
 // Initialize DOM elements
 function initializeDOMElements() {
-    // Initialize main content elements first (critical for showing app)
+    // Initialize main content elements
     mainContent = document.getElementById("mainContent");
-    authOverlay = document.getElementById("authOverlay");
-    userBar = document.getElementById("userBar");
     
     // Initialize other elements
     floatingProgress = document.getElementById("floatingProgress");
@@ -883,9 +150,7 @@ function initializeDOMElements() {
     clearSelectedChatsButton = document.getElementById("clearSelectedChats");
     
     console.log('DOMElements initialized:', {
-        mainContent: !!mainContent,
-        authOverlay: !!authOverlay,
-        userBar: !!userBar
+        mainContent: !!mainContent
     });
 }
 
@@ -895,13 +160,6 @@ function initializeApp() {
     
     // Initialize all DOM elements first
     initializeDOMElements();
-    initializeAuthElements();
-    
-    // Hide auth overlay initially - checkAuthStatus will show it if needed
-    // This prevents showing login modal in local mode
-    if (authOverlay) {
-        authOverlay.style.display = 'none';
-    }
     
     // Show main content initially (will be hidden if auth is needed)
     if (mainContent) {
@@ -921,7 +179,6 @@ function initializeApp() {
         console.log('Spotify button enabled initially');
     }
     
-    initializeLoginForm(); // Initialize login form after elements are ready
     
     // Check authentication status - this will determine if we show auth modal or main app
     checkAuthStatus();
@@ -1269,9 +526,8 @@ function setupSpotifyHandlers() {
     // Function to update button state based on authentication
     function updateSpotifyButtonState() {
         if (spotifyButton) {
-            // In local mode, isAuthenticated is true but currentUser is null
-            // Allow button if authenticated (either with user or in local mode)
-            if (!isAuthenticated || (!currentUser && !isAuthenticated)) {
+            // Local mode - always enabled
+            if (!isAuthenticated) {
                 spotifyButton.disabled = true;
                 spotifyButton.title = "Please log in first to authorize Spotify";
                 spotifyButton.style.opacity = "0.6";
@@ -1282,11 +538,7 @@ function setupSpotifyHandlers() {
                 spotifyButton.title = "Authorize Spotify to create playlists";
                 spotifyButton.style.opacity = "1";
                 spotifyButton.style.cursor = "pointer";
-                if (currentUser) {
-                    console.log("Spotify button enabled - user authenticated:", currentUser.username);
-                } else {
-                    console.log("Spotify button enabled - local mode (no user required)");
-                }
+                console.log("Spotify button enabled - local mode");
             }
         }
     }
@@ -1299,89 +551,7 @@ function setupSpotifyHandlers() {
     
     spotifyButton.addEventListener("click", async (event) => {
         console.log("Spotify button clicked!");
-        console.log("Event object:", event);
-        console.log("Current auth state - isAuthenticated:", isAuthenticated, "currentUser:", currentUser);
-        
-        // In local mode, isAuthenticated is true but currentUser is null - that's OK, proceed
-        // Only check auth if not authenticated
-        if (!isAuthenticated) {
-            console.warn("Not authenticated, checking if we're in local mode...");
-            // Check if we're in local mode first
-            try {
-                const healthResponse = await fetch(`${BASE_URL}/health`);
-                if (healthResponse.ok) {
-                    const healthData = await healthResponse.json();
-                    if (healthData.environment === "local") {
-                        console.log("Local mode detected - proceeding without auth");
-                        isAuthenticated = true;
-                        // Continue with the flow below
-                    } else {
-                        // Not local mode, need auth
-                        console.warn("Not in local mode, checking auth status...");
-                        try {
-                            const authCheck = await fetch(`${AUTH_BASE_URL}/status`, {
-                                credentials: 'include'
-                            });
-                            const authData = await authCheck.json();
-                            console.log("Re-check auth response:", authData);
-                            
-                            if (authData.authenticated) {
-                                isAuthenticated = true;
-                                currentUser = authData.user || null;
-                                console.log("Auth state updated - proceeding with Spotify authorization");
-                                // Continue with the flow below
-                            } else {
-                                console.error("User not authenticated - showing login modal");
-                                alert("You must be logged in to authorize Spotify. Please log in first.");
-                                showAuthModal();
-                                return;
-                            }
-                        } catch (authError) {
-                            console.error("Error checking auth:", authError);
-                            alert("You must be logged in to authorize Spotify. Please log in first.");
-                            showAuthModal();
-                            return;
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error("Error checking health/local mode:", error);
-                // If health check fails, try auth endpoint
-                try {
-                    const authCheck = await fetch(`${AUTH_BASE_URL}/status`, {
-                        credentials: 'include'
-                    });
-                    if (authCheck.ok) {
-                        const authData = await authCheck.json();
-                        if (authData.authenticated) {
-                            isAuthenticated = true;
-                            currentUser = authData.user || null;
-                            // Continue
-                        } else {
-                            alert("You must be logged in to authorize Spotify. Please log in first.");
-                            showAuthModal();
-                            return;
-                        }
-                    } else if (authCheck.status === 404) {
-                        // Auth endpoint doesn't exist - assume local mode
-                        console.log("Auth endpoint not found - assuming local mode");
-                        isAuthenticated = true;
-                        // Continue
-                    } else {
-                        alert("You must be logged in to authorize Spotify. Please log in first.");
-                        showAuthModal();
-                        return;
-                    }
-                } catch (authError) {
-                    // If auth endpoint doesn't exist (network error), assume local mode
-                    console.log("Auth endpoint not accessible - assuming local mode, proceeding");
-                    isAuthenticated = true;
-                    // Continue with the flow below
-                }
-            }
-        }
-        
-        // If we get here, we're authenticated (either with user or in local mode) - proceed
+        // Local mode - always authenticated, proceed directly
         
         try {
             console.log("Fetching client ID...");
@@ -1397,7 +567,6 @@ function setupSpotifyHandlers() {
                 
                 console.log("=== SPOTIFY OAUTH DEBUG ===");
                 console.log("Full response data:", data);
-                console.log("Authenticated status:", data.authenticated);
                 
                 if (!redirectUri) {
                     console.error("ERROR: Backend did not provide redirect_uri!");
@@ -1412,32 +581,15 @@ function setupSpotifyHandlers() {
                     return;
                 }
                 
-                // Check authentication status
-                // In local mode, these fields won't exist - that's OK
-                // Legacy multi-user mode support (not used)
-                if (data.hasOwnProperty('authenticated') && (!data.authenticated || !data.session_id)) {
-                    console.error("ERROR: User not authenticated or no session ID");
-                    console.error("Auth status:", data.authenticated, "Session ID:", data.session_id ? "present" : "missing");
-                    alert("Error: You must be logged in to authorize Spotify. Please log in and try again.");
-                    // Force re-check of auth status
-                    await checkAuthStatus();
-                    return;
-                }
-                
-                // If we're in local mode (no authenticated/session_id fields), proceed
-                console.log("Proceeding with Spotify authorization (local mode or authenticated)");
+                // Local mode - proceed with Spotify authorization
+                console.log("Proceeding with Spotify authorization");
                 
                 const scope = 'playlist-modify-public playlist-modify-private';
-                
-                // Get session ID from backend response (legacy multi-user mode)
-                // In local mode, there's no session_id - that's OK
-                const sessionId = data.session_id || null;
                 
                 console.log("Client ID:", clientId);
                 console.log("Redirect URI (from backend):", redirectUri);
                 console.log("Current window.location.origin:", window.location.origin);
                 console.log("Scope:", scope);
-                console.log("Session ID (from backend):", sessionId ? sessionId.substring(0, 10) + '...' : 'NOT FOUND (local mode)');
                 
                 // Double-check the redirect URI before sending
                 const expectedUri = "http://127.0.0.1:8888/callback";
@@ -1450,16 +602,7 @@ function setupSpotifyHandlers() {
                 }
                 
                 // Build auth URL
-                // In local mode, state parameter is optional (no session_id needed)
-                let authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${clientId}&scope=${encodeURIComponent(scope)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-                
-                // Only add state parameter if we have a session ID (legacy multi-user mode)
-                if (sessionId) {
-                    authUrl += `&state=${encodeURIComponent(sessionId)}`;
-                    console.log("Including session ID in state parameter (legacy mode)");
-                } else {
-                    console.log("No session ID - local mode, proceeding without state parameter");
-                }
+                const authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${clientId}&scope=${encodeURIComponent(scope)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
                 
                 console.log("Full Auth URL (first 200 chars):", authUrl.substring(0, 200) + '...');
                 console.log("===========================");
@@ -3379,16 +2522,6 @@ if (chatSearchSection) {
     observer.observe(chatSearchSection, { attributes: true, attributeFilter: ['class'] });
 }
 
-// Explicitly initialize the login form with forgot password link
-// This will be called after elements are initialized in initializeApp()
-function initializeLoginForm() {
-    console.log('Initializing login form with forgot password link');
-    if (authSwitchText && loginForm) {
-        switchAuthMode('login');
-    } else {
-        console.warn('Cannot initialize login form - elements not ready yet');
-    }
-}
 
 // Clean up on page unload
 window.addEventListener('beforeunload', () => {
