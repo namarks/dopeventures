@@ -4,75 +4,51 @@ Guide for using the Dopetracks launcher applications.
 
 ## Available Launchers
 
-### 1. GUI Launcher (`launch.py`)
+### CLI Launcher (`launch.py`)
 
-The easiest way to launch Dopetracks with a graphical interface.
-
-**Usage:**
-```bash
-python3 launch.py
-```
-
-Or double-click `Launch Dopetracks.command` which automatically runs the GUI launcher.
-
-**Features:**
-- Visual status indicators
-- One-click setup
-- One-click launch
-- Server management (start/stop)
-- Automatic browser opening
-
-### 2. Simple Launcher (`launch_simple.py`)
-
-A minimal command-line launcher for quick access.
+Simple command-line launcher that checks setup and launches the app.
 
 **Usage:**
 ```bash
-python3 launch_simple.py
+python3 launch.py          # Check setup and launch
+python3 launch.py --setup  # Run setup only
 ```
 
 **Features:**
 - Checks setup status
-- Prompts for launch
-- Minimal output
-
-### 3. Command File (`Launch Dopetracks.command`)
-
-A macOS command file that opens the GUI launcher.
-
-**Usage:**
-Double-click in Finder, or:
-```bash
-./Launch\ Dopetracks.command
-```
+- Runs setup if needed
+- Launches the app
+- Automatic browser opening
 
 ---
 
 ## First Time Setup
 
-### Using GUI Launcher
+### Using the Launcher
 
 1. **Run the launcher**:
    ```bash
    python3 launch.py
    ```
 
-2. **Click "Setup (First Time)"**:
+2. **Setup**:
+   - Launcher will automatically detect if setup is needed
    - Creates virtual environment
    - Installs dependencies
    - Creates `.env` file template
    - Creates `config.js`
 
 3. **Add Spotify Credentials**:
-   - Launcher will prompt you
    - Edit the `.env` file
    - Add your Spotify Client ID and Secret
+   - See setup instructions in the launcher output
 
-4. **Click "Launch App"**:
+4. **Launch**:
+   - Press Enter when prompted
    - Server starts automatically
    - Browser opens to http://127.0.0.1:8888
 
-### Using Command Line
+### Alternative: Manual Setup
 
 ```bash
 ./setup.sh
@@ -84,16 +60,16 @@ python3 start.py
 
 ## Subsequent Launches
 
-### GUI Launcher
+### Using the Launcher
 
-Just double-click `Launch Dopetracks.command` or run:
+Run:
 ```bash
 python3 launch.py
 ```
 
-Then click "Launch App" - no setup needed!
+Press Enter when prompted - no setup needed if already configured!
 
-### Command Line
+### Direct Launch (Advanced)
 
 ```bash
 source venv/bin/activate
@@ -114,9 +90,8 @@ The launcher automatically checks:
 
 ### Server Management
 
-- **Start Server**: Click "Launch App" button
-- **Stop Server**: Click "Stop Server" button
-- **Status**: Shows server status in log area
+- **Start Server**: Press Enter in launcher
+- **Stop Server**: Press Ctrl+C in the terminal
 
 ### Automatic Browser Opening
 
@@ -141,31 +116,29 @@ The launcher automatically opens your browser to:
 ### "Server won't start"
 
 - Check if port 8888 is already in use
-- Click "Stop Server" and try again
-- Or manually kill: `pkill -f uvicorn`
+- Kill existing server: `pkill -f uvicorn`
+- Try launching again
 
-### "Can't open .command file"
-
-- Right-click → Open With → Terminal
-- Or run: `chmod +x "Launch Dopetracks.command"`
-- Or run directly: `python3 launch.py`
 
 ### Browser doesn't open
 
 - Manually open: http://127.0.0.1:8888
 - Check the launcher log for errors
 
-### GUI doesn't open
+### Launcher issues
+
+The launcher is CLI-only. If you encounter issues:
 
 ```bash
 # Check Python version
 python3 --version  # Should be 3.11+
 
-# Check tkinter
-python3 -c "import tkinter; print('OK')"
+# Run setup manually
+./setup.sh
 
-# Try running directly
-python3 launch.py
+# Or launch directly
+source venv/bin/activate
+python3 start.py
 ```
 
 ---
@@ -211,8 +184,8 @@ python3 start.py
 ## Summary
 
 **Easiest Method:**
-1. Double-click `Launch Dopetracks.command`
-2. Click "Launch App"
+1. Run `python3 launch.py`
+2. Press Enter when prompted
 3. Use the app!
 
 **That's it!** The launcher handles everything else automatically.

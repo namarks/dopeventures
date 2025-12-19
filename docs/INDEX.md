@@ -1,4 +1,4 @@
-# Documentation
+# Documentation Index
 
 This folder contains all project documentation, guides, and technical references.
 
@@ -19,7 +19,7 @@ This folder contains all project documentation, guides, and technical references
 
 #### Getting Started
 - **[DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md)** - Development setup and architecture
-- **[QUICK_START.md](./QUICK_START.md)** - Quick start for developers
+- **[../QUICK_START.md](../QUICK_START.md)** - Quick start guide
 
 #### Testing
 - **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** - Complete testing workflow
@@ -33,9 +33,10 @@ This folder contains all project documentation, guides, and technical references
 - **[VIRTUAL_ENV_GUIDE.md](./VIRTUAL_ENV_GUIDE.md)** - Virtual environment setup
 - **[LAUNCHER_GUIDE.md](./LAUNCHER_GUIDE.md)** - Launcher usage
 
-#### Deployment
+#### Deployment & Distribution
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Deployment instructions
 - **[../PACKAGING.md](../PACKAGING.md)** - macOS app packaging guide
+- **[SHARING_GUIDE.md](./SHARING_GUIDE.md)** - How to share the app with others
 
 #### Troubleshooting
 - **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
