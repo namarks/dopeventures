@@ -35,8 +35,7 @@ This folder contains all project documentation, guides, and technical references
 
 #### Deployment
 - **[DEPLOYMENT.md](./DEPLOYMENT.md)** - Deployment instructions
-- **[LOCAL_DEPLOYMENT.md](./LOCAL_DEPLOYMENT.md)** - Local deployment guide
-- **[LOCAL_APP_MIGRATION.md](./LOCAL_APP_MIGRATION.md)** - Migration to local app
+- **[../PACKAGING.md](../PACKAGING.md)** - macOS app packaging guide
 
 #### Troubleshooting
 - **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues and solutions
@@ -50,10 +49,6 @@ This folder contains all project documentation, guides, and technical references
 - **[CHAT_DUPLICATES_EXPLANATION.md](./CHAT_DUPLICATES_EXPLANATION.md)** - Duplicate chat handling
 - **[MULTI_CHAT_PLAYLISTS.md](./MULTI_CHAT_PLAYLISTS.md)** - Multi-chat playlists
 
-#### Technical Documentation
-- **[REFACTOR_MIGRATION_GUIDE.md](./REFACTOR_MIGRATION_GUIDE.md)** - Refactoring guide
-- **[STRUCTURE_REORGANIZATION.md](./STRUCTURE_REORGANIZATION.md)** - Project structure
-- **[CLEANUP_SUMMARY.md](./CLEANUP_SUMMARY.md)** - Cleanup documentation
 
 ## Main Documentation (in project root)
 

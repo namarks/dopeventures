@@ -33,7 +33,16 @@ Dopetracks is an app that creates Spotify playlists from songs your friends have
 
 ## Download & Setup
 
-### Step 1: Download the App
+### Option A: Packaged macOS App (Recommended - Coming Soon!)
+
+1. Download `Dopetracks.dmg` from GitHub Releases
+2. Open the DMG file
+3. Drag `Dopetracks.app` to your Applications folder
+4. Double-click to launch - setup wizard will guide you!
+
+**Note:** The packaged app is still in development. Use Option B for now.
+
+### Option B: Download from GitHub
 
 1. Go to: **https://github.com/namarks/dopeventures**
 2. Click the green **"Code"** button (top right)
@@ -41,6 +50,8 @@ Dopetracks is an app that creates Spotify playlists from songs your friends have
 4. Extract the ZIP file to your Desktop or Applications folder
 
 ### Step 2: Get Spotify Credentials (2 minutes)
+
+> **Note:** If using the packaged app, the setup wizard will guide you through this step automatically.
 
 You need to create a free Spotify Developer App:
 

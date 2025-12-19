@@ -29,7 +29,13 @@ Dopetracks automatically creates Spotify playlists from songs your friends have 
 
 ## Quick Start (5 Minutes)
 
-### Option 1: No-Code Setup (Easiest!)
+### Option 1: Packaged macOS App (Easiest - Coming Soon!)
+
+Download the `.dmg` file, drag to Applications, and launch. No Python installation required!
+
+See **[PACKAGING.md](./PACKAGING.md)** for building the app yourself.
+
+### Option 2: No-Code Setup
 
 1. **Download**: Go to [GitHub](https://github.com/namarks/dopeventures) → Code → Download ZIP
 2. **Extract** the ZIP file
@@ -39,7 +45,7 @@ Dopetracks automatically creates Spotify playlists from songs your friends have 
 
 See **[USER_GUIDE.md](./USER_GUIDE.md)** for detailed instructions.
 
-### Option 2: Command Line Setup
+### Option 3: Command Line Setup
 
 ```bash
 git clone https://github.com/namarks/dopeventures.git
@@ -64,7 +70,7 @@ See **[QUICK_START.md](./QUICK_START.md)** for step-by-step instructions.
 
 ## Features
 
-- ✅ **Multi-user support** - Full authentication and data isolation
+- ✅ **Local-first** - All data stays on your Mac, nothing uploaded
 - ✅ **Automatic chat detection** - Finds your Messages database automatically
 - ✅ **Spotify OAuth** - Secure authentication with Spotify
 - ✅ **Streaming playlist creation** - Real-time progress updates

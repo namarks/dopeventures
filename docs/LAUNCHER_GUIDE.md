@@ -178,20 +178,14 @@ For detailed testing instructions, see the testing section in **[DEVELOPER_GUIDE
 
 ## Creating a macOS App Bundle
 
-You can create a double-clickable macOS app:
+Dopetracks can be packaged as a standalone macOS app using PyInstaller. See **[PACKAGING.md](../PACKAGING.md)** for complete instructions.
 
-1. **Open Automator** (Applications → Automator)
-2. **Create New Application**
-3. **Add "Run Shell Script" action**:
-   ```bash
-   cd /path/to/dopeventures
-   source venv/bin/activate
-   python3 start.py &
-   sleep 5
-   open http://127.0.0.1:8888
-   ```
-4. **Save as "Dopetracks.app"**
-5. **Double-click to launch!**
+**Quick build:**
+```bash
+./build_mac_app.sh
+```
+
+This creates `dist/Dopetracks.app` - a self-contained app bundle that doesn't require Python installation.
 
 ---
 
