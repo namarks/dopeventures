@@ -31,5 +31,5 @@ setup(
         ]
     },
     python_requires=">=3.9",
-    # Entry point removed - use start_multiuser.py instead
+    # Entry point: use start.py to run the application
 )

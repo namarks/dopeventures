@@ -33,7 +33,7 @@ python-multipart>=0.0.6
 flask>=2.3.0
 flask-session>=0.5.0
 
-# Multi-user architecture dependencies
+# Database and authentication dependencies
 sqlalchemy>=2.0.0
 alembic>=1.12.0
 psycopg2-binary>=2.9.0

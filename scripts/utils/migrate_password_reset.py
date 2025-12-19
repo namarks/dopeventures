@@ -13,6 +13,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'packages'))
 def migrate_password_reset():
     """Add password reset table to database."""
     
+    # Note: This script is for legacy multi-user databases
+    # Current app uses local.db in ~/.dopetracks/
     db_path = "dopetracks_multiuser.db"
     
     if not os.path.exists(db_path):

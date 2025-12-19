@@ -113,7 +113,7 @@ echo "Installing dependencies..."
 pip install -r requirements.txt
 
 echo "✅ Setup complete!"
-echo "To start the app, run: python3 start_multiuser.py"
+echo "To start the app, run: python3 start.py"
 ```
 
 Save as `setup.sh` and run: `bash setup.sh`

@@ -64,7 +64,7 @@ After updating `.env`:
 ```bash
 # Stop server (Ctrl+C)
 # Restart:
-python3 start_multiuser.py
+python3 start.py
 ```
 
 ## Common Issues

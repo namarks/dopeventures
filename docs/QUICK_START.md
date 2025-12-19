@@ -6,7 +6,7 @@
 
 ```bash
 # From project root directory
-python3 start_multiuser.py
+python3 start.py
 ```
 
 **Note:** On macOS, use `python3` not `python`
@@ -22,17 +22,16 @@ source venv/bin/activate
 # source /path/to/your/venv/bin/activate
 
 # Then run
-python3 start_multiuser.py
+python3 start.py
 ```
 
 ### What You Should See
 
 ```
-🚀 Starting Dopetracks Multi-User Application...
-📍 Health check: http://localhost:8888/health
-🌐 API docs: http://localhost:8888/docs
-🔐 Auth endpoints: http://localhost:8888/auth/
-INFO:     Uvicorn running on http://0.0.0.0:8888
+🚀 Starting Dopetracks Application...
+📍 Health check: http://127.0.0.1:8888/health
+🌐 Application: http://127.0.0.1:8888
+INFO:     Uvicorn running on http://127.0.0.1:8888
 ```
 
 ### Verify It's Working
@@ -51,7 +50,7 @@ curl http://localhost:8888/health
 ### "command not found: python"
 **Solution:** Use `python3` instead:
 ```bash
-python3 start_multiuser.py
+python3 start.py
 ```
 
 ### "No module named 'dopetracks'"
@@ -64,12 +63,12 @@ pip3 install -r requirements.txt
 **Solution:** Kill the existing process:
 ```bash
 pkill -f uvicorn
-# Or change the port in start_multiuser.py
+# Or change the port in start.py
 ```
 
 ### Import Errors
 **Solution:** Make sure you're running from the project root:
 ```bash
 cd /path/to/dopeventures
-python3 start_multiuser.py
+python3 start.py
 ```

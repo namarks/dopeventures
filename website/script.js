@@ -68,7 +68,7 @@ async function checkAuthStatus() {
         console.log("Health check failed, will try auth check:", error);
     }
     
-    // Try auth endpoint (for multi-user mode)
+    // Try auth endpoint (legacy - not used in local mode)
     try {
         const response = await fetch(`${AUTH_BASE_URL}/status`, {
             credentials: 'include'  // Ensure cookies are sent
@@ -1414,7 +1414,7 @@ function setupSpotifyHandlers() {
                 
                 // Check authentication status
                 // In local mode, these fields won't exist - that's OK
-                // Only check if the fields exist (multi-user mode)
+                // Legacy multi-user mode support (not used)
                 if (data.hasOwnProperty('authenticated') && (!data.authenticated || !data.session_id)) {
                     console.error("ERROR: User not authenticated or no session ID");
                     console.error("Auth status:", data.authenticated, "Session ID:", data.session_id ? "present" : "missing");
@@ -1429,7 +1429,7 @@ function setupSpotifyHandlers() {
                 
                 const scope = 'playlist-modify-public playlist-modify-private';
                 
-                // Get session ID from backend response (only in multi-user mode)
+                // Get session ID from backend response (legacy multi-user mode)
                 // In local mode, there's no session_id - that's OK
                 const sessionId = data.session_id || null;
                 
@@ -1453,10 +1453,10 @@ function setupSpotifyHandlers() {
                 // In local mode, state parameter is optional (no session_id needed)
                 let authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${clientId}&scope=${encodeURIComponent(scope)}&redirect_uri=${encodeURIComponent(redirectUri)}`;
                 
-                // Only add state parameter if we have a session ID (multi-user mode)
+                // Only add state parameter if we have a session ID (legacy multi-user mode)
                 if (sessionId) {
                     authUrl += `&state=${encodeURIComponent(sessionId)}`;
-                    console.log("Including session ID in state parameter (multi-user mode)");
+                    console.log("Including session ID in state parameter (legacy mode)");
                 } else {
                     console.log("No session ID - local mode, proceeding without state parameter");
                 }
