@@ -2775,7 +2775,13 @@ function setupPlaylistHandlers() {
             }
             statusHtml += statsMsg;
         } else {
-            statusHtml += `<br>Added ${result.tracks_added || 0} tracks (found ${result.total_tracks_found || 0} total)`;
+            const tracksAdded = result.tracks_added || 0;
+            const totalFound = result.total_tracks_found;
+            if (totalFound !== undefined && totalFound > 0) {
+                statusHtml += `<br>Added ${tracksAdded} tracks (found ${totalFound} total)`;
+            } else {
+                statusHtml += `<br>Added ${tracksAdded} tracks`;
+            }
         }
         
         statusHtml += `</div>`;

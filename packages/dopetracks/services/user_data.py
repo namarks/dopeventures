@@ -5,8 +5,10 @@ import json
 import logging
 import os
 import hashlib
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 
 from ..database.models import (
     User, UserDataCache, UserUploadedFile, UserSpotifyToken
@@ -95,6 +97,15 @@ class UserDataService:
     ) -> Optional[UserUploadedFile]:
         """Save an uploaded file for the user."""
         try:
+            # Enforce file size limit
+            max_size_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+            file_size = len(file_content)
+            if file_size > max_size_bytes:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File size ({file_size / 1024 / 1024:.2f} MB) exceeds maximum allowed size ({settings.MAX_FILE_SIZE_MB} MB)"
+                )
+            
             # Generate file hash for deduplication
             file_hash = hash_file_content(file_content)
             
@@ -111,18 +122,21 @@ class UserDataService:
             # Generate secure filename
             secure_filename = generate_secure_filename(original_filename, self.user.id)
             
-            # Create storage directory
+            # Create storage directory using configurable base path
             if settings.STORAGE_TYPE == "local":
-                storage_dir = f"./user_uploads/user_{self.user.id}"
-                os.makedirs(storage_dir, exist_ok=True)
-                storage_path = os.path.join(storage_dir, secure_filename)
+                # Use configurable base directory from settings, default to user_uploads in project root
+                base_upload_dir = Path(os.getenv("UPLOAD_BASE_DIR", "./user_uploads")).resolve()
+                storage_dir = base_upload_dir / f"user_{self.user.id}"
+                storage_dir.mkdir(parents=True, exist_ok=True)
+                storage_path = storage_dir / secure_filename
                 
                 # Write file to disk
-                with open(storage_path, "wb") as f:
-                    f.write(file_content)
+                storage_path.write_bytes(file_content)
+                # Store as string for database
+                storage_path_str = str(storage_path)
             else:
                 # For cloud storage, implement S3/GCS upload here
-                storage_path = f"user_{self.user.id}/{secure_filename}"
+                storage_path_str = f"user_{self.user.id}/{secure_filename}"
                 # TODO: Implement cloud storage upload
                 logger.warning("Cloud storage not implemented yet")
             
@@ -131,9 +145,9 @@ class UserDataService:
                 user_id=self.user.id,
                 filename=secure_filename,
                 original_filename=original_filename,
-                file_size=len(file_content),
+                file_size=file_size,
                 file_hash=file_hash,
-                storage_path=storage_path,
+                storage_path=storage_path_str,
                 content_type=content_type
             )
             
@@ -167,8 +181,11 @@ class UserDataService:
         
         try:
             if settings.STORAGE_TYPE == "local":
-                with open(uploaded_file.storage_path, "rb") as f:
-                    return f.read()
+                storage_path = Path(uploaded_file.storage_path)
+                if not storage_path.exists():
+                    logger.error(f"File not found at path: {storage_path}")
+                    return None
+                return storage_path.read_bytes()
             else:
                 # TODO: Implement cloud storage download
                 logger.warning("Cloud storage download not implemented yet")
@@ -191,8 +208,9 @@ class UserDataService:
         try:
             # Delete from storage
             if settings.STORAGE_TYPE == "local":
-                if os.path.exists(uploaded_file.storage_path):
-                    os.remove(uploaded_file.storage_path)
+                storage_path = Path(uploaded_file.storage_path)
+                if storage_path.exists():
+                    storage_path.unlink()
             else:
                 # TODO: Implement cloud storage deletion
                 pass

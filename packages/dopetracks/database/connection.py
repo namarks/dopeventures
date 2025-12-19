@@ -8,18 +8,24 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
 from .models import Base
+from ..config import settings
 
-# Use a simple local SQLite database
-DB_PATH = Path.home() / ".dopetracks" / "local.db"
-DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+# Use DATABASE_URL from settings, with fallback to local path
+DATABASE_URL = settings.DATABASE_URL
 
-DATABASE_URL = f"sqlite:///{DB_PATH}"
+# For SQLite, ensure directory exists if using file path
+if DATABASE_URL.startswith("sqlite:///"):
+    # Extract file path from SQLite URL
+    db_path_str = DATABASE_URL.replace("sqlite:///", "")
+    if not db_path_str.startswith(":memory:"):
+        db_path = Path(db_path_str)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
 
 # Create engine with connection pooling for SQLite
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
+    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
+    poolclass=StaticPool if DATABASE_URL.startswith("sqlite") else None,
     echo=False
 )
 

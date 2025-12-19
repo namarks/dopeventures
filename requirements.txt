@@ -14,6 +14,7 @@ python-dotenv>=1.0.0
 
 # HTTP requests
 requests>=2.31.0
+httpx>=0.25.0
 
 # Apple data parsing (for iMessage binary data)
 pytypedstream>=0.1.0

@@ -651,7 +651,7 @@ tail -f backend.log
 
 ## Additional Resources
 
-- **Deployment Guide**: See `DEPLOYMENT.md`
+- **Deployment Guide**: See `docs/DEPLOYMENT.md`
 - **Main README**: See `README.md` for setup instructions
 - **API Documentation**: Available at `/docs` when running
 - **Environment Template**: See `.env.example`

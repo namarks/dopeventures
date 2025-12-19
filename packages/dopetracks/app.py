@@ -6,7 +6,7 @@ import logging
 import sys
 import asyncio
 import json
-import requests
+import httpx
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, Form, UploadFile, File
@@ -26,6 +26,7 @@ from .config import settings
 from .database.connection import get_db, init_database, check_database_health
 from .database.models import SpotifyToken, LocalCache
 from .utils.helpers import get_db_path, validate_db_path
+from .services.session_storage import session_storage
 
 # Set up logging
 logging.basicConfig(
@@ -56,8 +57,14 @@ async def lifespan(app: FastAPI):
         logger.error("Database health check failed")
         raise RuntimeError("Database is not accessible")
     
+    # Start session storage cleanup task
+    session_storage.start_cleanup_task()
+    
     logger.info("Application startup complete")
     yield
+    
+    # Stop session storage cleanup task
+    session_storage.stop_cleanup_task()
     
     logger.info("Application shutdown")
 
@@ -73,7 +80,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Local app, allow all origins
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -197,20 +204,26 @@ async def spotify_callback(
     }
     
     logger.info("Exchanging Spotify authorization code for tokens")
-    response = requests.post(token_url, data=payload)
-    
-    if response.status_code != 200:
-        error_detail = response.text
+    async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            error_json = response.json()
-            error_detail = error_json.get('error_description', error_json.get('error', error_detail))
-        except:
-            pass
-        
-        logger.error(f"Spotify token exchange failed: {error_detail}")
-        raise HTTPException(status_code=400, detail=f"Spotify authorization failed: {error_detail}")
-    
-    tokens = response.json()
+            response = await client.post(token_url, data=payload)
+            response.raise_for_status()
+            tokens = response.json()
+        except httpx.HTTPStatusError as e:
+            error_detail = e.response.text
+            try:
+                error_json = e.response.json()
+                error_detail = error_json.get('error_description', error_json.get('error', error_detail))
+            except:
+                pass
+            logger.error(f"Spotify token exchange failed: {error_detail}")
+            raise HTTPException(status_code=400, detail=f"Spotify authorization failed: {error_detail}")
+        except httpx.TimeoutException:
+            logger.error("Spotify token exchange timed out")
+            raise HTTPException(status_code=504, detail="Spotify authorization request timed out")
+        except httpx.RequestError as e:
+            logger.error(f"Spotify token exchange request error: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to connect to Spotify: {str(e)}")
     
     # Store tokens locally (no user association)
     from datetime import datetime, timezone, timedelta
@@ -278,13 +291,20 @@ async def get_user_spotify_profile(db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Spotify not authorized")
     
     headers = {"Authorization": f"Bearer {token_entry.access_token}"}
-    response = requests.get("https://api.spotify.com/v1/me", headers=headers)
-    
-    if response.status_code != 200:
-        logger.warning(f"Invalid Spotify token: {response.status_code}")
-        raise HTTPException(status_code=401, detail="Invalid Spotify token")
-    
-    return response.json()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.get("https://api.spotify.com/v1/me", headers=headers)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"Invalid Spotify token: {e.response.status_code}")
+            raise HTTPException(status_code=401, detail="Invalid Spotify token")
+        except httpx.TimeoutException:
+            logger.error("Spotify API request timed out")
+            raise HTTPException(status_code=504, detail="Spotify API request timed out")
+        except httpx.RequestError as e:
+            logger.error(f"Spotify API request error: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to connect to Spotify: {str(e)}")
 
 @app.get("/user-playlists")
 async def get_user_playlists(db: Session = Depends(get_db)):
@@ -298,7 +318,7 @@ async def get_user_playlists(db: Session = Depends(get_db)):
     from .processing.spotify_interaction import create_spotify_playlist as csp
     
     # Check and refresh token if needed
-    token_entry = _refresh_token_if_needed(db, token_entry)
+    token_entry = await _refresh_token_if_needed(db, token_entry)
     
     sp = spotipy.Spotify(auth=token_entry.access_token)
     user_id = csp.get_user_id(sp)
@@ -316,7 +336,7 @@ async def get_user_playlists(db: Session = Depends(get_db)):
     return {"playlists": playlists}
 
 # Helper function to refresh token
-def _refresh_token_if_needed(db: Session, token_entry: SpotifyToken) -> SpotifyToken:
+async def _refresh_token_if_needed(db: Session, token_entry: SpotifyToken) -> SpotifyToken:
     """Refresh Spotify token if expired."""
     if not token_entry.expires_at:
         return token_entry
@@ -339,20 +359,28 @@ def _refresh_token_if_needed(db: Session, token_entry: SpotifyToken) -> SpotifyT
             "client_id": settings.SPOTIFY_CLIENT_ID,
             "client_secret": settings.SPOTIFY_CLIENT_SECRET,
         }
-        response = requests.post(token_url, data=payload)
-        
-        if response.status_code == 200:
-            tokens = response.json()
-            token_entry.access_token = tokens["access_token"]
-            if tokens.get("refresh_token"):
-                token_entry.refresh_token = tokens["refresh_token"]
-            if tokens.get("expires_in"):
-                token_entry.expires_at = datetime.now(timezone.utc) + timedelta(seconds=tokens["expires_in"])
-            token_entry.updated_at = datetime.now(timezone.utc)
-            db.commit()
-            logger.info("Token refreshed successfully")
-        else:
-            raise HTTPException(status_code=401, detail="Failed to refresh token")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.post(token_url, data=payload)
+                response.raise_for_status()
+                tokens = response.json()
+                token_entry.access_token = tokens["access_token"]
+                if tokens.get("refresh_token"):
+                    token_entry.refresh_token = tokens["refresh_token"]
+                if tokens.get("expires_in"):
+                    token_entry.expires_at = datetime.now(timezone.utc) + timedelta(seconds=tokens["expires_in"])
+                token_entry.updated_at = datetime.now(timezone.utc)
+                db.commit()
+                logger.info("Token refreshed successfully")
+            except httpx.HTTPStatusError:
+                logger.error("Failed to refresh token: HTTP error")
+                raise HTTPException(status_code=401, detail="Failed to refresh token")
+            except httpx.TimeoutException:
+                logger.error("Token refresh request timed out")
+                raise HTTPException(status_code=504, detail="Token refresh request timed out")
+            except httpx.RequestError as e:
+                logger.error(f"Token refresh request error: {e}")
+                raise HTTPException(status_code=502, detail=f"Failed to refresh token: {str(e)}")
     
     return token_entry
 
@@ -562,7 +590,7 @@ async def create_playlist_optimized_stream(
             track_urls = list(url_to_message.keys())
             
             if not track_urls:
-                yield f"data: {json.dumps({'status': 'complete', 'message': 'No Spotify track links found', 'tracks_added': 0, 'track_details': [], 'skipped_urls': skipped_urls, 'other_links': other_links})}\n\n"
+                yield f"data: {json.dumps({'status': 'complete', 'message': 'No Spotify track links found', 'tracks_added': 0, 'total_tracks_found': 0, 'track_details': [], 'skipped_urls': skipped_urls, 'other_links': other_links})}\n\n"
                 await asyncio.sleep(0)
                 return
             
@@ -577,7 +605,7 @@ async def create_playlist_optimized_stream(
                 return
             
             # Refresh token if needed
-            token_entry = _refresh_token_if_needed(db, token_entry)
+            token_entry = await _refresh_token_if_needed(db, token_entry)
             
             sp = spotipy.Spotify(auth=token_entry.access_token)
             user_id = csp.get_user_id(sp)
@@ -706,13 +734,13 @@ async def create_playlist_optimized_stream(
                         batch = track_ids[i:i+100]
                         sp.playlist_add_items(playlist['id'], batch)
                     
-                    yield f"data: {json.dumps({'status': 'complete', 'message': f'Successfully added {len(track_ids)} tracks to playlist', 'tracks_added': len(track_ids), 'playlist_id': playlist['id'], 'playlist_name': playlist['name'], 'playlist_url': playlist.get('external_urls', {}).get('spotify'), 'track_details': track_details, 'skipped_urls': skipped_urls, 'other_links': other_links})}\n\n"
+                    yield f"data: {json.dumps({'status': 'complete', 'message': f'Successfully added {len(track_ids)} tracks to playlist', 'tracks_added': len(track_ids), 'total_tracks_found': len(track_urls), 'playlist_id': playlist['id'], 'playlist_name': playlist['name'], 'playlist_url': playlist.get('external_urls', {}).get('spotify'), 'track_details': track_details, 'skipped_urls': skipped_urls, 'other_links': other_links})}\n\n"
                     await asyncio.sleep(0)
                 except Exception as e:
                     yield f"data: {json.dumps({'status': 'error', 'message': f'Failed to add tracks to playlist: {str(e)}', 'tracks_added': 0, 'track_details': track_details})}\n\n"
                     await asyncio.sleep(0)
             else:
-                yield f"data: {json.dumps({'status': 'complete', 'message': 'No valid tracks to add', 'tracks_added': 0, 'track_details': track_details, 'skipped_urls': skipped_urls, 'other_links': other_links})}\n\n"
+                yield f"data: {json.dumps({'status': 'complete', 'message': 'No valid tracks to add', 'tracks_added': 0, 'total_tracks_found': len(track_urls), 'track_details': track_details, 'skipped_urls': skipped_urls, 'other_links': other_links})}\n\n"
                 await asyncio.sleep(0)
                 
         except Exception as e:

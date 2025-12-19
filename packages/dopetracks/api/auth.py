@@ -3,8 +3,6 @@ Authentication API endpoints for Dopetracks.
 """
 import logging
 import secrets
-import json
-import time
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Query
 from fastapi.responses import JSONResponse
@@ -14,6 +12,7 @@ from datetime import datetime, timedelta
 
 from ..database.connection import get_db
 from ..database.models import User, UserPasswordReset, get_user_by_username, get_user_by_email
+from ..config import settings
 from ..auth.security import (
     hash_password, 
     authenticate_user, 
@@ -167,14 +166,15 @@ async def register(
     # For Spotify OAuth, use 127.0.0.1 consistently (not localhost)
     # Using SameSite="lax" for local dev - works for same-site requests
     # For OAuth callback, we use state parameter to pass session ID (more reliable than cookies)
-    # In production with HTTPS, can use secure=True with SameSite="lax" or "none"
+    # In production with HTTPS, use secure=True with SameSite="lax" or "none"
+    is_production = settings.is_production()
     response.set_cookie(
         key="dopetracks_session",
         value=session.session_id,
         max_age=86400 * 7,  # 7 days
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
-        samesite="lax",  # Works for same-site requests (127.0.0.1 to 127.0.0.1)
+        secure=is_production,  # Secure in production with HTTPS
+        samesite="none" if is_production else "lax",  # "none" for OAuth flows in production
         domain=None,  # Don't set domain - cookie works for current hostname only
         path="/"  # Make cookie available for all paths
     )
@@ -194,17 +194,7 @@ async def login(
     db: Session = Depends(get_db)
 ):
     """Authenticate user and create session."""
-    # #region agent log
-    with open('/Users/nmarks/root_code_repo/dopeventures/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"location":"auth.py:188","message":"login endpoint entry","data":{"username":user_data.username,"hasPassword":bool(user_data.password)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"})+"\n")
-    # #endregion
-    
     user = authenticate_user(db, user_data.username, user_data.password)
-    
-    # #region agent log
-    with open('/Users/nmarks/root_code_repo/dopeventures/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"location":"auth.py:197","message":"authentication result","data":{"authenticated":user is not None,"userId":user.id if user else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"})+"\n")
-    # #endregion
     
     if not user:
         logger.warning(f"Failed login attempt for username: {user_data.username}")
@@ -218,46 +208,30 @@ async def login(
     user_agent = get_user_agent(request)
     session = create_user_session(db, user.id, ip_address, user_agent)
     
-    # #region agent log
-    with open('/Users/nmarks/root_code_repo/dopeventures/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"location":"auth.py:210","message":"session created","data":{"sessionId":session.session_id if session else None,"userId":user.id},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"})+"\n")
-    # #endregion
-    
     # Set secure cookie
     # Note: Don't set domain - this allows cookie to work for the current hostname
     # For Spotify OAuth, use 127.0.0.1 consistently (not localhost)
     # Using SameSite="lax" for local dev - works for same-site requests
     # For OAuth callback, we use state parameter to pass session ID (more reliable than cookies)
-    # In production with HTTPS, can use secure=True with SameSite="lax" or "none"
+    # In production with HTTPS, use secure=True with SameSite="lax" or "none"
+    is_production = settings.is_production()
     response.set_cookie(
         key="dopetracks_session",
         value=session.session_id,
         max_age=86400 * 7,  # 7 days
         httponly=True,
-        secure=False,  # Set to True in production with HTTPS
-        samesite="lax",  # Works for same-site requests (127.0.0.1 to 127.0.0.1)
+        secure=is_production,  # Secure in production with HTTPS
+        samesite="none" if is_production else "lax",  # "none" for OAuth flows in production
         domain=None,  # Don't set domain - cookie works for current hostname only
         path="/"  # Make cookie available for all paths
     )
     
-    # #region agent log
-    with open('/Users/nmarks/root_code_repo/dopeventures/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"location":"auth.py:225","message":"cookie set","data":{"sessionId":session.session_id},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"})+"\n")
-    # #endregion
-    
     logger.info(f"User logged in: {user.username} (ID: {user.id})")
     
-    auth_response = AuthResponse(
+    return AuthResponse(
         user=UserResponse.from_user(user),
         message="Login successful"
     )
-    
-    # #region agent log
-    with open('/Users/nmarks/root_code_repo/dopeventures/.cursor/debug.log', 'a') as f:
-        f.write(json.dumps({"location":"auth.py:231","message":"response prepared","data":{"hasUser":auth_response.user is not None,"userId":auth_response.user.id if auth_response.user else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"})+"\n")
-    # #endregion
-    
-    return auth_response
 
 @router.post("/logout")
 async def logout(

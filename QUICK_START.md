@@ -3,8 +3,8 @@
 Get Dopetracks running in 5 minutes!
 
 > **🎯 No-Code Option**: Don't want to use the command line? Use the **GUI Launcher** instead!  
-> Just double-click `launch.py` and follow the on-screen instructions.  
-> See [README_LAUNCHER.md](./README_LAUNCHER.md) for details.
+> Just double-click `Launch Dopetracks.command` and follow the on-screen instructions.  
+> See [docs/LAUNCHER_GUIDE.md](./docs/LAUNCHER_GUIDE.md) for details.
 
 ## Prerequisites
 
@@ -120,7 +120,7 @@ lsof -ti:8888 | xargs kill -9
 ## What's Next?
 
 - See [README.md](./README.md) for detailed documentation
-- See [TESTING_LOCAL_APP.md](./TESTING_LOCAL_APP.md) for testing guide
+- See [docs/TESTING_LOCAL_APP.md](./docs/TESTING_LOCAL_APP.md) for testing guide
 - Check the `/health` endpoint to verify everything is working
 
 ## Need Help?
