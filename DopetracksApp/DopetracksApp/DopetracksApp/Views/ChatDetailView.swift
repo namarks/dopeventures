@@ -106,7 +106,8 @@ struct ChatDetailView: View {
             .padding()
         }
         .navigationTitle(chat.displayName)
-        .task {
+        .task(id: chat.id) {
+            // Reload messages when the selected chat changes
             await loadMessages()
         }
     }
