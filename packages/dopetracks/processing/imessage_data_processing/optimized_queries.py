@@ -203,7 +203,7 @@ def get_chat_list(db_path: str) -> List[Dict[str, Any]]:
         WHERE chat.display_name IS NOT NULL
         GROUP BY chat.ROWID, chat.display_name, chat.chat_identifier
         HAVING message_count > 0
-        ORDER BY message_count DESC
+        ORDER BY last_message_date DESC
     """
     
     df = pd.read_sql_query(query, conn)
