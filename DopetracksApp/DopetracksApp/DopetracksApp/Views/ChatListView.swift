@@ -22,6 +22,7 @@ struct ChatListView: View {
     @State private var showingFilters = false
     @State private var useAdvancedSearch = false
     @State private var currentSearchTask: Task<Void, Never>?
+    @State private var hasLoadedOnce = false
     
     private var selectedChat: Chat? {
         guard let selectedChatId = selectedChatId else { return nil }
@@ -257,10 +258,12 @@ struct ChatListView: View {
                 .frame(width: 500, height: 600)
             }
             .task {
-                // Check Full Disk Access permission first
-                checkPermissions()
-                // Load all chats when view appears
-                await loadAllChats()
+                // Only load once; avoid reloading on every tab revisit
+                if !hasLoadedOnce {
+                    checkPermissions()
+                    await loadAllChats()
+                    hasLoadedOnce = true
+                }
             }
         } detail: {
             if let selectedChat = selectedChat {
