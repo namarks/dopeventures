@@ -19,8 +19,6 @@ struct ChatListView: View {
     @State private var showingPlaylistCreation = false
     @State private var hasFullDiskAccess = false
     @State private var searchFilters = SearchFilters()
-    @State private var showingFilters = false
-    @State private var useAdvancedSearch = false
     @State private var currentSearchTask: Task<Void, Never>?
     @State private var hasLoadedOnce = false
     
@@ -65,14 +63,6 @@ struct ChatListView: View {
                             }
                         }
                     
-                    Button {
-                        showingFilters.toggle()
-                    } label: {
-                        Image(systemName: searchFilters.hasFilters ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                            .foregroundColor(searchFilters.hasFilters ? .accentColor : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Advanced Search Filters")
                 }
                 .padding()
                 .background(Color(NSColor.controlBackgroundColor))
@@ -80,36 +70,45 @@ struct ChatListView: View {
                 .padding(.horizontal)
                 .padding(.top)
                 
-                // Filter summary
-                if searchFilters.hasFilters && !showingFilters {
-                    HStack {
-                        if searchFilters.startDate != nil || searchFilters.endDate != nil {
-                            Label("Date range", systemImage: "calendar")
-                                .font(.caption)
-                        }
-                        if !searchFilters.participantNames.isEmpty {
-                            Label("\(searchFilters.participantNames.count) participant(s)", systemImage: "person.2")
-                                .font(.caption)
-                        }
-                        if !searchFilters.messageContent.isEmpty {
-                            Label("Message content", systemImage: "text.bubble")
-                                .font(.caption)
-                        }
+                // Inline status/loading indicator
+                if isLoading {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                        Text("Searching...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                         Spacer()
-                        Button("Clear") {
-                            searchFilters = SearchFilters()
-                            searchText = ""
-                            Task {
-                                await loadAllChats()
-                            }
-                        }
-                        .buttonStyle(.borderless)
-                        .font(.caption)
                     }
                     .padding(.horizontal)
-                    .padding(.vertical, 4)
-                    .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+                    .padding(.bottom, 4)
                 }
+                
+                // Inline advanced search filters (always visible)
+                VStack(alignment: .leading, spacing: 8) {
+                    SearchFiltersView(filters: $searchFilters)
+                        .onChange(of: searchFilters) { _ in
+                            Task { await performSearch() }
+                        }
+                    
+                    if searchFilters.hasFilters {
+                        HStack {
+                            Label("Filters active", systemImage: "line.3.horizontal.decrease.circle.fill")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Button("Clear Filters") {
+                                searchFilters = SearchFilters()
+                                searchText = ""
+                                Task { await loadAllChats() }
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
                 
                 // Chat list
                 if isLoading {
@@ -226,36 +225,6 @@ struct ChatListView: View {
             }
             .sheet(isPresented: $showingPlaylistCreation) {
                 PlaylistCreationView(selectedChatIds: Array(selectedChats))
-            }
-            .sheet(isPresented: $showingFilters) {
-                VStack {
-                    SearchFiltersView(filters: $searchFilters)
-                        .onChange(of: searchFilters) { _ in
-                            // Auto-search when filters change
-                            Task {
-                                await performSearch()
-                            }
-                        }
-                    
-                    HStack {
-                        Button("Close") {
-                            showingFilters = false
-                        }
-                        .buttonStyle(.bordered)
-                        
-                        Spacer()
-                        
-                        Button("Search") {
-                            showingFilters = false
-                            Task {
-                                await performSearch()
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .padding()
-                }
-                .frame(width: 500, height: 600)
             }
             .task {
                 // Only load once; avoid reloading on every tab revisit
