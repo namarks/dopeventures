@@ -75,10 +75,8 @@ struct SettingsView: View {
                 
                 Section("Spotify Credentials") {
                     TextField("Client ID", text: $clientId)
-                        .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
                     SecureField("Client Secret", text: $clientSecret)
-                        .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
                     
                     if let saveError = saveError {
