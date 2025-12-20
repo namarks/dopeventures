@@ -222,11 +222,13 @@ def get_chat_list(db_path: str) -> List[Dict[str, Any]]:
         # Get recent messages for this chat (available in details view)
         recent_messages = get_recent_messages_for_chat(db_path, int(row['chat_id']), limit=5)
         
+        member_count_val = int(row['member_count']) if pd.notna(row['member_count']) else 0
+        name_val = row['chat_identifier'] if member_count_val == 1 else (row['display_name'] or row['chat_identifier'])
         results.append({
             "chat_id": int(row['chat_id']),
-            "name": row['display_name'] or row['chat_identifier'],
+            "name": name_val,
             "chat_identifier": row['chat_identifier'],
-            "members": int(row['member_count']) if pd.notna(row['member_count']) else 0,
+            "members": member_count_val,
             "total_messages": int(row['message_count']),
             "user_messages": int(row['user_message_count']) if pd.notna(row['user_message_count']) else 0,
             "last_message_date": row['last_message_date'],
@@ -752,11 +754,13 @@ def search_chats_by_name(db_path: str, query: str) -> List[Dict[str, Any]]:
         # This parses attributedBody for display purposes (to help user pick the right chat)
         recent_messages = get_recent_messages_for_chat(db_path, int(row['chat_id']), limit=5)
         
+        member_count_val = int(row['member_count']) if pd.notna(row['member_count']) else 0
+        name_val = row['chat_identifier'] if member_count_val == 1 else (row['display_name'] or row['chat_identifier'])
         results.append({
             "chat_id": int(row['chat_id']),
-            "name": row['display_name'] or row['chat_identifier'],
+            "name": name_val,
             "chat_identifier": row['chat_identifier'],
-            "members": int(row['member_count']) if pd.notna(row['member_count']) else 0,
+            "members": member_count_val,
             "total_messages": int(row['message_count']),
             "user_messages": int(row['user_message_count']) if pd.notna(row['user_message_count']) else 0,
             "last_message_date": row['last_message_date'],
@@ -1153,11 +1157,13 @@ def advanced_chat_search(
     for _, row in df.iterrows():
         recent_messages = get_recent_messages_for_chat(db_path, int(row['chat_id']), limit=5)
         
+        member_count_val = int(row['member_count']) if pd.notna(row['member_count']) else 0
+        name_val = row['chat_identifier'] if member_count_val == 1 else (row['display_name'] or row['chat_identifier'])
         results.append({
             "chat_id": int(row['chat_id']),
-            "name": row['display_name'] or row['chat_identifier'],
+            "name": name_val,
             "chat_identifier": row['chat_identifier'],
-            "members": int(row['member_count']) if pd.notna(row['member_count']) else 0,
+            "members": member_count_val,
             "total_messages": int(row['message_count']),
             "user_messages": int(row['user_message_count']) if pd.notna(row['user_message_count']) else 0,
             "last_message_date": row['last_message_date'],
@@ -1426,11 +1432,13 @@ def advanced_chat_search_streaming(
                 try:
                     recent_messages = get_recent_messages_for_chat(db_path, int(row['chat_id']), limit=5)
                     
+                    member_count_val = int(row['member_count']) if pd.notna(row['member_count']) else 0
+                    name_val = row['chat_identifier'] if member_count_val == 1 else (row['display_name'] or row['chat_identifier'])
                     result = {
                         "chat_id": int(row['chat_id']),
-                        "name": row['display_name'] or row['chat_identifier'],
+                        "name": name_val,
                         "chat_identifier": row['chat_identifier'],
-                        "members": int(row['member_count']) if pd.notna(row['member_count']) else 0,
+                        "members": member_count_val,
                         "total_messages": int(row['message_count']),
                         "user_messages": int(row['user_message_count']) if pd.notna(row['user_message_count']) else 0,
                         "last_message_date": row['last_message_date'],
