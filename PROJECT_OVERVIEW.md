@@ -122,7 +122,6 @@ dopeventures/
 - **`packages/dopetracks/app.py`**
   - Main FastAPI application
   - Route definitions and handlers
-  - Static file serving (development)
 
 - **`packages/dopetracks/config.py`**
   - Configuration management
@@ -141,14 +140,7 @@ dopeventures/
 
 #### Services
 - **`packages/dopetracks/services/session_storage.py`**
-  - In-memory session data caching
-  - File upload handling
-  - Data caching (session + database)
-  - Spotify token storage
-
-- **`packages/dopetracks/services/session_storage.py`**
-  - In-memory session data storage
-  - Temporary caching layer
+  - In-memory session data storage (temporary caching)
 
 #### Data Processing
 - **`packages/dopetracks/processing/prepare_data_main.py`**
@@ -211,10 +203,7 @@ dopeventures/
   - Database URL
   - Security keys
   - See `.env.example` for template
-
-- **`Procfile`**: Process definition for hosting platforms
-- **`runtime.txt`**: Python version specification
-- **`requirements.txt`**: Python package dependencies
+- **`requirements.txt`**: Python dependencies
 
 ---
 
@@ -473,8 +462,7 @@ chat.db (input)
 
 ### Development Workflow
 
-1. **Database Migrations**
-   - Run migration scripts as needed
+1. **Database Setup**
    - Database auto-initializes on first run
    - Check `database/connection.py` for schema creation
 
@@ -489,16 +477,6 @@ chat.db (input)
    - Backend runs automatically via `BackendManager`
 
 ### Common Tasks
-
-#### Promote User to Admin
-```bash
-python scripts/utils/promote_admin.py <username>
-```
-
-#### Reset User Password
-```bash
-python scripts/utils/reset_password.py <username>
-```
 
 #### Check Database Health
 ```bash
@@ -515,7 +493,6 @@ tail -f backend.log
 - **Development Server**: `dev_server.py` (simple launcher with auto-reload)
 - **Production Launcher**: `scripts/launch/app_launcher.py` (used by Swift app)
 - **Direct FastAPI**: `packages/dopetracks/app.py` (can be run directly with uvicorn)
-- **Legacy Interface**: `packages/dopetracks/dopetracks/frontend_interface/web_interface.py`
 
 ---
 

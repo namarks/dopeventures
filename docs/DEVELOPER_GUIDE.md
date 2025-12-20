@@ -99,10 +99,10 @@ The application will start on **http://127.0.0.1:8888**
 
 ### Using the Launcher (Optional)
 
-For development, you can use the launcher:
+For bundled/production runs (used by the Swift app):
 
 ```bash
-python3 scripts/launch/launch.py
+python3 scripts/launch/app_launcher.py
 ```
 
 See [LAUNCHER_GUIDE.md](./LAUNCHER_GUIDE.md) for more details.
@@ -150,10 +150,9 @@ When adding tests, create a `tests/` directory with:
 ### Backend
 
 - **Framework**: FastAPI
-- **Database**: SQLite (dev) / PostgreSQL (production)
+- **Database**: SQLite (local)
 - **ORM**: SQLAlchemy
-- **Authentication**: Session-based with bcrypt password hashing
-- **OAuth**: Spotify OAuth 2.0
+- **OAuth**: Spotify OAuth 2.0 (single-user)
 
 ### Frontend
 
@@ -202,13 +201,8 @@ See **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)** for complete schema.
 ### Playlist Endpoints
 
 - `POST /create-playlist-optimized-stream` - Create playlist (streaming)
-- `GET /user-playlists` - Get user's playlists
+- `GET /user-playlists` - Get playlists
 - `GET /user-profile` - Get Spotify profile
-
-### Chat Endpoints
-
-- `GET /chat-search-optimized` - Search chats
-- `GET /chat/{chat_id}/recent-messages` - Get recent messages
 
 See **http://127.0.0.1:8888/docs** for interactive API documentation.
 
