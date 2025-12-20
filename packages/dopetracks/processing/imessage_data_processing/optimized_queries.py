@@ -193,9 +193,9 @@ def get_chat_list(db_path: str) -> List[Dict[str, Any]]:
             chat.display_name,
             chat.chat_identifier,
             COUNT(DISTINCT message.ROWID) as message_count,
-            -- Participant count: distinct handles + self if present
+            -- Participant count: distinct handles from chat_handle_join + self if present
             (
-              COUNT(DISTINCT message.handle_id)
+              COUNT(DISTINCT chat_handle_join.handle_id)
               + CASE WHEN SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END
             ) AS member_count,
             COUNT(DISTINCT CASE WHEN message.is_from_me = 1 THEN message.ROWID END) as user_message_count,
@@ -204,6 +204,7 @@ def get_chat_list(db_path: str) -> List[Dict[str, Any]]:
         FROM chat
         LEFT JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
         LEFT JOIN message ON chat_message_join.message_id = message.ROWID
+        LEFT JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
         WHERE chat.display_name IS NOT NULL
         GROUP BY chat.ROWID, chat.display_name, chat.chat_identifier
         HAVING message_count > 0
@@ -729,12 +730,16 @@ def search_chats_by_name(db_path: str, query: str) -> List[Dict[str, Any]]:
             chat.display_name,
             chat.chat_identifier,
             COUNT(DISTINCT message.ROWID) as message_count,
-            COUNT(DISTINCT message.handle_id) as member_count,
+            (
+              COUNT(DISTINCT chat_handle_join.handle_id)
+              + CASE WHEN SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END
+            ) as member_count,
             COUNT(DISTINCT CASE WHEN message.is_from_me = 1 THEN message.ROWID END) as user_message_count,
             MAX(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as last_message_date
         FROM chat
         LEFT JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
         LEFT JOIN message ON chat_message_join.message_id = message.ROWID
+        LEFT JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
         WHERE chat.ROWID IN ({chat_id_placeholders})
         GROUP BY chat.ROWID, chat.display_name, chat.chat_identifier
         HAVING message_count > 0
@@ -1137,12 +1142,16 @@ def advanced_chat_search(
             chat.display_name,
             chat.chat_identifier,
             COUNT(DISTINCT message.ROWID) as message_count,
-            COUNT(DISTINCT message.handle_id) as member_count,
+            (
+              COUNT(DISTINCT chat_handle_join.handle_id)
+              + CASE WHEN SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END
+            ) as member_count,
             COUNT(DISTINCT CASE WHEN message.is_from_me = 1 THEN message.ROWID END) as user_message_count,
             MAX(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as last_message_date
         FROM chat
         LEFT JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
         LEFT JOIN message ON chat_message_join.message_id = message.ROWID
+        LEFT JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
         WHERE chat.ROWID IN ({chat_id_placeholders})
         GROUP BY chat.ROWID, chat.display_name, chat.chat_identifier
         HAVING message_count > 0
@@ -1305,12 +1314,16 @@ def advanced_chat_search_streaming(
                     chat.display_name,
                     chat.chat_identifier,
                     COUNT(DISTINCT message.ROWID) as message_count,
-                    COUNT(DISTINCT message.handle_id) as member_count,
+                    (
+                      COUNT(DISTINCT chat_handle_join.handle_id)
+                      + CASE WHEN SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END
+                    ) as member_count,
                     COUNT(DISTINCT CASE WHEN message.is_from_me = 1 THEN message.ROWID END) as user_message_count,
                     MAX(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as last_message_date
                 FROM chat
                 LEFT JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
                 LEFT JOIN message ON chat_message_join.message_id = message.ROWID
+                LEFT JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
                 WHERE chat.ROWID IN ({chat_id_placeholders})
                 GROUP BY chat.ROWID, chat.display_name, chat.chat_identifier
                 HAVING message_count > 0
