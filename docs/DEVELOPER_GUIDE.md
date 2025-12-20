@@ -162,11 +162,11 @@ When adding tests, create a `tests/` directory with:
 
 ### Key Components
 
-1. **Native macOS App**: SwiftUI interface, manages Python backend lifecycle
-2. **FastAPI Backend**: REST API server, handles all business logic
-3. **Spotify Integration**: OAuth flow, token management (single-user), playlist creation
-4. **iMessage Processing**: Database queries, message extraction, FTS indexing, URL parsing
-5. **Playlist Generation**: Track processing, batch adding, progress streaming
+1. **Native macOS App (UI Layer)**: SwiftUI interface, manages Python backend lifecycle. Today views call `APIClient` directly; if you prefer stricter layering, introduce ViewModels gradually.
+2. **FastAPI Backend (API Layer)**: REST API server, handles all business logic
+3. **Processing Layer**: iMessage processing, Spotify integration, data enrichment, FTS
+4. **Data Layer**: DB models and connection
+5. **Utilities**: Config/helpers
 
 See **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)** for detailed architecture.
 

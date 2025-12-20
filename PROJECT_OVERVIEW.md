@@ -79,24 +79,28 @@
 
 ### Application Layers
 
-1. **API Layer** (`app.py`)
+1. **SwiftUI App (UI Layer)**
+   - SwiftUI views consume backend services via `APIClient`
+   - (Optional, future) ViewModels can be added to isolate UI logic; today views call the service directly
+
+2. **API Layer** (`app.py`)
    - FastAPI application with REST API endpoints
    - Request/response handling
    - Single-user setup (no authentication needed)
 
-2. **Service Layer** (`services/`)
+3. **Service Layer** (`services/`)
    - `session_storage.py`: In-memory session data caching
-
-3. **Data Layer** (`database/`)
-   - `models.py`: SQLAlchemy ORM models
-   - `connection.py`: Database connection and initialization
 
 4. **Processing Layer** (`processing/`)
    - `imessage_data_processing/`: Extract and clean Messages data
    - `spotify_interaction/`: Spotify API integration
    - `prepare_data_main.py`: Main data preparation pipeline
 
-5. **Utilities** (`utils/`)
+5. **Data Layer** (`database/`)
+   - `models.py`: SQLAlchemy ORM models
+   - `connection.py`: Database connection and initialization
+
+6. **Utilities** (`utils/`)
    - Helper functions for database paths
    - Configuration management
 
