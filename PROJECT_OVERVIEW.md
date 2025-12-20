@@ -170,10 +170,12 @@ dopeventures/
   - `import_contact_info.py`: Contact information processing
 
 #### API Endpoints
-- **`packages/dopetracks/api/`**
-  - REST API endpoints for chats, messages, playlists
+- **`packages/dopetracks/app.py`**
+  - All REST API endpoints defined in `app.py`
+  - Chat search and message endpoints
   - FTS indexing endpoints
   - Spotify OAuth endpoints
+  - Playlist creation endpoints
 
 ### Native macOS App
 - **`DopetracksApp/`**: SwiftUI native macOS application
@@ -397,31 +399,17 @@ CORS_ORIGINS=["http://localhost:8889", "http://localhost:3000"]
 
 ## Workflows
 
-### User Registration & Setup
+### Setup & Spotify Authorization
 
-1. **Register Account**
-   - POST `/auth/register` with username, email, password
-   - Creates user record, initializes session
-   - Returns user info and sets session cookie
-
-2. **Authorize Spotify**
+1. **Authorize Spotify**
    - GET `/get-client-id` to get OAuth client ID
    - Redirect to Spotify authorization
    - Callback at `/callback` stores tokens
 
-3. **Provide Messages Database**
-   - Option A: Validate system username
-     - GET `/validate-username?username=...`
-     - Checks `/Users/{username}/Library/Messages/chat.db`
-   - Option B: Upload database file
-     - POST `/validate-chat-file` with .db file
-     - Validates format and stores file
-
-4. **Prepare Data**
-   - GET `/chat-search-progress` (Server-Sent Events)
-   - Extracts messages from database
-   - Identifies Spotify links
-   - Caches processed data
+2. **Access Messages Database**
+   - App automatically reads from `~/Library/Messages/chat.db`
+   - Requires Full Disk Access permission on macOS
+   - FTS indexing can be triggered via `/fts/index` endpoint
 
 ### Chat Search & Playlist Creation
 
@@ -447,11 +435,11 @@ chat.db (input)
     ↓
 [Data Enrichment] → Add metadata, identify Spotify links
     ↓
+[FTS Indexing] → Create full-text search index (optional, for faster searches)
+    ↓
 [Spotify Processing] → Extract URLs, fetch metadata
     ↓
-[Cache Storage] → Store in user_data_cache table
-    ↓
-[Frontend Display] → Search, filter, create playlists
+[Swift App Display] → Search, filter, create playlists
 ```
 
 ---
@@ -475,13 +463,13 @@ chat.db (input)
 
 3. **Start Application**
    ```bash
-   python3 start.py
+   python3 dev_server.py
    ```
 
 4. **Access Application**
-   - Frontend: http://localhost:8889 (if running separately)
-   - Backend API: http://localhost:8888
-   - API Docs: http://localhost:8888/docs
+   - Backend API: http://127.0.0.1:8888
+   - API Docs: http://127.0.0.1:8888/docs
+   - Swift App: Open in Xcode and run
 
 ### Development Workflow
 
@@ -495,10 +483,10 @@ chat.db (input)
    - Test endpoints individually
    - Check logs in `backend.log`
 
-3. **Frontend Development**
-   - Edit files in `website/`
-   - Update `config.js` for backend URL
-   - FastAPI serves static files in development
+3. **Swift App Development**
+   - Open `DopetracksApp/DopetracksApp.xcodeproj` in Xcode
+   - Edit Swift files in `DopetracksApp/DopetracksApp/`
+   - Backend runs automatically via `BackendManager`
 
 ### Common Tasks
 
@@ -524,9 +512,9 @@ tail -f backend.log
 
 ### Project Entry Points
 
-- **Main Application**: `start.py`
-- **Direct FastAPI**: `packages/dopetracks/app.py`
-- **Bundled App**: `scripts/launch/launch_bundled.py` (for packaged macOS app)
+- **Development Server**: `dev_server.py` (simple launcher with auto-reload)
+- **Production Launcher**: `scripts/launch/app_launcher.py` (used by Swift app)
+- **Direct FastAPI**: `packages/dopetracks/app.py` (can be run directly with uvicorn)
 - **Legacy Interface**: `packages/dopetracks/dopetracks/frontend_interface/web_interface.py`
 
 ---

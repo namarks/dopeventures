@@ -65,18 +65,17 @@ DEBUG=True
 dopeventures/
 ├── packages/
 │   └── dopetracks/          # Main application package
-│       ├── api/             # API endpoints
-│       │   ├── auth.py      # Authentication endpoints
-│       │   └── admin.py    # Admin endpoints
-│       ├── auth/            # Authentication utilities
+│       ├── app.py           # FastAPI application (main entrypoint)
+│       ├── config.py        # Configuration management
 │       ├── database/        # Database models and connection
 │       ├── processing/      # Data processing modules
 │       ├── services/        # Business logic services
 │       └── utils/           # Utility functions
-├── website/                 # Frontend (HTML/JS/CSS)
+├── DopetracksApp/           # Native macOS Swift app
 ├── scripts/                 # Utility scripts
 ├── docs/                    # Documentation
-├── start.py                 # Application entry point
+├── dev_server.py            # Development server launcher
+├── scripts/launch/          # Production launchers
 └── requirements.txt         # Python dependencies
 ```
 
@@ -93,7 +92,7 @@ See **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)** for detailed architecture.
 source venv/bin/activate
 
 # Run the application
-python3 start.py
+python3 dev_server.py
 ```
 
 The application will start on **http://127.0.0.1:8888**
@@ -119,30 +118,30 @@ Once running, access:
 
 ## Testing
 
-### Running Tests
+### Current Status
 
-```bash
-# Run all tests
-pytest
+**Note**: Automated tests are not yet implemented. The codebase is currently tested manually.
 
-# Run with coverage
-pytest --cov=packages/dopetracks
+### Manual Testing
 
-# Run specific test file
-pytest tests/test_auth.py
-```
+1. **Backend Testing**: Use Swagger UI at http://127.0.0.1:8888/docs
+2. **Swift App Testing**: Run the app in Xcode and test UI interactions
+3. **Integration Testing**: Test full workflow (chat search → playlist creation)
 
 ### Testing via Swagger UI
 
 See **[TESTING_VIA_SWAGGER.md](./TESTING_VIA_SWAGGER.md)** for step-by-step guide.
 
-### Frontend Testing
-
-See **[FRONTEND_TESTING_GUIDE.md](./FRONTEND_TESTING_GUIDE.md)** for complete frontend testing guide.
-
 ### Manual Testing Checklist
 
 See **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** for complete testing workflow.
+
+### Future: Adding Automated Tests
+
+When adding tests, create a `tests/` directory with:
+- `tests/unit/` - Unit tests for individual functions
+- `tests/integration/` - Integration tests for API endpoints
+- `tests/fixtures/` - Test data and fixtures
 
 ---
 
@@ -158,16 +157,17 @@ See **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** for complete testing workflow.
 
 ### Frontend
 
-- **Technology**: Vanilla JavaScript, HTML, CSS
-- **Served by**: FastAPI static file serving
-- **Communication**: REST API calls to backend
+- **Technology**: SwiftUI native macOS app
+- **Location**: `DopetracksApp/`
+- **Communication**: HTTP REST API calls to backend (localhost:8888)
 
 ### Key Components
 
-1. **Authentication System**: User registration, login, session management
-2. **Spotify Integration**: OAuth flow, token management, playlist creation
-3. **iMessage Processing**: Database queries, message extraction, URL parsing
-4. **Playlist Generation**: Track processing, batch adding, progress streaming
+1. **Native macOS App**: SwiftUI interface, manages Python backend lifecycle
+2. **FastAPI Backend**: REST API server, handles all business logic
+3. **Spotify Integration**: OAuth flow, token management (single-user), playlist creation
+4. **iMessage Processing**: Database queries, message extraction, FTS indexing, URL parsing
+5. **Playlist Generation**: Track processing, batch adding, progress streaming
 
 See **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)** for detailed architecture.
 
@@ -177,13 +177,10 @@ See **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)** for detailed architecture.
 
 ### Core Tables
 
-- **users**: User accounts
-- **user_sessions**: Active user sessions
-- **user_spotify_tokens**: Per-user Spotify OAuth tokens
-- **user_data_cache**: Cached user data (messages, contacts)
-- **user_uploaded_files**: User-uploaded database files
-- **user_playlists**: Created playlists metadata
-- **spotify_tokens**: Legacy global Spotify tokens (deprecated)
+- **spotify_tokens**: Single-user Spotify OAuth tokens
+- **local_cache**: Optional local data cache (currently unused)
+
+**Note**: This is a single-user application. No user accounts or authentication tables.
 
 See **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)** for complete schema.
 
@@ -191,13 +188,16 @@ See **[PROJECT_OVERVIEW.md](../PROJECT_OVERVIEW.md)** for complete schema.
 
 ## API Documentation
 
-### Authentication Endpoints
+### Core Endpoints
 
-- `POST /auth/register` - Register new user
-- `POST /auth/login` - User login
-- `POST /auth/logout` - User logout
-- `GET /auth/me` - Get current user
-- `GET /auth/status` - Check authentication status
+- `GET /health` - Health check
+- `GET /` - API information
+
+### Chat Endpoints
+
+- `GET /chats` - Get all chats
+- `GET /chat-search-optimized` - Search chats
+- `GET /chat/{chat_id}/recent-messages` - Get recent messages
 
 ### Playlist Endpoints
 
@@ -261,10 +261,10 @@ See **http://127.0.0.1:8888/docs** for interactive API documentation.
 
 ```bash
 # Start development server
-python3 start.py
+python3 dev_server.py
 
-# Run tests
-pytest
+# Note: Automated tests not yet implemented
+# Manual testing via Swagger UI: http://127.0.0.1:8888/docs
 
 # Check code style
 flake8 packages/dopetracks
@@ -280,7 +280,7 @@ alembic revision --autogenerate -m "description"
 
 - Health: http://127.0.0.1:8888/health
 - API Docs: http://127.0.0.1:8888/docs
-- Frontend: http://127.0.0.1:8888
+- Root: http://127.0.0.1:8888/
 
 ---
 

@@ -38,37 +38,26 @@ def convert_to_apple_timestamp(date_str: str) -> int:
     delta = dt - APPLE_EPOCH
     return int(delta.total_seconds() * 1e9)
 
-def get_user_db_path(user_data_service) -> Optional[str]:
-    """Get the Messages database path for a user."""
-    # Try preferred path first
-    preferred_path = user_data_service.get_preferred_db_path()
-    if preferred_path and os.path.exists(preferred_path):
-        return preferred_path
+def get_user_db_path() -> Optional[str]:
+    """
+    Get the Messages database path for the current user.
     
-    # Check uploaded files
-    uploaded_files = user_data_service.get_uploaded_files()
-    for file in uploaded_files:
-        if file.original_filename.endswith('.db') and os.path.exists(file.storage_path):
-            return file.storage_path
+    Returns the standard macOS Messages database path.
+    For single-user setup, this is always ~/Library/Messages/chat.db
+    """
+    # Standard macOS Messages database path
+    default_path = os.path.expanduser("~/Library/Messages/chat.db")
     
-    # Try system paths
-    system_user = os.path.expanduser("~").split("/")[-1]
-    possible_paths = [
-        f"/Users/{system_user}/Library/Messages/chat.db",
-        f"/Users/{user_data_service.user.username}/Library/Messages/chat.db",
-        os.path.expanduser("~/Library/Messages/chat.db")
-    ]
-    
-    for path in possible_paths:
-        if os.path.exists(path):
-            try:
-                # Test database access
-                conn = sqlite3.connect(path)
-                conn.execute("SELECT COUNT(*) FROM message LIMIT 1;")
-                conn.close()
-                return path
-            except Exception:
-                continue
+    if os.path.exists(default_path):
+        try:
+            # Test database access
+            conn = sqlite3.connect(default_path)
+            conn.execute("SELECT COUNT(*) FROM message LIMIT 1;")
+            conn.close()
+            return default_path
+        except Exception as e:
+            logger.warning(f"Messages database exists but cannot be accessed: {e}")
+            return None
     
     return None
 
