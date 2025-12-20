@@ -412,7 +412,6 @@ struct ChatRow: View {
 }
 
 #Preview {
-    ChatListView()
-        .environmentObject(APIClient())
+    ChatListView(apiClient: APIClient())
 }
 
