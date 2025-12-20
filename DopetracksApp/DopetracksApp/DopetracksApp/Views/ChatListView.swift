@@ -302,7 +302,8 @@ struct ChatListView: View {
         error = nil
         
         do {
-            chats = try await apiClient.getAllChats()
+            let fetched = try await apiClient.getAllChats()
+            chats = sortChats(fetched)
         } catch {
             self.error = error
         }
@@ -356,14 +357,14 @@ struct ChatListView: View {
                         newChats.append(chat)
                         print("Received chat: \(chat.displayName)")
                         await MainActor.run {
-                            chats = newChats
+                            chats = sortChats(newChats)
                         }
                     }
                     
                     print("Stream completed. Total chats: \(newChats.count)")
                     
                     await MainActor.run {
-                        chats = newChats
+                        chats = sortChats(newChats)
                         isLoading = false
                     }
                 } else if searchFilters.hasFilters {
@@ -378,12 +379,12 @@ struct ChatListView: View {
                         newChats.append(chat)
                         // Update UI incrementally as results arrive
                         await MainActor.run {
-                            chats = newChats
+                            chats = sortChats(newChats)
                         }
                     }
                     
                     await MainActor.run {
-                        chats = newChats
+                        chats = sortChats(newChats)
                         isLoading = false
                     }
                 } else {
@@ -411,6 +412,14 @@ struct ChatListView: View {
     
     private func searchChats() async {
         await performSearch()
+    }
+    
+    private func sortChats(_ list: [Chat]) -> [Chat] {
+        list.sorted { lhs, rhs in
+            let lDate = lhs.lastMessageDate ?? Date.distantPast
+            let rDate = rhs.lastMessageDate ?? Date.distantPast
+            return lDate > rDate
+        }
     }
 }
 
