@@ -12,6 +12,7 @@ struct PlaylistListView: View {
     @State private var playlists: [Playlist] = []
     @State private var isLoading = false
     @State private var error: Error?
+    @State private var hasLoadedOnce = false
     
     var body: some View {
         NavigationStack {
@@ -58,7 +59,11 @@ struct PlaylistListView: View {
             }
             .navigationTitle("Playlists")
             .task {
-                await loadPlaylists()
+                // Avoid reloading every time user reopens the tab
+                if !hasLoadedOnce {
+                    await loadPlaylists()
+                    hasLoadedOnce = true
+                }
             }
         }
     }
