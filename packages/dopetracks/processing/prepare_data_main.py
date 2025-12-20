@@ -19,7 +19,9 @@ def pull_and_clean_messages(db_path: Optional[str] = None):
     """
     Main function to pull and clean iMessage data from the specified database.
     Args:
-        db_path (Optional[str]): Path to the iMessage database file. If not provided, defaults to "/Users/nmarks/Library/Messages/chat.db".
+        db_path (Optional[str]): Path to the iMessage database file. 
+            If not provided, defaults to the standard macOS Messages database path:
+            ~/Library/Messages/chat.db
     Returns:
         dict: A dictionary containing the following datasets:
             - "messages": DataFrame containing cleaned and enriched message data.
@@ -34,7 +36,11 @@ def pull_and_clean_messages(db_path: Optional[str] = None):
     """
     """Main function to pull data."""
     if db_path is None:
-        db_path = "/Users/nmarks/Library/Messages/chat.db"  # Default path
+        # Use standard macOS Messages database path
+        import os
+        from pathlib import Path
+        home = Path.home()
+        db_path = str(home / "Library" / "Messages" / "chat.db")
 
     logging.info(
 '''

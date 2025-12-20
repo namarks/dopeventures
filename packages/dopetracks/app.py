@@ -25,7 +25,7 @@ if __name__ == "__main__":
 
 from .config import settings
 from .database.connection import get_db, init_database, check_database_health
-from .database.models import SpotifyToken, LocalCache
+from .database.models import SpotifyToken
 from .utils.helpers import get_db_path, validate_db_path
 from .services.session_storage import session_storage
 

@@ -28,10 +28,9 @@
 
 ### Technology Stack
 - **Backend**: FastAPI (Python 3.11+)
-- **Database**: SQLite (development) / PostgreSQL (production)
-- **Frontend**: Static HTML/JS/CSS served by FastAPI
-- **Authentication**: Session-based with password hashing
-- **OAuth**: Spotify OAuth 2.0 flow
+- **Database**: SQLite (local database)
+- **Frontend**: Native macOS SwiftUI app
+- **OAuth**: Spotify OAuth 2.0 flow (single-user)
 
 ---
 
@@ -40,32 +39,50 @@
 ### High-Level Architecture
 
 ```
-┌─────────────────┐
-│   Frontend      │  (website/ - HTML/JS/CSS)
-│   (Port 8889)   │
-└────────┬────────┘
-         │ HTTP Requests
-         ▼
-┌─────────────────┐
-│   FastAPI App   │  (app.py)
-│   (Port 8888)   │
-└────────┬────────┘
-         │
-    ┌────┴────┬──────────────┬─────────────┐
-    ▼         ▼              ▼             ▼
-┌────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
-│Database│ │Spotify   │ │File      │ │Processing│
-│(SQLite │ │API       │ │Storage   │ │Pipeline  │
-│/PG)    │ │          │ │          │ │          │
-└────────┘ └──────────┘ └──────────┘ └──────────┘
+┌─────────────────────────────────────────┐
+│      Native macOS App (SwiftUI)         │
+│  ┌───────────────────────────────────┐  │
+│  │  BackendManager                   │  │  ← Launches/manages Python backend
+│  │  - Starts Python process          │  │
+│  │  - Health checks                  │  │
+│  └──────────────┬────────────────────┘  │
+│                 │                       │
+│  ┌──────────────▼────────────────────┐  │
+│  │  APIClient                        │  │  ← HTTP client
+│  │  - REST API calls                 │  │
+│  └──────────────┬────────────────────┘  │
+└─────────────────┼───────────────────────┘
+                  │ HTTP REST API (localhost:8888)
+                  ▼
+┌─────────────────────────────────────────┐
+│      FastAPI Backend (Python)           │
+│      (app.py - Port 8888)               │
+└──────────┬──────────────────────────────┘
+           │
+    ┌──────┴──────┬──────────────┬─────────────┐
+    ▼             ▼              ▼             ▼
+┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+│Database  │ │Spotify   │ │Messages  │ │Processing│
+│(SQLite)  │ │API       │ │chat.db   │ │Pipeline  │
+│          │ │(External)│ │(File)    │ │          │
+│-Tokens   │ │          │ │          │ │-FTS      │
+│-Cache    │ │          │ │          │ │-Search   │
+└──────────┘ └──────────┘ └──────────┘ └──────────┘
 ```
+
+**Key Points:**
+- **Swift App** manages and communicates with the Python backend
+- **BackendManager** launches the Python process automatically
+- **APIClient** handles all HTTP communication
+- **Backend** accesses local files (chat.db) and external APIs (Spotify)
+- **Single-user**: No authentication, all data is local
 
 ### Application Layers
 
 1. **API Layer** (`app.py`)
-   - FastAPI application with route handlers
+   - FastAPI application with REST API endpoints
    - Request/response handling
-   - Local data access (no authentication needed)
+   - Single-user setup (no authentication needed)
 
 2. **Service Layer** (`services/`)
    - `session_storage.py`: In-memory session data caching
@@ -91,11 +108,11 @@
 ```
 dopeventures/
 ├── packages/dopetracks/               # Main application package 
-├── website/                           # Frontend static files
-├── user_uploads/                      # Per-user uploaded files
+├── DopetracksApp/                     # Native macOS Swift app
+├── user_uploads/                      # Uploaded chat.db files (optional)
 ├── .env                               # Environment variables (not in repo)
-├── start.py                           # Application entry point
-├── scripts/launch/launch_bundled.py  # Bundled app launcher (for packaging)
+├── dev_server.py                      # Development server launcher
+├── scripts/launch/app_launcher.py    # Production/bundled app launcher
 └── requirements.txt                   # Python dependencies
 ```
 
@@ -115,28 +132,16 @@ dopeventures/
 #### Database
 - **`packages/dopetracks/database/models.py`**
   - SQLAlchemy ORM models
-  - User, Session, Spotify tokens, data cache, playlists
+  - `SpotifyToken`: Single-user Spotify OAuth tokens
+  - `LocalCache`: Local data cache (optional, currently unused)
 
 - **`packages/dopetracks/database/connection.py`**
   - Database connection management
   - Initialization and health checks
 
-#### Authentication & Security
-- **`packages/dopetracks/api/auth.py`**
-  - Authentication endpoints (register, login, logout, password reset)
-
-- **`packages/dopetracks/auth/security.py`**
-  - Password hashing and validation
-  - File content hashing
-  - Secure filename generation
-
-- **`packages/dopetracks/auth/dependencies.py`**
-  - FastAPI dependencies for authentication
-  - Current user retrieval
-
 #### Services
-- **`packages/dopetracks/services/user_data.py`**
-  - Per-user data management
+- **`packages/dopetracks/services/session_storage.py`**
+  - In-memory session data caching
   - File upload handling
   - Data caching (session + database)
   - Spotify token storage
@@ -164,11 +169,11 @@ dopeventures/
 - **`packages/dopetracks/processing/contacts_data_processing/`**
   - `import_contact_info.py`: Contact information processing
 
-#### Admin
-- **`packages/dopetracks/api/admin.py`**
-  - Admin-only endpoints
-  - User management
-  - System statistics
+#### API Endpoints
+- **`packages/dopetracks/api/`**
+  - REST API endpoints for chats, messages, playlists
+  - FTS indexing endpoints
+  - Spotify OAuth endpoints
 
 ### Native macOS App
 - **`DopetracksApp/`**: SwiftUI native macOS application
@@ -179,19 +184,13 @@ dopeventures/
 
 ### Data Storage Locations
 
-#### User Data
-- **Uploaded Files**: `user_uploads/user_{id}/`
-  - Per-user directory for uploaded chat.db files
-  - Files stored with secure, hashed filenames
-
-- **Database Cache**: `user_data_cache` table
-  - Serialized DataFrames (pickle + base64)
-  - Messages, contacts, handles data
-  - Per-user isolation
+#### Application Data
+- **Uploaded Files** (optional): `user_uploads/`
+  - Optional directory for uploaded chat.db files
+  - Used if user wants to process a different Messages database
 
 - **Session Data**: 
-  - In-memory: `session_storage` (temporary)
-  - Database: `user_sessions` table (persistent)
+  - In-memory: `session_storage` (temporary caching)
 
 #### Database Files
 - **Main DB**: `~/.dopetracks/local.db` (user data directory)
@@ -215,63 +214,18 @@ dopeventures/
 - **`runtime.txt`**: Python version specification
 - **`requirements.txt`**: Python package dependencies
 
-### Migration Scripts
-- **`scripts/utils/migrate_password_reset.py`**: Added password reset functionality
-- **`scripts/utils/migrate_roles.py`**: Added user roles (user, admin, super_admin)
-- **`scripts/utils/promote_admin.py`**: Utility to promote users to admin
-- **`scripts/utils/reset_password.py`**: Utility script for password resets
-
 ---
 
 ## Database Schema
 
 ### Tables
 
-#### `users`
-User accounts and authentication.
+#### `spotify_tokens`
+Single-user Spotify OAuth tokens.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | Integer | Primary key |
-| `username` | String(50) | Unique username |
-| `email` | String(100) | Unique email |
-| `password_hash` | String(255) | Hashed password |
-| `is_active` | Boolean | Account status |
-| `role` | String(20) | user, admin, super_admin |
-| `permissions` | Text | JSON permissions |
-| `created_at` | DateTime | Account creation |
-| `updated_at` | DateTime | Last update |
-
-**Relationships:**
-- One-to-many: `user_sessions`
-- One-to-one: `user_spotify_tokens`
-- One-to-many: `user_data_cache`
-- One-to-many: `user_playlists`
-- One-to-many: `user_password_resets`
-
-#### `user_sessions`
-Active user sessions.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | Integer | Primary key |
-| `session_id` | String(255) | Unique session identifier |
-| `user_id` | Integer | Foreign key to users |
-| `expires_at` | DateTime | Session expiration |
-| `created_at` | DateTime | Session creation |
-| `ip_address` | String(45) | Client IP (IPv6 support) |
-| `user_agent` | String(500) | Client user agent |
-
-**Indexes:**
-- `idx_session_user_expires`: (user_id, expires_at)
-
-#### `user_spotify_tokens`
-Spotify OAuth tokens per user.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | Integer | Primary key |
-| `user_id` | Integer | Foreign key to users (unique) |
 | `access_token` | Text | OAuth access token |
 | `refresh_token` | Text | OAuth refresh token |
 | `token_type` | String(50) | Usually "Bearer" |
@@ -280,111 +234,44 @@ Spotify OAuth tokens per user.
 | `created_at` | DateTime | Token creation |
 | `updated_at` | DateTime | Last update |
 
-#### `user_data_cache`
-Cached processed data per user.
+**Note**: This is a single-user application. Only one set of Spotify tokens is stored.
+
+#### `local_cache` (optional, currently unused)
+Local cache for processed data.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | Integer | Primary key |
-| `user_id` | Integer | Foreign key to users |
-| `data_type` | String(50) | 'messages', 'contacts', 'handles', 'preferred_db_path' |
-| `data_blob` | Text | JSON serialized data (or base64 pickle for DataFrames) |
-| `file_hash` | String(64) | SHA256 hash of source file |
+| `cache_key` | String(100) | Unique cache key |
+| `data_blob` | Text | JSON serialized data |
 | `created_at` | DateTime | Cache creation |
 | `updated_at` | DateTime | Last update |
-
-**Indexes:**
-- `idx_user_data_type`: (user_id, data_type)
-
-#### `user_uploaded_files`
-Track uploaded files per user.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | Integer | Primary key |
-| `user_id` | Integer | Foreign key to users |
-| `filename` | String(255) | Secure storage filename |
-| `original_filename` | String(255) | Original filename |
-| `file_size` | Integer | File size in bytes |
-| `file_hash` | String(64) | SHA256 hash |
-| `storage_path` | String(500) | File system path |
-| `content_type` | String(100) | MIME type |
-| `created_at` | DateTime | Upload time |
-
-**Indexes:**
-- `idx_user_files`: (user_id, created_at)
-
-#### `user_playlists`
-Track created playlists per user.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | Integer | Primary key |
-| `user_id` | Integer | Foreign key to users |
-| `spotify_playlist_id` | String(100) | Spotify playlist ID |
-| `playlist_name` | String(255) | Playlist name |
-| `tracks_count` | Integer | Number of tracks |
-| `date_range_start` | String(10) | YYYY-MM-DD |
-| `date_range_end` | String(10) | YYYY-MM-DD |
-| `selected_chats` | Text | JSON array of chat names |
-| `created_at` | DateTime | Creation time |
-
-**Indexes:**
-- `idx_user_playlists`: (user_id, created_at)
-
-#### `user_password_resets`
-Password reset tokens.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | Integer | Primary key |
-| `user_id` | Integer | Foreign key to users |
-| `reset_token` | String(255) | Unique reset token |
-| `expires_at` | DateTime | Token expiration |
-| `used_at` | DateTime | When token was used (nullable) |
-| `created_at` | DateTime | Token creation |
-| `ip_address` | String(45) | Request IP |
-| `user_agent` | String(500) | Request user agent |
-
-**Indexes:**
-- `idx_reset_token_expires`: (reset_token, expires_at)
-- `idx_user_resets`: (user_id, created_at)
 
 ---
 
 ## Key Components
 
-### UserDataService
-**Location**: `services/user_data.py`
+### Session Storage
+**Location**: `services/session_storage.py`
 
-Manages all user-specific data with complete isolation:
-- **Data Caching**: Two-tier caching (session memory + database)
-- **File Management**: Upload, storage, retrieval, deletion
-- **Spotify Tokens**: OAuth token storage and retrieval
-- **Database Paths**: Preferred Messages database path storage
-
-### Authentication System
-**Location**: `api/auth.py`, `auth/security.py`
-
-- **Registration**: Username/email validation, password strength checking
-- **Login**: Session-based authentication with secure cookies
-- **Password Reset**: Token-based reset flow with expiration
-- **Session Management**: Automatic expiration, cleanup
+- **In-Memory Caching**: Temporary session data storage
+- **Data Types**: Messages, contacts, handles data
+- **Lifecycle**: Cleared when session ends
 
 ### Data Processing Pipeline
 **Location**: `processing/prepare_data_main.py`
 
-1. **Extraction**: Read from chat.db (system path or uploaded file)
+1. **Extraction**: Read from chat.db (defaults to `~/Library/Messages/chat.db`)
 2. **Cleaning**: Normalize message data, handle edge cases
 3. **Enrichment**: Add metadata, identify Spotify links
-4. **Caching**: Store processed DataFrames for quick access
+4. **FTS Indexing**: Full-text search index for fast message searches
 
 ### Spotify Integration
 **Location**: `processing/spotify_interaction/`
 
-- **OAuth Flow**: Per-user token management
+- **OAuth Flow**: Single-user token management (stored in `spotify_tokens` table)
 - **URL Processing**: Extract and validate Spotify links
-- **Metadata Caching**: Local SQLite cache for track metadata
+- **Metadata Caching**: Local SQLite cache for track metadata (`~/.spotify_cache/spotify_cache.db`)
 - **Playlist Creation**: Generate playlists from selected chats
 
 ---
@@ -393,22 +280,23 @@ Manages all user-specific data with complete isolation:
 
 ### Working Features ✅
 
-1. **User Management**
-   - User registration with validation
-   - Login/logout with session management
-   - Password reset with secure tokens
-   - Role-based access control (user, admin, super_admin)
-
-2. **Data Processing**
-   - iMessage database extraction (system path or file upload)
+1. **Data Processing**
+   - iMessage database extraction (defaults to `~/Library/Messages/chat.db`)
    - Message cleaning and normalization
    - Spotify link identification
-   - Per-user data caching
+   - Full-text search (FTS) indexing for fast searches
+   - In-memory session caching
 
-3. **Spotify Integration**
-   - OAuth 2.0 authentication (per-user)
-   - Token storage and management
-   - Playlist creation
+2. **Spotify Integration**
+   - OAuth 2.0 authentication (single-user)
+   - Token storage and management (in `spotify_tokens` table)
+   - Playlist creation from selected chats and date ranges
+
+3. **Native macOS App**
+   - SwiftUI interface
+   - Automatic backend management
+   - Chat browsing and search
+   - Playlist creation workflow
    - Metadata caching
 
 4. **File Management**

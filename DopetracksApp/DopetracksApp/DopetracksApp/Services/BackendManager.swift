@@ -44,8 +44,21 @@ class BackendManager: ObservableObject {
         }
         
         // Check if backend is already running (for development mode)
+        // Try multiple times with small delays to handle race conditions
         print("Checking if backend is already running...")
-        if await checkBackendHealth() {
+        var backendDetected = false
+        for attempt in 1...3 {
+            if await checkBackendHealth() {
+                backendDetected = true
+                break
+            }
+            // Wait a bit before retrying (only if not first attempt)
+            if attempt < 3 {
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            }
+        }
+        
+        if backendDetected {
             print("✅ Backend is already running, connecting to it")
             await MainActor.run {
                 isBackendRunning = true
@@ -283,16 +296,32 @@ class BackendManager: ObservableObject {
         do {
             let url = URL(string: "http://127.0.0.1:8888/health")!
             var request = URLRequest(url: url)
-            request.timeoutInterval = 2.0 // Short timeout for quick checks
+            request.timeoutInterval = 5.0 // Increased timeout to handle slow startup
+            request.cachePolicy = .reloadIgnoringLocalCacheData // Don't use cached responses
             
-            let (_, response) = try await URLSession.shared.data(for: request)
+            // Use a dedicated URLSession with appropriate configuration
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = 5.0
+            config.timeoutIntervalForResource = 10.0
+            config.waitsForConnectivity = false // Don't wait for network connectivity
+            let session = URLSession(configuration: config)
+            
+            let (_, response) = try await session.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
-                return httpResponse.statusCode == 200
+                let isHealthy = httpResponse.statusCode == 200
+                if !isHealthy {
+                    print("Backend health check returned status code: \(httpResponse.statusCode)")
+                }
+                return isHealthy
             }
         } catch {
             // Backend not ready yet - log for debugging
-            print("Backend health check failed: \(error.localizedDescription)")
+            if let urlError = error as? URLError {
+                print("Backend health check failed: \(urlError.localizedDescription) (code: \(urlError.code.rawValue))")
+            } else {
+                print("Backend health check failed: \(error.localizedDescription)")
+            }
         }
         return false
     }
@@ -301,9 +330,10 @@ class BackendManager: ObservableObject {
         healthCheckTask?.cancel()
         
         healthCheckTask = Task {
+            // Give backend a moment to fully initialize before first health check
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+            
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-                
                 // Check if process is still running
                 if let process = backendProcess, !process.isRunning {
                     await MainActor.run {
@@ -318,10 +348,17 @@ class BackendManager: ObservableObject {
                 
                 await MainActor.run {
                     if !isHealthy && isBackendRunning {
-                        isBackendRunning = false
-                        error = BackendError.connectionLost
+                        // Don't immediately mark as failed - retry once more
+                        // Sometimes the backend might be temporarily busy
+                        print("⚠️ Health check failed, will retry on next cycle")
+                    } else if isHealthy && !isBackendRunning {
+                        // Backend recovered
+                        isBackendRunning = true
+                        error = nil
                     }
                 }
+                
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds between checks
             }
         }
     }
