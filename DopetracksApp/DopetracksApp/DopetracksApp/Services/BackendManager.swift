@@ -296,13 +296,13 @@ class BackendManager: ObservableObject {
         do {
             let url = URL(string: "http://127.0.0.1:8888/health")!
             var request = URLRequest(url: url)
-            request.timeoutInterval = 5.0 // Increased timeout to handle slow startup
+            request.timeoutInterval = 10.0 // Increased timeout to handle slower startup
             request.cachePolicy = .reloadIgnoringLocalCacheData // Don't use cached responses
             
             // Use a dedicated URLSession with appropriate configuration
             let config = URLSessionConfiguration.default
-            config.timeoutIntervalForRequest = 5.0
-            config.timeoutIntervalForResource = 10.0
+            config.timeoutIntervalForRequest = 10.0
+            config.timeoutIntervalForResource = 20.0
             config.waitsForConnectivity = false // Don't wait for network connectivity
             let session = URLSession(configuration: config)
             
@@ -330,8 +330,8 @@ class BackendManager: ObservableObject {
         healthCheckTask?.cancel()
         
         healthCheckTask = Task {
-            // Give backend a moment to fully initialize before first health check
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
+            // Give backend a bit more time to fully initialize before first health check
+            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
             
             while !Task.isCancelled {
                 // Check if process is still running
