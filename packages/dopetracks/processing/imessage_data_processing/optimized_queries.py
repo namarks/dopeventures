@@ -193,10 +193,11 @@ def get_chat_list(db_path: str) -> List[Dict[str, Any]]:
             chat.display_name,
             chat.chat_identifier,
             COUNT(DISTINCT message.ROWID) as message_count,
-            -- Include self if there are any from_me messages
-            COUNT(DISTINCT message.handle_id) 
-              + CASE WHEN SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END 
-              AS member_count,
+            -- Participant count: distinct handles + self if present
+            (
+              COUNT(DISTINCT message.handle_id)
+              + CASE WHEN SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END
+            ) AS member_count,
             COUNT(DISTINCT CASE WHEN message.is_from_me = 1 THEN message.ROWID END) as user_message_count,
             MIN(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as first_message_date,
             MAX(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as last_message_date
