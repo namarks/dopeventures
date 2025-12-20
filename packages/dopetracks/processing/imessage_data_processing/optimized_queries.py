@@ -724,7 +724,7 @@ def search_chats_by_name(db_path: str, query: str) -> List[Dict[str, Any]]:
     chat_id_placeholders = ','.join(['?'] * len(chat_ids))
     
     # Now get full statistics for matching chats
-        stats_query = f"""
+    stats_query = f"""
         SELECT 
             chat.ROWID as chat_id,
             chat.display_name,
@@ -743,7 +743,7 @@ def search_chats_by_name(db_path: str, query: str) -> List[Dict[str, Any]]:
         WHERE chat.ROWID IN ({chat_id_placeholders})
         GROUP BY chat.ROWID, chat.display_name, chat.chat_identifier
         HAVING message_count > 0
-            ORDER BY last_message_date DESC
+        ORDER BY last_message_date DESC
         LIMIT 50
     """
     
