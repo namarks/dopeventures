@@ -21,7 +21,7 @@ final class ChatListViewModel: ObservableObject {
     @Published var hasLoadedOnce = false
     
     private var currentSearchTask: Task<Void, Never>?
-    private let apiClient: APIClient
+    let apiClient: APIClient
     
     init(apiClient: APIClient) {
         self.apiClient = apiClient
@@ -54,6 +54,10 @@ final class ChatListViewModel: ObservableObject {
         searchFilters = SearchFilters()
         searchText = ""
         Task { await loadAllChats() }
+    }
+    
+    func refreshPermissions() {
+        checkPermissions()
     }
     
     func loadAllChats() async {

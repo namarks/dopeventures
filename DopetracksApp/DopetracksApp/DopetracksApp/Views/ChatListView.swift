@@ -125,9 +125,9 @@ struct ChatListView: View {
                                     .buttonStyle(.borderedProminent)
                                     
                                     Button("Check Again") {
-                                        checkPermissions()
+                                        viewModel.refreshPermissions()
                                         Task {
-                                            await loadAllChats()
+                                            await viewModel.loadAllChats()
                                         }
                                     }
                                     .buttonStyle(.bordered)
@@ -207,7 +207,7 @@ struct ChatListView: View {
             }
         } detail: {
             if let selectedChat = selectedChat {
-                ChatDetailView(chat: selectedChat)
+                ChatDetailView(chat: selectedChat, apiClient: viewModel.apiClient)
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "message.fill")
@@ -224,141 +224,6 @@ struct ChatListView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        }
-    }
-    
-    private func checkPermissions() {
-        // Try to access Messages database to trigger permission prompt if needed
-        hasFullDiskAccess = PermissionManager.shared.checkFullDiskAccess()
-        
-        if !hasFullDiskAccess {
-            // Permission not granted - the system should show a prompt
-            // If it doesn't, we'll show instructions in the error view
-        }
-    }
-    
-    private func loadAllChats() async {
-        isLoading = true
-        error = nil
-        
-        do {
-            let fetched = try await apiClient.getAllChats()
-            chats = sortChats(fetched)
-        } catch {
-            self.error = error
-        }
-        
-        isLoading = false
-    }
-    
-    private func performSearch() async {
-        // Cancel any existing search
-        currentSearchTask?.cancel()
-        
-        // Create new search task
-        let searchTask = Task {
-            await MainActor.run {
-                isLoading = true
-                error = nil
-                chats = [] // Clear existing results
-            }
-            
-            do {
-                // Check if task was cancelled before starting
-                try Task.checkCancellation()
-                
-                print("🔍 performSearch called: searchText='\(searchText)', hasFilters=\(searchFilters.hasFilters)")
-                
-                // Check if we have only a text query (no other filters)
-                let hasOnlyTextQuery = !searchText.isEmpty && 
-                                      searchFilters.startDate == nil && 
-                                      searchFilters.endDate == nil && 
-                                      searchFilters.participantNames.isEmpty && 
-                                      searchFilters.messageContent.isEmpty
-                
-                print("🔍 hasOnlyTextQuery=\(hasOnlyTextQuery), searchText='\(searchText)'")
-                
-                if hasOnlyTextQuery {
-                    // For text-only queries, use advanced search with message_content
-                    // This searches both chat names AND message content
-                    var filters = SearchFilters()
-                    filters.query = searchText
-                    filters.messageContent = searchText  // Also search in messages
-                    
-                    print("🔍 Using advanced search with query='\(filters.query)', messageContent='\(filters.messageContent)'")
-                    
-                    var newChats: [Chat] = []
-                    let stream = try await apiClient.advancedSearch(filters: filters, stream: true)
-                    
-                    print("🔍 Stream obtained, starting to read results...")
-                    
-                    for try await chat in stream {
-                        try Task.checkCancellation()
-                        newChats.append(chat)
-                        print("Received chat: \(chat.displayName)")
-                        await MainActor.run {
-                            chats = sortChats(newChats)
-                        }
-                    }
-                    
-                    print("Stream completed. Total chats: \(newChats.count)")
-                    
-                    await MainActor.run {
-                        chats = sortChats(newChats)
-                        isLoading = false
-                    }
-                } else if searchFilters.hasFilters {
-                    // Use advanced search with streaming for complex queries
-                    var newChats: [Chat] = []
-                    let stream = try await apiClient.advancedSearch(filters: searchFilters, stream: true)
-                    
-                    for try await chat in stream {
-                        // Check for cancellation periodically
-                        try Task.checkCancellation()
-                        
-                        newChats.append(chat)
-                        // Update UI incrementally as results arrive
-                        await MainActor.run {
-                            chats = sortChats(newChats)
-                        }
-                    }
-                    
-                    await MainActor.run {
-                        chats = sortChats(newChats)
-                        isLoading = false
-                    }
-                } else {
-                    // Load all chats if no search criteria
-                    try Task.checkCancellation()
-                    await loadAllChats()
-                    return
-                }
-            } catch is CancellationError {
-                // Search was cancelled - this is expected when starting a new search
-                await MainActor.run {
-                    // Don't update UI if cancelled
-                }
-            } catch {
-                await MainActor.run {
-                    self.error = error
-                    self.isLoading = false
-                }
-            }
-        }
-        
-        currentSearchTask = searchTask
-        await searchTask.value
-    }
-    
-    private func searchChats() async {
-        await performSearch()
-    }
-    
-    private func sortChats(_ list: [Chat]) -> [Chat] {
-        list.sorted { lhs, rhs in
-            let lDate = lhs.lastMessageDate ?? Date.distantPast
-            let rDate = rhs.lastMessageDate ?? Date.distantPast
-            return lDate > rDate
         }
     }
 }
