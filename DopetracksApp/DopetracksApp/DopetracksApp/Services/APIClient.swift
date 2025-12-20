@@ -156,7 +156,8 @@ class APIClient: ObservableObject {
                                     print("❌ Failed to decode chat from JSON: \(error)")
                                     print("❌ JSON string (first 300 chars): \(String(jsonString.prefix(300)))")
                                     if let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                                        print("❌ JSON keys: \(json.keys.joined(separator: \", \"))")
+                                        let keys = json.keys.joined(separator: ", ")
+                                        print("❌ JSON keys: \(keys)")
                                     }
                                 }
                             } else {
