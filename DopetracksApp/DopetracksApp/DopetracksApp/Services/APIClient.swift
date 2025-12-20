@@ -126,36 +126,38 @@ class APIClient: ObservableObject {
                             if trimmed.hasPrefix("data: ") {
                                 let jsonString = String(trimmed.dropFirst(6)) // Remove "data: "
                                 
-                                // Check for completion or error
-                                if jsonString.contains("\"status\":\"complete\"") {
-                                    print("📡 Stream completed")
-                                    continuation.finish()
-                                    return
+                                guard let jsonData = jsonString.data(using: .utf8) else {
+                                    print("⚠️ Could not convert JSON string to data: \(jsonString.prefix(100))")
+                                    continue
                                 }
                                 
-                                if jsonString.contains("\"status\":\"error\"") {
-                                    print("📡 Stream error: \(jsonString)")
-                                    continuation.finish(throwing: APIError.decodingError(NSError(domain: "APIError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Search error"])))
-                                    return
+                                // Inspect JSON to handle status vs chat
+                                if let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                                    if let status = json["status"] as? String, status.lowercased() == "complete" {
+                                        print("📡 Stream completed")
+                                        continuation.finish()
+                                        return
+                                    }
+                                    
+                                    // Skip non-chat payloads
+                                    if json["chat_id"] == nil {
+                                        // Not a chat object, ignore
+                                        continue
+                                    }
                                 }
                                 
                                 // Try to decode as Chat
-                                if let jsonData = jsonString.data(using: .utf8) {
-                                    do {
-                                        let chat = try JSONDecoder().decode(Chat.self, from: jsonData)
-                                        print("📡 Decoded chat: \(chat.displayName)")
-                                        continuation.yield(chat)
-                                    } catch {
-                                        // Log decoding errors for debugging
-                                        print("❌ Failed to decode chat from JSON: \(error)")
-                                        print("❌ JSON string (first 300 chars): \(String(jsonString.prefix(300)))")
-                                        // Try to parse as JSON to see structure
-                                        if let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                                            print("❌ JSON keys: \(json.keys.joined(separator: ", "))")
-                                        }
+                                do {
+                                    let chat = try JSONDecoder().decode(Chat.self, from: jsonData)
+                                    print("📡 Decoded chat: \(chat.displayName)")
+                                    continuation.yield(chat)
+                                } catch {
+                                    // Log decoding errors for debugging
+                                    print("❌ Failed to decode chat from JSON: \(error)")
+                                    print("❌ JSON string (first 300 chars): \(String(jsonString.prefix(300)))")
+                                    if let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                                        print("❌ JSON keys: \(json.keys.joined(separator: \", \"))")
                                     }
-                                } else {
-                                    print("⚠️ Could not convert JSON string to data: \(jsonString.prefix(100))")
                                 }
                             } else {
                                 // Log non-data lines for debugging
