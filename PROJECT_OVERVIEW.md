@@ -20,7 +20,7 @@
 **Dopetracks** is a local macOS application that extracts Spotify links from iMessage chat databases (macOS Messages app), processes and organizes shared music links, and automatically creates Spotify playlists from group chat conversations. All data stays on your Mac - nothing is uploaded to external servers.
 
 ### Core Functionality
-- **Local-First**: All data stays on your Mac, no user accounts needed
+- **Local-First**: All data stays on your Mac
 - **iMessage Data Extraction**: Reads from macOS Messages database (`chat.db`)
 - **Spotify Integration**: OAuth-based authentication and playlist creation
 - **Data Processing**: Extracts messages, identifies Spotify links, and organizes by chat
@@ -90,7 +90,7 @@
 ### Project Root
 ```
 dopeventures/
-├── packages/dopetracks/               # Main application package (flattened structure)
+├── packages/dopetracks/               # Main application package 
 ├── website/                           # Frontend static files
 ├── user_uploads/                      # Per-user uploaded files
 ├── .env                               # Environment variables (not in repo)
@@ -170,17 +170,12 @@ dopeventures/
   - User management
   - System statistics
 
-### Frontend Structure
-- **`website/index.html`**: Main application page
-- **`website/script.js`**: Frontend JavaScript logic
-- **`website/config.js`**: Backend URL configuration
-
-### Removed/Deprecated
-- ❌ **`frontend_interface/`** - Removed (replaced by `app.py`)
-  - Old FastAPI implementation
-  - No longer used
-- ❌ **`tests/`** - Removed (outdated test files)
-  - Will be replaced with proper test suite if needed
+### Native macOS App
+- **`DopetracksApp/`**: SwiftUI native macOS application
+- **`DopetracksApp/DopetracksApp/`**: Main Swift app code
+  - **`Models/`**: Data models (Chat, Message, Playlist, SpotifyProfile)
+  - **`Services/`**: API client and backend manager
+  - **`Views/`**: SwiftUI views (ChatListView, PlaylistCreationView, etc.)
 
 ### Data Storage Locations
 

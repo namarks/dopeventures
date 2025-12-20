@@ -44,7 +44,7 @@ git clone https://github.com/namarks/dopeventures.git
 cd dopeventures
 ./setup.sh
 # Edit .env file with Spotify credentials
-python3 start.py
+python3 dev_server.py
 ```
 
 See **[QUICK_START.md](./QUICK_START.md)** for step-by-step instructions.

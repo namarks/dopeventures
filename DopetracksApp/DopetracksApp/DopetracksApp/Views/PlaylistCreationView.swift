@@ -14,6 +14,7 @@ struct PlaylistCreationView: View {
     let selectedChatIds: [String]
     
     @State private var playlistName = ""
+    @State private var isDateFilterEnabled = false
     @State private var startDate: Date?
     @State private var endDate: Date?
     @State private var isCreating = false
@@ -21,37 +22,48 @@ struct PlaylistCreationView: View {
     @State private var showError = false
     @State private var createdPlaylist: Playlist?
     
+    private var isDateRangeInvalid: Bool {
+        if let startDate, let endDate { return endDate < startDate }
+        return false
+    }
+    
     var body: some View {
         NavigationStack {
             Form {
                 Section("Playlist Details") {
                     TextField("Playlist Name", text: $playlistName)
+                        .accessibilityLabel("Playlist name")
                 }
                 
                 Section("Date Range (Optional)") {
-                    Toggle("Filter by date range", isOn: Binding(
-                        get: { startDate != nil || endDate != nil },
-                        set: { enabled in
-                            if !enabled {
+                    Toggle("Filter by date range", isOn: $isDateFilterEnabled)
+                        .onChange(of: isDateFilterEnabled) { enabled in
+                            if enabled {
+                                let now = Date()
+                                startDate = Calendar.current.date(byAdding: .day, value: -30, to: now)
+                                endDate = now
+                            } else {
                                 startDate = nil
                                 endDate = nil
-                            } else {
-                                startDate = Date().addingTimeInterval(-30 * 24 * 60 * 60) // 30 days ago
-                                endDate = Date()
                             }
                         }
-                    ))
-                    
-                    if startDate != nil || endDate != nil {
+
+                    if isDateFilterEnabled {
                         DatePicker("Start Date", selection: Binding(
                             get: { startDate ?? Date() },
                             set: { startDate = $0 }
                         ), displayedComponents: .date)
-                        
+
                         DatePicker("End Date", selection: Binding(
                             get: { endDate ?? Date() },
                             set: { endDate = $0 }
                         ), displayedComponents: .date)
+
+                        if isDateRangeInvalid {
+                            Text("End date must be on or after start date.")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
                     }
                 }
                 
@@ -70,12 +82,14 @@ struct PlaylistCreationView: View {
                 }
                 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
-                        Task {
-                            await createPlaylist()
+                    if isCreating {
+                        ProgressView().accessibilityLabel("Creating playlist")
+                    } else {
+                        Button("Create") {
+                            Task { await createPlaylist() }
                         }
+                        .disabled(playlistName.isEmpty || isDateRangeInvalid)
                     }
-                    .disabled(playlistName.isEmpty || isCreating)
                 }
             }
             .alert("Error", isPresented: $showError) {
@@ -88,7 +102,9 @@ struct PlaylistCreationView: View {
                 }
             }
             .sheet(item: $createdPlaylist) { playlist in
-                PlaylistCreatedView(playlist: playlist)
+                PlaylistCreatedView(playlist: playlist) {
+                    dismiss()
+                }
             }
         }
         .frame(width: 500, height: 400)
@@ -103,7 +119,7 @@ struct PlaylistCreationView: View {
                 chatIds: selectedChatIds,
                 startDate: startDate,
                 endDate: endDate,
-                playlistName: playlistName.isEmpty ? "New Playlist" : playlistName
+                playlistName: playlistName
             )
             
             await MainActor.run {
@@ -122,6 +138,7 @@ struct PlaylistCreationView: View {
 
 struct PlaylistCreatedView: View {
     let playlist: Playlist
+    var onDone: (() -> Void)? = nil
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
@@ -129,6 +146,7 @@ struct PlaylistCreatedView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 64))
                 .foregroundColor(.green)
+                .accessibilityLabel("Playlist successfully created")
             
             Text("Playlist Created!")
                 .font(.title2)
@@ -144,6 +162,7 @@ struct PlaylistCreatedView: View {
             
             Button("Done") {
                 dismiss()
+                onDone?()
             }
             .buttonStyle(.bordered)
         }
@@ -156,4 +175,3 @@ struct PlaylistCreatedView: View {
     PlaylistCreationView(selectedChatIds: ["chat1", "chat2"])
         .environmentObject(APIClient())
 }
-

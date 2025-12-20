@@ -1,168 +1,73 @@
-# Native App UI Options
+# Native macOS App
 
-This document outlines options for improving the user experience, particularly around permissions and making the app feel more native.
+This document describes the native macOS app architecture and development.
 
-## Current Setup
+## Current Architecture
 
-- **Backend**: FastAPI (Python)
-- **Frontend**: HTML/CSS/JavaScript served via FastAPI
-- **Launch**: Opens in external browser (Safari/Chrome/etc)
-- **Permissions**: User must manually grant Full Disk Access
+- **Backend**: FastAPI (Python) - API server running on `http://127.0.0.1:8888`
+- **Frontend**: SwiftUI native macOS application
+- **Launch**: Swift app launches Python backend automatically
+- **Communication**: Swift app communicates with backend via HTTP REST API
 
-## Option 1: Keep Web UI + Add Helper Features (✅ RECOMMENDED - Easiest)
+## Swift App Structure
 
-**Pros:**
-- ✅ Minimal changes to existing code
-- ✅ Already works well
-- ✅ Easy to maintain and update
-- ✅ Cross-platform compatible (if you ever want to support other OS)
+- **`DopetracksApp/DopetracksApp/`**: Main Swift app code
+  - **`Models/`**: Data models (Chat, Message, Playlist, SpotifyProfile)
+  - **`Services/`**: 
+    - `APIClient.swift`: HTTP client for backend API
+    - `BackendManager.swift`: Manages Python backend process lifecycle
+  - **`Views/`**: SwiftUI views
+    - `ContentView.swift`: Main app view
+    - `ChatListView.swift`: List of chats
+    - `PlaylistCreationView.swift`: Playlist creation interface
+    - `PlaylistListView.swift`: List of created playlists
+    - `SettingsView.swift`: App settings
 
-**Cons:**
-- ❌ Still opens in external browser
-- ❌ Less "native" feel
+## Backend Launch
 
-**What we've added:**
-- ✅ Button to open System Settings directly to Full Disk Access
-- ✅ Better error messages and instructions
-- ✅ Help section that appears when validation fails
+The Swift app automatically launches the Python backend when it starts:
 
-**Implementation Status:** ✅ DONE
+1. `BackendManager.swift` checks if backend is already running
+2. If not, it launches `dev_server.py` (development) or `app_launcher.py` (production)
+3. Backend runs on `http://127.0.0.1:8888`
+4. Swift app connects to backend via `APIClient.swift`
 
----
+## Development
 
-## Option 2: Embed Web UI in Native Window (PyWebView)
+### Running in Development Mode
 
-**Pros:**
-- ✅ Native window (not external browser)
-- ✅ Keep existing web UI code
-- ✅ Better integration with macOS
-- ✅ Can add native menus, notifications, etc.
-
-**Cons:**
-- ❌ Additional dependency (pywebview)
-- ❌ Slightly more complex build process
-- ❌ Need to handle window management
-
-**Implementation:**
-
-1. Install pywebview:
+1. Start backend manually (optional, Swift app can start it):
    ```bash
-   pip install pywebview
+   python dev_server.py
    ```
 
-2. Modify `launch_bundled.py`:
-   ```python
-   import webview
-   
-   def launch_main_app():
-       # ... existing setup code ...
-       
-       # Instead of opening browser, create native window
-       webview.create_window(
-           'Dopetracks',
-           'http://127.0.0.1:8888',
-           width=1200,
-           height=800,
-           min_size=(800, 600),
-           resizable=True
-       )
-       webview.start(debug=False)
+2. Open Swift app in Xcode:
+   ```bash
+   open DopetracksApp/DopetracksApp.xcodeproj
    ```
 
-3. Update `build_app.spec` to include pywebview:
-   ```python
-   hiddenimports = [
-       # ... existing imports ...
-       'webview',
-       'webview.platforms.cocoa',  # macOS-specific
-   ]
-   ```
+3. Build and run from Xcode
 
-**Estimated Effort:** 2-3 hours
+### Backend API
 
----
+The backend provides REST API endpoints:
+- `GET /health` - Health check
+- `GET /chats` - List chats
+- `GET /chats/{chat_id}/messages` - Get messages for a chat
+- `POST /playlists` - Create playlist
+- `GET /playlists` - List playlists
+- `POST /fts/index` - Index messages for full-text search
+- `GET /fts/status` - Get FTS index status
 
-## Option 3: Full Native UI (PyQt/PySide)
+See `/docs` endpoint for full API documentation when backend is running.
 
-**Pros:**
-- ✅ Fully native macOS look and feel
-- ✅ Best integration with macOS features
-- ✅ Can use native dialogs, menus, etc.
-- ✅ No browser dependency
+## Permissions
 
-**Cons:**
-- ❌ Need to rewrite entire frontend
-- ❌ Much more complex
-- ❌ Larger app bundle size
-- ❌ Steeper learning curve
+The app requires Full Disk Access to read the Messages database:
+- Location: `~/Library/Messages/chat.db`
+- The Swift app should prompt for this permission on first launch
+- Users can also grant it manually in System Settings > Privacy & Security > Full Disk Access
 
-**Implementation:**
+## Building for Distribution
 
-Would require rewriting the entire frontend in PyQt/PySide. This is a significant undertaking.
-
-**Estimated Effort:** 2-3 weeks
-
----
-
-## Option 4: Hybrid Approach (Current + Native Window)
-
-**Best of both worlds:**
-
-1. Keep the web-based UI (easy to maintain)
-2. Use PyWebView to show it in a native window
-3. Add native macOS features:
-   - Native menus (File, Edit, Help)
-   - System tray icon
-   - Native notifications
-   - Better permission handling
-
-**Implementation:**
-
-Similar to Option 2, but with additional native features.
-
-**Estimated Effort:** 1 week
-
----
-
-## Recommendation
-
-**Start with Option 1** (what we've already done):
-- ✅ Button to open System Settings
-- ✅ Better error messages
-- ✅ Clear instructions
-
-**Then consider Option 2** (PyWebView) if users want:
-- Native window instead of browser
-- Better macOS integration
-- More "app-like" experience
-
-**Skip Option 3** unless you have a strong reason to rewrite everything.
-
----
-
-## Testing the System Settings Button
-
-The new `/open-full-disk-access` endpoint uses:
-```bash
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
-```
-
-This should work on macOS Ventura (13.0+) and later. For older macOS versions, you might need:
-```bash
-open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
-```
-
-Or fallback to:
-```bash
-open /System/Library/PreferencePanes/Security.prefPane
-```
-
----
-
-## Next Steps
-
-1. ✅ **DONE**: Add System Settings button
-2. **Test**: Verify the button works on different macOS versions
-3. **Consider**: Add PyWebView for native window (if users request it)
-4. **Future**: Consider native notifications, system tray icon, etc.
-
+See `docs/PACKAGING.md` for instructions on building a distributable app bundle.

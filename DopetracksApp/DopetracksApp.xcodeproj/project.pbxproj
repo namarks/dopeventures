@@ -1,0 +1,384 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0E19A0706A3F02336C2D8675 /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B447941C02CD969CA881367B /* Chat.swift */; };
+		20E8CB0611EEB8725D39417C /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50FC2F11ACC7FA7458551059 /* PermissionManager.swift */; };
+		366FD70046DB2F593050957B /* Playlist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09CCE4E95323680892C1C1AF /* Playlist.swift */; };
+		493CFE1A1F055FF1461E9112 /* PlaylistCreationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E7CE5DF2FA8AAEB1BE30445 /* PlaylistCreationView.swift */; };
+		4A688040F1F7684B9C28A795 /* BackendManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E900990CBC392E97DA9314D /* BackendManager.swift */; };
+		71A476478B44451CA7F6E50E /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1932E63B2CB57632AB2B7780 /* Message.swift */; };
+		A29F3C95C6709BABDD1C2056 /* SearchFilters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66D186F394F8992B62663BAA /* SearchFilters.swift */; };
+		AD4274D19DE9C02EC9FCAC6F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 388823AAF30AB09343F28ABA /* SettingsView.swift */; };
+		B61869BB8C784516FFD778E4 /* DopetracksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF2BDE7A3C13D46998C8AB6C /* DopetracksApp.swift */; };
+		CC6F43A2697559B9526F1668 /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9BC3F45AFBC3192CD92E6CE /* ChatListView.swift */; };
+		CDA349A840832F26A60622ED /* SearchFiltersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D1FFFE22F0E00143E4D8FAC /* SearchFiltersView.swift */; };
+		D5E139566CE5010F7207784D /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A05AF3E6E40FF4E05DA0FA6A /* APIClient.swift */; };
+		D9422E74173F983D6A56C79E /* ChatDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0B8B0031D5B87A7D8B49C3 /* ChatDetailView.swift */; };
+		DA911D2C0A57BB719313C33B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34D2BEC36A1A4B33EBD699A7 /* ContentView.swift */; };
+		DE87BF5DFB364828E3971E12 /* PlaylistListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C55A29CA6888F2761EABBAB /* PlaylistListView.swift */; };
+		F1AE0A8EBEFA622680A37400 /* SpotifyProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F35BCB7BC206AFE33A0CC9 /* SpotifyProfile.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		09CCE4E95323680892C1C1AF /* Playlist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Playlist.swift; sourceTree = "<group>"; };
+		0E900990CBC392E97DA9314D /* BackendManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendManager.swift; sourceTree = "<group>"; };
+		1932E63B2CB57632AB2B7780 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		2C55A29CA6888F2761EABBAB /* PlaylistListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistListView.swift; sourceTree = "<group>"; };
+		34D2BEC36A1A4B33EBD699A7 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		388823AAF30AB09343F28ABA /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		3D1FFFE22F0E00143E4D8FAC /* SearchFiltersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFiltersView.swift; sourceTree = "<group>"; };
+		3E7CE5DF2FA8AAEB1BE30445 /* PlaylistCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistCreationView.swift; sourceTree = "<group>"; };
+		3F0B8B0031D5B87A7D8B49C3 /* ChatDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDetailView.swift; sourceTree = "<group>"; };
+		48F35BCB7BC206AFE33A0CC9 /* SpotifyProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotifyProfile.swift; sourceTree = "<group>"; };
+		50FC2F11ACC7FA7458551059 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
+		66D186F394F8992B62663BAA /* SearchFilters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFilters.swift; sourceTree = "<group>"; };
+		88E711C922A1FB7CA56B490B /* DopetracksApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DopetracksApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A05AF3E6E40FF4E05DA0FA6A /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		B447941C02CD969CA881367B /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
+		D9BC3F45AFBC3192CD92E6CE /* ChatListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListView.swift; sourceTree = "<group>"; };
+		DF2BDE7A3C13D46998C8AB6C /* DopetracksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DopetracksApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		18FB5C09EBEEFB1DA790673A /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				3F0B8B0031D5B87A7D8B49C3 /* ChatDetailView.swift */,
+				D9BC3F45AFBC3192CD92E6CE /* ChatListView.swift */,
+				3E7CE5DF2FA8AAEB1BE30445 /* PlaylistCreationView.swift */,
+				2C55A29CA6888F2761EABBAB /* PlaylistListView.swift */,
+				3D1FFFE22F0E00143E4D8FAC /* SearchFiltersView.swift */,
+				388823AAF30AB09343F28ABA /* SettingsView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		2C37BC3CD8FF81EC14E57A2A /* DopetracksApp */ = {
+			isa = PBXGroup;
+			children = (
+				DF2BDE7A3C13D46998C8AB6C /* DopetracksApp.swift */,
+			);
+			path = DopetracksApp;
+			sourceTree = "<group>";
+		};
+		4488659A72E5FE4ED9FC0E44 /* DopetracksApp */ = {
+			isa = PBXGroup;
+			children = (
+				34D2BEC36A1A4B33EBD699A7 /* ContentView.swift */,
+				95CE883897AA6557C812C3AA /* Models */,
+				979A6E9295DD585C1F59815F /* Services */,
+				18FB5C09EBEEFB1DA790673A /* Views */,
+			);
+			name = DopetracksApp;
+			path = DopetracksApp/DopetracksApp;
+			sourceTree = "<group>";
+		};
+		4C8D941BD9E74E7B0E95D7A8 = {
+			isa = PBXGroup;
+			children = (
+				2C37BC3CD8FF81EC14E57A2A /* DopetracksApp */,
+				4488659A72E5FE4ED9FC0E44 /* DopetracksApp */,
+				E91C10F210B7B2A6DBCB88CB /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		95CE883897AA6557C812C3AA /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B447941C02CD969CA881367B /* Chat.swift */,
+				1932E63B2CB57632AB2B7780 /* Message.swift */,
+				09CCE4E95323680892C1C1AF /* Playlist.swift */,
+				66D186F394F8992B62663BAA /* SearchFilters.swift */,
+				48F35BCB7BC206AFE33A0CC9 /* SpotifyProfile.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		979A6E9295DD585C1F59815F /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A05AF3E6E40FF4E05DA0FA6A /* APIClient.swift */,
+				0E900990CBC392E97DA9314D /* BackendManager.swift */,
+				50FC2F11ACC7FA7458551059 /* PermissionManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		E91C10F210B7B2A6DBCB88CB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				88E711C922A1FB7CA56B490B /* DopetracksApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0796D003CADA0DD5C38A1E0C /* DopetracksApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 880831F7F7BAE2D16F6408D1 /* Build configuration list for PBXNativeTarget "DopetracksApp" */;
+			buildPhases = (
+				936F3DA48F19D654672D3985 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DopetracksApp;
+			packageProductDependencies = (
+			);
+			productName = DopetracksApp;
+			productReference = 88E711C922A1FB7CA56B490B /* DopetracksApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		986CB695D9FF63C6FC835293 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					0796D003CADA0DD5C38A1E0C = {
+						DevelopmentTeam = "";
+					};
+				};
+			};
+			buildConfigurationList = AB7CC0D6283B148FF9B77B52 /* Build configuration list for PBXProject "DopetracksApp" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 4C8D941BD9E74E7B0E95D7A8;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0796D003CADA0DD5C38A1E0C /* DopetracksApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		936F3DA48F19D654672D3985 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D5E139566CE5010F7207784D /* APIClient.swift in Sources */,
+				4A688040F1F7684B9C28A795 /* BackendManager.swift in Sources */,
+				0E19A0706A3F02336C2D8675 /* Chat.swift in Sources */,
+				D9422E74173F983D6A56C79E /* ChatDetailView.swift in Sources */,
+				CC6F43A2697559B9526F1668 /* ChatListView.swift in Sources */,
+				DA911D2C0A57BB719313C33B /* ContentView.swift in Sources */,
+				B61869BB8C784516FFD778E4 /* DopetracksApp.swift in Sources */,
+				71A476478B44451CA7F6E50E /* Message.swift in Sources */,
+				20E8CB0611EEB8725D39417C /* PermissionManager.swift in Sources */,
+				366FD70046DB2F593050957B /* Playlist.swift in Sources */,
+				493CFE1A1F055FF1461E9112 /* PlaylistCreationView.swift in Sources */,
+				DE87BF5DFB364828E3971E12 /* PlaylistListView.swift in Sources */,
+				A29F3C95C6709BABDD1C2056 /* SearchFilters.swift in Sources */,
+				CDA349A840832F26A60622ED /* SearchFiltersView.swift in Sources */,
+				AD4274D19DE9C02EC9FCAC6F /* SettingsView.swift in Sources */,
+				F1AE0A8EBEFA622680A37400 /* SpotifyProfile.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		187A61DE36865FF7BEEA4EE6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		24F49CFE74F1AEBCED4EEC77 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = DopetracksApp/DopetracksApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dopetracks.app;
+				PRODUCT_NAME = DopetracksApp;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		29DD1A61A6C8586699B34F71 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "";
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				INFOPLIST_FILE = DopetracksApp/DopetracksApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dopetracks.app;
+				PRODUCT_NAME = DopetracksApp;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		790330CF001F557CE453D3DF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		880831F7F7BAE2D16F6408D1 /* Build configuration list for PBXNativeTarget "DopetracksApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				24F49CFE74F1AEBCED4EEC77 /* Debug */,
+				29DD1A61A6C8586699B34F71 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AB7CC0D6283B148FF9B77B52 /* Build configuration list for PBXProject "DopetracksApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				187A61DE36865FF7BEEA4EE6 /* Debug */,
+				790330CF001F557CE453D3DF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 986CB695D9FF63C6FC835293 /* Project object */;
+}

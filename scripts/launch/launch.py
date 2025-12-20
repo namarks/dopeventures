@@ -13,14 +13,14 @@ from pathlib import Path
 # Check if running as bundled app (PyInstaller)
 if getattr(sys, 'frozen', False):
     print("⚠️  This launcher is for development mode only.")
-    print("   For bundled app, use scripts/launch/launch_bundled.py")
+    print("   For full app launcher, use scripts/launch/app_launcher.py")
     sys.exit(1)
 
 project_root = Path(__file__).parent
 venv_path = project_root / "venv"
 env_file = project_root / ".env"
 config_file = project_root / "website" / "config.js"
-start_script = project_root / "start.py"
+start_script = project_root / "dev_server.py"
 
 def check_setup():
     """Check if setup is needed. Returns (needs_setup, messages)."""

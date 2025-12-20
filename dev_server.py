@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Startup script for Dopetracks local application (single-user, no authentication).
-Each user runs this on their own MacBook for privacy.
+Development Server Launcher for Dopetracks
+
+Simple launcher for development/testing. Starts uvicorn with auto-reload.
+For production use or apps with setup wizard, use scripts/launch/app_launcher.py instead.
 """
 import sys
 import os
@@ -46,6 +48,11 @@ sys.path.insert(0, str(packages_dir))
 
 if __name__ == "__main__":
     import uvicorn
+    import logging
+    
+    # Suppress watchfiles INFO messages (they're just noise from file watching)
+    watchfiles_logger = logging.getLogger("watchfiles")
+    watchfiles_logger.setLevel(logging.WARNING)  # Only show warnings/errors, not INFO
     
     print("🚀 Starting Dopetracks Application...")
     print("📍 Health check: http://127.0.0.1:8888/health")
@@ -55,6 +62,20 @@ if __name__ == "__main__":
     
     # Import the app
     from dopetracks.app import app
+    
+    # Check if port is already in use
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", 8888))
+        sock.close()
+    except OSError:
+        print(f"⚠️  Port 8888 is already in use!")
+        print(f"   Another instance may be running. Try:")
+        print(f"   pkill -f 'uvicorn.*app'")
+        print(f"   OR")
+        print(f"   lsof -ti :8888 | xargs kill -9")
+        sys.exit(1)
     
     # Run the app
     uvicorn.run(

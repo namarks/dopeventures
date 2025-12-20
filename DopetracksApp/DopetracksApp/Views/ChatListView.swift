@@ -14,11 +14,17 @@ struct ChatListView: View {
     @State private var isLoading = false
     @State private var error: Error?
     @State private var selectedChats: Set<Chat.ID> = []
+    @State private var selectedChatId: Chat.ID?
     @State private var showingPlaylistCreation = false
+    
+    private var selectedChat: Chat? {
+        guard let selectedChatId = selectedChatId else { return nil }
+        return chats.first { $0.id == selectedChatId }
+    }
     
     var body: some View {
         NavigationSplitView {
-            VStack {
+            VStack(spacing: 0) {
                 // Search bar
                 HStack {
                     Image(systemName: "magnifyingglass")
@@ -79,9 +85,11 @@ struct ChatListView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List(chats, selection: $selectedChats) { chat in
-                        ChatRow(chat: chat)
+                    List(selection: $selectedChatId) {
+                        ForEach(chats) { chat in
+                            ChatRow(chat: chat, isSelected: selectedChats.contains(chat.id))
                             .tag(chat.id)
+                        }
                     }
                 }
             }
@@ -98,8 +106,19 @@ struct ChatListView: View {
                 PlaylistCreationView(selectedChatIds: Array(selectedChats))
             }
         } detail: {
+            Group {
+                if let selectedChat = selectedChat {
+                    ChatDetailView(chat: selectedChat)
+                } else {
             Text("Select a chat to view details")
                 .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+        .onChange(of: selectedChatId) { oldValue, newValue in
+            // Debug: Print when selection changes
+            print("Selected chat ID changed: \(String(describing: newValue))")
         }
     }
     
@@ -124,8 +143,10 @@ struct ChatListView: View {
 
 struct ChatRow: View {
     let chat: Chat
+    let isSelected: Bool
     
     var body: some View {
+        HStack {
         VStack(alignment: .leading, spacing: 4) {
             Text(chat.displayName)
                 .font(.headline)
@@ -150,9 +171,18 @@ struct ChatRow: View {
                 Text(date, style: .relative)
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.accentColor)
             }
         }
         .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
 

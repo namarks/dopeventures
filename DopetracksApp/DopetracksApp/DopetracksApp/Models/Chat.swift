@@ -53,5 +53,15 @@ struct Chat: Identifiable, Decodable, Hashable {
         // We could check this later when needed
         hasSpotifyLinks = false
     }
+    
+    // Memberwise initializer for testing/preview purposes
+    init(id: String, displayName: String, participantCount: Int, messageCount: Int, lastMessageDate: Date?, hasSpotifyLinks: Bool) {
+        self.id = id
+        self.displayName = displayName
+        self.participantCount = participantCount
+        self.messageCount = messageCount
+        self.lastMessageDate = lastMessageDate
+        self.hasSpotifyLinks = hasSpotifyLinks
+    }
 }
 

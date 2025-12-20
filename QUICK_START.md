@@ -27,7 +27,7 @@ The setup script will:
 - ✅ Create a virtual environment
 - ✅ Install all dependencies
 - ✅ Create a `.env` file template
-- ✅ Create `website/config.js`
+- ✅ Configure Spotify credentials in `.env`
 
 ## Step 2: Get Spotify Credentials (2 minutes)
 
@@ -77,7 +77,7 @@ To access your Messages database:
 source venv/bin/activate
 
 # Start the app
-python3 start.py
+python3 dev_server.py
 ```
 
 You should see:
@@ -89,7 +89,7 @@ You should see:
 
 ## Step 6: Use the App
 
-1. **Open your browser**: http://127.0.0.1:8888
+1. **Open the Swift app**: Open `DopetracksApp/DopetracksApp.xcodeproj` in Xcode and run
 2. **Authorize Spotify**: Click "Connect to Spotify" and complete OAuth
 3. **Verify System Access**: The app will auto-detect your Messages database
 4. **Search Chats**: Search for chat names or participant names

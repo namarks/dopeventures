@@ -1,0 +1,41 @@
+name: DopetracksApp
+options:
+  bundleIdPrefix: com.dopetracks
+  deploymentTarget:
+    macOS: "13.0"
+  developmentLanguage: en
+  xcodeVersion: "15.0"
+
+targets:
+  DopetracksApp:
+    type: application
+    platform: macOS
+    sources:
+      - path: DopetracksApp/DopetracksApp
+        excludes:
+          - "**/*.xcassets"
+          - "**/Info.plist"
+      - path: DopetracksApp/DopetracksApp.swift
+    resources:
+      - path: DopetracksApp/DopetracksApp/Assets.xcassets
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.dopetracks.app
+      PRODUCT_NAME: DopetracksApp
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+      SWIFT_VERSION: "5.9"
+      CODE_SIGN_IDENTITY: ""
+      DEVELOPMENT_TEAM: ""
+    info:
+      path: DopetracksApp/DopetracksApp/Info.plist
+      properties:
+        CFBundleName: DopetracksApp
+        CFBundleDisplayName: Dopetracks
+        CFBundleIdentifier: com.dopetracks.app
+        CFBundleVersion: "1.0.0"
+        CFBundleShortVersionString: "1.0.0"
+        CFBundlePackageType: APPL
+        LSMinimumSystemVersion: "13.0"
+        NSPrincipalClass: NSApplication
+        NSHighResolutionCapable: true
+        NSFullDiskAccessUsageDescription: "Dopetracks needs Full Disk Access to read your Messages database and create Spotify playlists from shared songs."
+

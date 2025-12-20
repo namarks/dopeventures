@@ -73,15 +73,7 @@ else
     echo "✅ .env file already exists"
 fi
 
-# Check for config.js
-echo ""
-if [ ! -f "website/config.js" ]; then
-    echo "📝 Creating website/config.js..."
-    echo 'const BASE_URL = "http://127.0.0.1:8888";' > website/config.js
-    echo "✅ Created config.js"
-else
-    echo "✅ website/config.js already exists"
-fi
+# Note: Native macOS app - no website config needed
 
 # Check macOS permissions
 echo ""
@@ -100,9 +92,8 @@ echo "✅ Setup complete!"
 echo ""
 echo "Next steps:"
 echo "1. Edit .env file and add your Spotify credentials"
-echo "2. Run: source venv/bin/activate"
-echo "3. Run: python3 start.py"
-echo "4. Open http://127.0.0.1:8888 in your browser"
+echo "2. For development: Run 'python3 dev_server.py' to start the API server"
+echo "3. For native app: Open DopetracksApp/DopetracksApp.xcodeproj in Xcode and run"
 echo ""
 echo "For more help, see README.md"
 

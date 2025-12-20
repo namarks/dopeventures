@@ -60,8 +60,9 @@ class APIClient: ObservableObject {
             throw APIError.httpError(httpResponse.statusCode)
         }
         
-        let searchResponse = try JSONDecoder().decode(ChatSearchResponse.self, from: data)
-        return searchResponse.chats
+        // API returns array directly, not wrapped in an object
+        let chats = try JSONDecoder().decode([Chat].self, from: data)
+        return chats
     }
     
     func getRecentMessages(chatId: String) async throws -> [Message] {
@@ -181,9 +182,7 @@ struct ClientIDResponse: Codable {
     }
 }
 
-struct ChatSearchResponse: Codable {
-    let chats: [Chat]
-}
+// ChatSearchResponse removed - API returns array directly
 
 struct MessagesResponse: Codable {
     let messages: [Message]

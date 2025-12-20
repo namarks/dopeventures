@@ -8,7 +8,7 @@ on run
     tell application "Terminal"
         activate
         -- Create a new window and run the setup/launch commands
-        do script "cd " & quoted form of projectPath & " && source venv/bin/activate && python3 start.py"
+        do script "cd " & quoted form of projectPath & " && source venv/bin/activate && python3 dev_server.py"
     end tell
     
     -- Wait a few seconds for server to start

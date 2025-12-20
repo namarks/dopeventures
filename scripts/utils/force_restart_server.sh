@@ -23,4 +23,4 @@ echo ""
 echo "🚀 Starting server with new configuration..."
 echo "   (Make sure you're in the project root directory)"
 echo ""
-python3 start.py
+python3 dev_server.py

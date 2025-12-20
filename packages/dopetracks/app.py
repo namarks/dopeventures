@@ -7,12 +7,13 @@ import sys
 import asyncio
 import json
 import httpx
+import queue
+import time
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
@@ -35,8 +36,20 @@ if getattr(sys, 'frozen', False):
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / 'backend.log'
 else:
-    # Development - use project root
-    log_file = Path("backend.log")
+    # Development - use project root or user log directory
+    # Try to find project root first
+    project_root = Path(__file__).parent.parent.parent.parent
+    if (project_root / "packages" / "dopetracks").exists():
+        # We're in the project structure
+        log_file = project_root / "backend.log"
+    else:
+        # Fallback to user log directory
+        log_dir = Path.home() / 'Library' / 'Logs' / 'Dopetracks'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / 'backend.log'
+    
+    # Ensure parent directory exists
+    log_file.parent.mkdir(parents=True, exist_ok=True)
 
 # Set up logging
 logging.basicConfig(
@@ -48,6 +61,19 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# FTS indexer imports
+try:
+    from .processing.imessage_data_processing.fts_indexer import (
+        get_fts_db_path,
+        populate_fts_database,
+        get_fts_status,
+        is_fts_available
+    )
+    FTS_AVAILABLE = True
+except ImportError:
+    FTS_AVAILABLE = False
+    logger.warning("FTS indexer not available - will use fallback search method")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -111,42 +137,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files (frontend)
-website_path = Path(__file__).parent.parent.parent / "website"
-if website_path.exists():
-    # Serve static files (JS, CSS, etc.)
-    app.mount("/static", StaticFiles(directory=str(website_path)), name="static")
-    
-    # Serve individual files directly
-    @app.get("/script.js", response_class=Response)
-    async def serve_script():
-        script_path = website_path / "script.js"
-        if script_path.exists():
-            return Response(content=script_path.read_text(), media_type="application/javascript")
-        raise HTTPException(status_code=404, detail="script.js not found")
-    
-    @app.get("/config.js", response_class=Response)
-    async def serve_config():
-        config_path = website_path / "config.js"
-        if config_path.exists():
-            return Response(content=config_path.read_text(), media_type="application/javascript")
-        raise HTTPException(status_code=404, detail="config.js not found")
-    
-    # Serve loading.html
-    @app.get("/loading.html", response_class=HTMLResponse)
-    async def serve_loading():
-        loading_path = website_path / "loading.html"
-        if loading_path.exists():
-            return loading_path.read_text()
-        return "<h1>Dopetracks</h1><p>Starting up...</p>"
-    
-    # Serve index.html at root
-    @app.get("/", response_class=HTMLResponse)
-    async def read_root():
-        index_path = website_path / "index.html"
-        if index_path.exists():
-            return index_path.read_text()
-        return "<h1>Dopetracks Local</h1><p>Frontend not found</p>"
+# Root endpoint - API info for native app
+@app.get("/")
+async def read_root():
+    """API root endpoint - returns API information."""
+    return {
+        "name": "Dopetracks API",
+        "version": "3.0.0",
+        "description": "Playlist generator from iMessage data - Native macOS App",
+        "docs": "/docs",
+        "health": "/health"
+    }
 
 # Health check
 @app.get("/health")
@@ -417,6 +418,42 @@ async def _refresh_token_if_needed(db: Session, token_entry: SpotifyToken) -> Sp
     
     return token_entry
 
+# Get all chats endpoint
+@app.get("/chats")
+async def get_all_chats(db: Session = Depends(get_db)):
+    """Get all chats with basic statistics."""
+    try:
+        from .processing.imessage_data_processing.optimized_queries import get_chat_list
+        
+        db_path = get_db_path()
+        if not db_path:
+            logger.error("get_all_chats: get_db_path() returned None - check logs for details")
+            raise HTTPException(
+                status_code=400,
+                detail="No Messages database found. Please grant Full Disk Access in System Preferences > Security & Privacy > Privacy > Full Disk Access, or upload your Messages database file manually."
+            )
+        
+        if not os.path.exists(db_path):
+            logger.error(f"get_all_chats: Database path does not exist: {db_path}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Messages database not found at {db_path}"
+            )
+        
+        logger.info(f"get_all_chats: Loading all chats from database {db_path}")
+        results = get_chat_list(db_path)
+        logger.info(f"get_all_chats: Found {len(results)} chats")
+        return results
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting all chats: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error loading chats: {str(e)}"
+        )
+
 # Chat search endpoint
 @app.get("/chat-search-optimized")
 async def chat_search_optimized(
@@ -455,6 +492,253 @@ async def chat_search_optimized(
             status_code=500,
             detail=f"Error searching chats: {str(e)}"
         )
+
+# Advanced chat search endpoint (streaming)
+@app.get("/chat-search-advanced")
+async def chat_search_advanced(
+    query: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    participant_names: Optional[str] = None,  # Comma-separated list
+    message_content: Optional[str] = None,
+    stream: bool = False,  # Enable streaming mode
+    db: Session = Depends(get_db)
+):
+    """Advanced chat search with multiple filter criteria. Supports streaming results."""
+    try:
+        from .processing.imessage_data_processing.optimized_queries import advanced_chat_search, advanced_chat_search_streaming
+        
+        db_path = get_db_path()
+        if not db_path:
+            logger.error("chat_search_advanced: get_db_path() returned None - check logs for details")
+            raise HTTPException(
+                status_code=400,
+                detail="No Messages database found. Please grant Full Disk Access in System Preferences > Security & Privacy > Privacy > Full Disk Access, or upload your Messages database file manually."
+            )
+        
+        if not os.path.exists(db_path):
+            logger.error(f"chat_search_advanced: Database path does not exist: {db_path}")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Messages database not found at {db_path}"
+            )
+        
+        # Parse participant names (comma-separated)
+        participant_list = None
+        if participant_names:
+            participant_list = [name.strip() for name in participant_names.split(',') if name.strip()]
+        
+        logger.info(f"chat_search_advanced: Searching with query='{query}', start_date='{start_date}', end_date='{end_date}', participants={participant_list}, message_content='{message_content}', stream={stream}")
+        
+        if stream:
+            # Streaming mode: yield results as they're found
+            async def generate_results():
+                loop = asyncio.get_event_loop()
+                try:
+                    # Create a queue to pass results from thread to async generator
+                    result_queue = queue.Queue()
+                    exception_queue = queue.Queue()
+                    
+                    def run_search():
+                        try:
+                            result_count = 0
+                            for result in advanced_chat_search_streaming(
+                                db_path,
+                                query,
+                                start_date,
+                                end_date,
+                                participant_list,
+                                message_content,
+                                limit_to_recent=None  # No limit - process all chats
+                            ):
+                                result_count += 1
+                                result_queue.put(result)
+                            logger.info(f"Streaming search completed: {result_count} results found")
+                            result_queue.put(None)  # Sentinel to signal completion
+                        except Exception as e:
+                            logger.error(f"Error in run_search: {e}", exc_info=True)
+                            exception_queue.put(e)
+                            # Also put sentinel to signal completion even on error
+                            try:
+                                result_queue.put(None)
+                            except:
+                                pass
+                    
+                    # Start search in thread pool with timeout
+                    search_task = loop.run_in_executor(None, run_search)
+                    
+                    # Yield results as they arrive (with overall timeout)
+                    timeout_seconds = 300  # 5 minutes max for streaming search
+                    start_time = time.time()
+                    
+                    while True:
+                        # Check for timeout
+                        elapsed = time.time() - start_time
+                        if elapsed > timeout_seconds:
+                            logger.warning(f"Streaming search timed out after {timeout_seconds} seconds")
+                            search_task.cancel()
+                            yield f"data: {json.dumps({'status': 'error', 'message': f'Search timed out after {timeout_seconds} seconds'})}\n\n"
+                            break
+                        # Check for exceptions
+                        try:
+                            exc = exception_queue.get_nowait()
+                            raise exc
+                        except queue.Empty:
+                            pass
+                        
+                        # Check for results
+                        try:
+                            result = result_queue.get(timeout=0.1)
+                            if result is None:  # Completion sentinel
+                                break
+                            yield f"data: {json.dumps(result)}\n\n"
+                            await asyncio.sleep(0)  # Yield to event loop
+                        except queue.Empty:
+                            # Check if search task is done
+                            if search_task.done():
+                                # Process any remaining results
+                                while True:
+                                    try:
+                                        result = result_queue.get_nowait()
+                                        if result is None:
+                                            break
+                                        yield f"data: {json.dumps(result)}\n\n"
+                                        await asyncio.sleep(0)
+                                    except queue.Empty:
+                                        break
+                                break
+                            await asyncio.sleep(0.01)  # Small delay before checking again
+                    
+                    yield f"data: {json.dumps({'status': 'complete'})}\n\n"
+                except Exception as e:
+                    logger.error(f"Error in streaming search: {e}", exc_info=True)
+                    yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+            
+            return StreamingResponse(
+                generate_results(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                }
+            )
+        else:
+            # Non-streaming mode: return all results at once
+            loop = asyncio.get_event_loop()
+            try:
+                results = await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None,
+                        lambda: advanced_chat_search(
+                            db_path,
+                            query,
+                            start_date,
+                            end_date,
+                            participant_list,
+                            message_content,
+                            limit_to_recent=None  # No limit - process all chats
+                        ),
+                    ),
+                    timeout=60.0
+                )
+                logger.info(f"chat_search_advanced: Found {len(results)} results")
+                return results
+            except asyncio.TimeoutError:
+                logger.error("chat_search_advanced: Search operation timed out after 60 seconds")
+                raise HTTPException(
+                    status_code=504,
+                    detail="Search operation timed out. Try narrowing your search criteria (date range, participants, or message content)."
+                )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in chat search: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error searching chats: {str(e)}"
+        )
+
+@app.post("/fts/index")
+async def index_fts_database(
+    force_rebuild: bool = False,
+    db: Session = Depends(get_db)
+):
+    """Create or update FTS index for Messages database."""
+    if not FTS_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="FTS indexer not available"
+        )
+    
+    try:
+        db_path = get_db_path()
+        if not db_path or not os.path.exists(db_path):
+            raise HTTPException(
+                status_code=404,
+                detail="Messages database not found"
+            )
+        
+        fts_db_path = get_fts_db_path(db_path)
+        
+        logger.info(f"Starting FTS indexing for {db_path} (force_rebuild={force_rebuild})")
+        
+        # Run indexing in executor to avoid blocking
+        loop = asyncio.get_event_loop()
+        stats = await loop.run_in_executor(
+            None,
+            lambda: populate_fts_database(
+                fts_db_path=fts_db_path,
+                source_db_path=db_path,
+                batch_size=1000,
+                force_rebuild=force_rebuild
+            )
+        )
+        
+        return {
+            "status": "success",
+            "fts_db_path": fts_db_path,
+            "stats": stats
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"FTS indexing error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/fts/status")
+async def get_fts_index_status(db: Session = Depends(get_db)):
+    """Get status of FTS index."""
+    if not FTS_AVAILABLE:
+        return {"available": False, "reason": "FTS indexer not available"}
+    
+    try:
+        db_path = get_db_path()
+        if not db_path:
+            return {"available": False, "reason": "No database path"}
+        
+        fts_db_path = get_fts_db_path(db_path)
+        available = is_fts_available(fts_db_path)
+        
+        if available:
+            status = get_fts_status(fts_db_path)
+            return {
+                "available": True,
+                "fts_db_path": fts_db_path,
+                "status": status
+            }
+        else:
+            return {
+                "available": False,
+                "fts_db_path": fts_db_path,
+                "reason": "FTS database not found or empty"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error getting FTS status: {e}")
+        return {"available": False, "error": str(e)}
 
 # Validate database path
 @app.get("/validate-username")

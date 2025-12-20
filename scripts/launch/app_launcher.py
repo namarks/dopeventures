@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """
-Bundled app launcher - handles setup wizard and app startup.
-This script is used when the app is packaged with PyInstaller.
+App Launcher for Dopetracks - Native macOS App
+
+Full-featured launcher that handles:
+- First-time setup wizard (web-based, for initial configuration)
+- Bundled app support (PyInstaller)
+- API server startup
+
+This is the main launcher used by the Swift native macOS app.
+The Swift app handles all UI - this launcher just starts the API server.
+For simple development, use dev_server.py instead.
 """
 import sys
 import os
 from pathlib import Path
-import webbrowser
 import threading
 import time
 import uvicorn
@@ -89,7 +96,6 @@ def launch_setup_wizard():
     try:
         from fastapi import FastAPI, Request, Form
         from fastapi.responses import HTMLResponse, RedirectResponse
-        from fastapi.staticfiles import StaticFiles
         import httpx
     except ImportError as e:
         logger.error(f"Missing dependencies for setup wizard: {e}")
@@ -97,11 +103,6 @@ def launch_setup_wizard():
         sys.exit(1)
     
     setup_app = FastAPI(title="Dopetracks Setup")
-    
-    # Serve static files if available
-    website_path = APP_DIR / 'website' if IS_BUNDLED else APP_DIR / 'website'
-    if website_path.exists():
-        setup_app.mount("/static", StaticFiles(directory=str(website_path)), name="static")
     
     @setup_app.get("/", response_class=HTMLResponse)
     async def setup_wizard_home():
@@ -489,13 +490,11 @@ LOG_LEVEL=INFO
     # Wait for server to start
     time.sleep(2)
     
-    # Open browser
-    try:
-        webbrowser.open("http://127.0.0.1:8889")
-        logger.info("Setup wizard opened in browser")
-    except Exception as e:
-        logger.error(f"Error opening browser: {e}")
-        print("Please open http://127.0.0.1:8889 in your browser")
+    # Note: Setup wizard runs on port 8889, but native app should handle setup differently
+    # For now, log the URL in case manual access is needed
+    logger.info("Setup wizard available at http://127.0.0.1:8889")
+    print("Setup wizard available at http://127.0.0.1:8889")
+    print("(Native app should handle setup through UI)")
     
     # Wait for setup to complete (check config file periodically)
     logger.info("Waiting for setup to complete...")
@@ -551,196 +550,15 @@ def launch_main_app():
         print(f"❌ Error: Packages directory not found at {packages_dir}")
         sys.exit(1)
     
-    # Use browser instead of webview for faster startup
-    # Webview adds significant startup time (import + window creation)
-    # Browser opens instantly once server is ready
-    USE_WEBVIEW = False  # Disabled for faster startup
-    window = None
-    
-    if IS_BUNDLED and USE_WEBVIEW:
-        try:
-            logger.info("Importing webview for immediate window display...")
-            import webview
-            logger.info("Webview imported successfully")
-            
-            # Create inline loading screen HTML (no file needed, shows immediately)
-            loading_html = '''<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Dopetracks - Starting...</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-       display: flex; justify-content: center; align-items: center; height: 100vh; color: white; }
-.loading { text-align: center; }
-.logo { font-size: 48px; margin-bottom: 20px; animation: pulse 2s ease-in-out infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.7; transform: scale(1.05); } }
-h1 { font-size: 32px; margin-bottom: 10px; font-weight: 600; }
-.subtitle { font-size: 18px; opacity: 0.9; margin-bottom: 40px; }
-.spinner { border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid white;
-           border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite;
-           margin: 0 auto 20px; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-.status { font-size: 16px; opacity: 0.8; margin-top: 20px; }
-</style></head>
-<body><div class="loading">
-<div class="logo">🎵</div><h1>Dopetracks</h1>
-<p class="subtitle">Starting up...</p>
-<div class="spinner"></div>
-<p class="status" id="status">Initializing application</p>
-</div>
-<script>
-const msgs = ['Initializing application', 'Loading modules', 'Starting server', 'Almost ready'];
-let i = 0;
-setInterval(() => { i = (i + 1) % msgs.length; document.getElementById('status').textContent = msgs[i]; }, 1500);
-let attempts = 0;
-function check() {
-    attempts++;
-    fetch('http://127.0.0.1:8888/health').then(r => {
-        if (r.ok) window.location.href = 'http://127.0.0.1:8888/';
-        else if (attempts < 60) setTimeout(check, 500);
-        else { document.getElementById('status').textContent = 'Server taking longer than expected...'; setTimeout(check, 1000); }
-    }).catch(() => {
-        if (attempts < 60) setTimeout(check, 500);
-        else { document.getElementById('status').textContent = 'Server taking longer than expected...'; setTimeout(check, 1000); }
-    });
-}
-setTimeout(check, 1000);
-</script></body></html>'''
-            
-            logger.info("Creating window with loading screen...")
-            window = webview.create_window(
-                'Dopetracks',
-                html=loading_html,  # Use html parameter for immediate display
-                width=1200,
-                height=800,
-                min_size=(800, 600),
-                resizable=True,
-                text_select=True,
-            )
-            logger.info("Window created")
-        except ImportError as e:
-            logger.warning(f"pywebview not available: {e}, will use browser fallback")
-            USE_WEBVIEW = False
-            window = None
-        except Exception as e:
-            logger.error(f"Error opening window: {e}", exc_info=True)
-            USE_WEBVIEW = False
-            window = None
-    
-    # If using webview, start it IMMEDIATELY in a background thread
-    # This will show the window right away, even though it blocks
-    # We'll import and start the app in another background thread
-    if IS_BUNDLED and USE_WEBVIEW and window:
-        logger.info("Starting webview in background - window will show immediately...")
-        
-        # Start app import and server in background thread
-        app_ready = threading.Event()
-        app_instance = None
-        
-        def import_and_start_app():
-            """Import app and start server in background."""
-            nonlocal app_instance
-            try:
-                logger.info("Importing application modules (this may take a moment)...")
-                from dopetracks.app import app
-                logger.info("Successfully imported app")
-                app_instance = app
-                
-                # Configure logging for uvicorn
-                log_config = {
-                    "version": 1,
-                    "disable_existing_loggers": False,
-                    "formatters": {
-                        "default": {
-                            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                        },
-                    },
-                    "handlers": {
-                        "file": {
-                            "class": "logging.FileHandler",
-                            "filename": str(LOG_DIR / "backend.log"),
-                            "formatter": "default",
-                        },
-                        "console": {
-                            "class": "logging.StreamHandler",
-                            "formatter": "default",
-                        },
-                    },
-                    "root": {
-                        "level": "INFO",
-                        "handlers": ["file", "console"],
-                    },
-                }
-                
-                logger.info("Starting uvicorn server...")
-                uvicorn.run(
-                    app,
-                    host="127.0.0.1",
-                    port=8888,
-                    log_level="info",
-                    access_log=True,
-                    log_config=log_config,
-                )
-            except Exception as e:
-                logger.error(f"Error in app thread: {e}", exc_info=True)
-                import traceback
-                logger.error(traceback.format_exc())
-        
-        app_thread = threading.Thread(target=import_and_start_app, daemon=False)
-        app_thread.start()
-        
-        # Wait a tiny bit for server to start, then redirect window when ready
-        def wait_and_redirect():
-            import socket
-            max_attempts = 60
-            for i in range(max_attempts):
-                try:
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    result = sock.connect_ex(('127.0.0.1', 8888))
-                    sock.close()
-                    if result == 0:
-                        logger.info("Server is ready, redirecting window...")
-                        try:
-                            window.load_url('http://127.0.0.1:8888')
-                            logger.info("Redirected window to main app")
-                        except Exception as e:
-                            logger.warning(f"Could not redirect window: {e}")
-                        break
-                except Exception:
-                    pass
-                time.sleep(0.5)
-        
-        redirect_thread = threading.Thread(target=wait_and_redirect, daemon=True)
-        redirect_thread.start()
-        
-        # NOW call webview.start() - this blocks but window shows IMMEDIATELY
-        logger.info("Calling webview.start() - window will appear now...")
-        try:
-            webview.start(debug=False)  # Blocks, but window shows immediately
-            logger.info("Window closed, shutting down...")
-        except Exception as e:
-            logger.error(f"Error in webview: {e}", exc_info=True)
-            webbrowser.open("http://127.0.0.1:8888")
-            try:
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                logger.info("Keyboard interrupt received")
-        return  # Exit function early - webview.start() blocks
-    
-    # Fallback: import and start app normally (no webview)
+    # Native macOS app - no webview or browser needed
+    # Swift app handles all UI
+    # Just import and start the API server
     logger.info("Importing application modules (this may take a moment)...")
     try:
         from dopetracks.app import app
         logger.info("Successfully imported app")
     except ImportError as e:
         logger.error(f"Failed to import app: {e}", exc_info=True)
-        if window:
-            # Try to show error in window
-            try:
-                window.evaluate_js(f"document.body.innerHTML = '<h1>Error</h1><p>Failed to import application: {e}</p>'")
-            except:
-                pass
         print("❌ Error: Failed to import application. Check logs for details.")
         print(f"   Error: {e}")
         if IS_BUNDLED:
@@ -749,182 +567,73 @@ setTimeout(check, 1000);
         sys.exit(1)
     except Exception as e:
         logger.error(f"Error importing app: {e}", exc_info=True)
-        if window:
-            try:
-                window.evaluate_js(f"document.body.innerHTML = '<h1>Error</h1><p>Application error: {e}</p>'")
-            except:
-                pass
         print("❌ Error: Application configuration error. Check logs for details.")
         print(f"   Error: {e}")
         sys.exit(1)
     
-    logger.info("🚀 Starting Dopetracks server...")
+    logger.info("🚀 Starting Dopetracks API server...")
     
-    # Only print to console if not bundled (to avoid issues with windowed mode)
+    # Only print to console if not bundled
     if not IS_BUNDLED:
-        print("🚀 Starting Dopetracks...")
-        print(f"🌐 Application: http://127.0.0.1:8888")
+        print("🚀 Starting Dopetracks API Server...")
         print(f"📍 Health check: http://127.0.0.1:8888/health")
         print(f"📁 Logs: {LOG_DIR}")
         print()
     
-    # Wrap everything in try-except to catch any errors
+    # Configure logging for uvicorn
+    log_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            },
+        },
+        "handlers": {
+            "file": {
+                "class": "logging.FileHandler",
+                "filename": str(LOG_DIR / "backend.log"),
+                "formatter": "default",
+            },
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": "default",
+            },
+        },
+        "root": {
+            "level": "INFO",
+            "handlers": ["file", "console"],
+        },
+    }
+    
+    # Check if port is already in use before starting
+    import socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        logger.info("Entering try block...")
-        # Configure logging for uvicorn
-        logger.info("Configuring uvicorn logging...")
-        log_config = {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {
-                "default": {
-                    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                },
-            },
-            "handlers": {
-                "file": {
-                    "class": "logging.FileHandler",
-                    "filename": str(LOG_DIR / "backend.log"),
-                    "formatter": "default",
-                },
-                "console": {
-                    "class": "logging.StreamHandler",
-                    "formatter": "default",
-                },
-            },
-            "root": {
-                "level": "INFO",
-                "handlers": ["file", "console"],
-            },
-        }
-        
-        # Start server in background thread
-        server_thread = None
-        server_started = threading.Event()
-        
-        def start_server():
-            """Start uvicorn server in background thread."""
-            try:
-                # Check if port is already in use
-                import socket
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                result = sock.connect_ex(('127.0.0.1', 8888))
-                sock.close()
-                if result == 0:
-                    logger.warning("Port 8888 is already in use. Another instance may be running.")
-                    server_started.set()
-                    return
-
-                logger.info("Starting uvicorn server...")
-                uvicorn.run(
-                    app,
-                    host="127.0.0.1",
-                    port=8888,
-                    log_level="info",
-                    access_log=True,
-                    log_config=log_config,
-                )
-            except Exception as e:
-                logger.error(f"Error starting server: {e}", exc_info=True)
-                import traceback
-                logger.error(traceback.format_exc())
-                server_started.set()
-
-        # Start server in background (NOT daemon - we need it to keep running)
-        server_thread = threading.Thread(target=start_server, daemon=False)
-        server_thread.start()
-        
-        # If using webview, start it NOW (before waiting for server)
-        # This shows the window immediately, even though webview.start() blocks
-        # The server continues starting in the background, and loading screen will redirect when ready
-        if IS_BUNDLED and USE_WEBVIEW and window:
-            logger.info("Starting webview - window will show immediately...")
-            # Start a thread to wait for server and redirect window when ready
-            def wait_and_redirect():
-                import socket
-                max_attempts = 60
-                for i in range(max_attempts):
-                    try:
-                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        result = sock.connect_ex(('127.0.0.1', 8888))
-                        sock.close()
-                        if result == 0:
-                            logger.info("Server is ready, redirecting window...")
-                            server_started.set()
-                            try:
-                                window.load_url('http://127.0.0.1:8888')
-                                logger.info("Redirected window to main app")
-                            except Exception as e:
-                                logger.warning(f"Could not redirect window: {e}")
-                            break
-                    except Exception:
-                        pass
-                    time.sleep(0.5)
-                if not server_started.is_set():
-                    logger.error("Server failed to start within timeout")
-            
-            redirect_thread = threading.Thread(target=wait_and_redirect, daemon=True)
-            redirect_thread.start()
-            
-            try:
-                # webview.start() blocks until window closes, but window shows IMMEDIATELY
-                # This is the key - window appears right away, even though this blocks
-                webview.start(debug=False)
-                logger.info("Window closed, shutting down...")
-            except Exception as e:
-                logger.error(f"Error in webview: {e}", exc_info=True)
-                # Fallback to browser
-                webbrowser.open("http://127.0.0.1:8888")
-                try:
-                    while True:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    logger.info("Keyboard interrupt received")
-        else:
-            # Wait for server to be ready (browser fallback)
-            import socket
-            max_attempts = 60
-            for i in range(max_attempts):
-                try:
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    result = sock.connect_ex(('127.0.0.1', 8888))
-                    sock.close()
-                    if result == 0:
-                        logger.info("Server is ready")
-                        server_started.set()
-                        break
-                except Exception:
-                    pass
-                time.sleep(0.5)
-            
-            if not server_started.is_set():
-                logger.error("Server failed to start within timeout")
-                if not IS_BUNDLED:
-                    print("❌ Error: Server failed to start")
-                sys.exit(1)
-            
-            # Handle browser fallback if not using webview
-            logger.info("Opening browser...")
-            def open_browser():
-                time.sleep(1)
-                try:
-                    webbrowser.open("http://127.0.0.1:8888")
-                    logger.info("Browser opened")
-                except Exception as e:
-                    logger.warning(f"Could not open browser: {e}")
-            
-            browser_thread = threading.Thread(target=open_browser, daemon=True)
-            browser_thread.start()
-            
-            # Keep main thread alive so server doesn't die
-            try:
-                logger.info("Server running. Press Ctrl+C to stop.")
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                logger.info("Keyboard interrupt received, shutting down...")
-                if not IS_BUNDLED:
-                    print("\n🛑 Shutting down Dopetracks...")
+        sock.bind(("127.0.0.1", 8888))
+        sock.close()
+    except OSError:
+        logger.error("Port 8888 is already in use! Another instance may be running.")
+        logger.error("Try: pkill -f 'uvicorn.*app' or lsof -ti :8888 | xargs kill -9")
+        if not IS_BUNDLED:
+            print("❌ Error: Port 8888 is already in use")
+        sys.exit(1)
+    
+    # Start the server (blocks until stopped)
+    try:
+        logger.info("Starting uvicorn server...")
+        uvicorn.run(
+            app,
+            host="127.0.0.1",
+            port=8888,
+            log_level="info",
+            access_log=True,
+            log_config=log_config,
+        )
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received, shutting down...")
+        if not IS_BUNDLED:
+            print("\n🛑 Shutting down Dopetracks...")
     except Exception as e:
         logger.error(f"Fatal error in launch_main_app: {e}", exc_info=True)
         import traceback
@@ -932,15 +641,6 @@ setTimeout(check, 1000);
         if not IS_BUNDLED:
             print(f"\n❌ Fatal error: {e}")
             print("Check logs for details.")
-        # Don't exit - try to open browser anyway
-        try:
-            webbrowser.open("http://127.0.0.1:8888")
-            logger.info("Opened browser as fallback")
-            # Keep running
-            while True:
-                time.sleep(1)
-        except:
-            pass
         sys.exit(1)
     
     # Set up signal handlers for graceful shutdown
@@ -969,7 +669,7 @@ def main():
         logger.info("First-time setup required")
         print("\n🎵 Welcome to Dopetracks!")
         print("This appears to be your first time running the app.")
-        print("A setup wizard will open in your browser.\n")
+        print("Setup wizard will be available at http://127.0.0.1:8889\n")
         
         setup_complete = launch_setup_wizard()
         

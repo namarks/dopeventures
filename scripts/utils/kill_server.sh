@@ -28,4 +28,4 @@ sleep 1
 
 echo ""
 echo "✅ Port 8888 should now be free"
-echo "   You can now run: python3 start.py"
+echo "   You can now run: python3 dev_server.py"

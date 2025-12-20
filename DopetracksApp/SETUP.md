@@ -29,8 +29,8 @@ The Swift + SwiftUI native macOS app structure has been created on the `swift-na
 You need to create an Xcode project to build and run the app:
 
 1. **Open Xcode**
-2. **File → New → Project**
 3. **macOS → App**
+2. **File → New → Project**
 4. **Product Name**: `DopetracksApp`
 5. **Interface**: SwiftUI
 6. **Language**: Swift

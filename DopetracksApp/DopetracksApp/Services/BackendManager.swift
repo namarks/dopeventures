@@ -67,17 +67,28 @@ class BackendManager: ObservableObject {
                 .deletingLastPathComponent()
                 .deletingLastPathComponent()
             
+            // Prefer dev_server.py for Swift app (simple, no browser opening)
+            let devServerScript = projectRoot.appendingPathComponent("dev_server.py")
             let launchScript = projectRoot
                 .appendingPathComponent("scripts")
                 .appendingPathComponent("launch")
-                .appendingPathComponent("launch_bundled.py")
+                .appendingPathComponent("app_launcher.py")
             
-            process.arguments = [launchScript.path]
+            // Use dev_server.py if it exists, otherwise fall back to app_launcher.py
+            let finalScript: URL
+            if FileManager.default.fileExists(atPath: devServerScript.path) {
+                finalScript = devServerScript
+            } else {
+                finalScript = launchScript
+            }
+            
+            process.arguments = [finalScript.path]
         }
         
         // Set up environment
         var environment = ProcessInfo.processInfo.environment
         environment["PYTHONUNBUFFERED"] = "1"
+        environment["SWIFT_APP_MODE"] = "1" // Signal to launcher to skip browser opening
         process.environment = environment
         
         // Set up output pipes (optional, for debugging)
