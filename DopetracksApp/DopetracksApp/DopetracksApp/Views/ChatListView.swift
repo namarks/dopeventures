@@ -74,7 +74,9 @@ struct ChatListView: View {
                 if isLoading {
                     HStack(spacing: 8) {
                         ProgressView()
-                            .scaleEffect(0.7)
+                            .controlSize(.small)
+                            .frame(width: 12, height: 12, alignment: .center)
+                            .progressViewStyle(.circular)
                         Text("Searching...")
                             .font(.caption)
                             .foregroundColor(.secondary)
