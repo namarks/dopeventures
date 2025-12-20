@@ -11,6 +11,7 @@ import SwiftUI
 struct DopetracksApp: App {
     @StateObject private var backendManager = BackendManager()
     @StateObject private var apiClient = APIClient()
+    @Environment(\.scenePhase) private var scenePhase
     
     var body: some Scene {
         WindowGroup {
@@ -21,6 +22,11 @@ struct DopetracksApp: App {
                     // Start backend when app launches
                     Task {
                         await backendManager.startBackend()
+                    }
+                }
+                .onChange(of: scenePhase) { newPhase in
+                    if newPhase == .inactive || newPhase == .background {
+                        backendManager.stopBackend()
                     }
                 }
         }
