@@ -9,22 +9,16 @@ import SwiftUI
 import AppKit
 
 struct ChatListView: View {
-    @EnvironmentObject var apiClient: APIClient
-    @State private var searchText = ""
-    @State private var chats: [Chat] = []
-    @State private var isLoading = false
-    @State private var error: Error?
-    @State private var selectedChats: Set<Chat.ID> = []
-    @State private var selectedChatId: Chat.ID?
+    @StateObject private var viewModel: ChatListViewModel
     @State private var showingPlaylistCreation = false
-    @State private var hasFullDiskAccess = false
-    @State private var searchFilters = SearchFilters()
-    @State private var currentSearchTask: Task<Void, Never>?
-    @State private var hasLoadedOnce = false
+    
+    init(apiClient: APIClient) {
+        _viewModel = StateObject(wrappedValue: ChatListViewModel(apiClient: apiClient))
+    }
     
     private var selectedChat: Chat? {
-        guard let selectedChatId = selectedChatId else { return nil }
-        return chats.first { $0.id == selectedChatId }
+        guard let selectedChatId = viewModel.selectedChatId else { return nil }
+        return viewModel.chats.first { $0.id == selectedChatId }
     }
     
     var body: some View {
@@ -34,32 +28,14 @@ struct ChatListView: View {
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.secondary)
-                    TextField("Search chats...", text: $searchText)
+                    TextField("Search chats...", text: $viewModel.searchText)
                         .textFieldStyle(.plain)
-                        .onChange(of: searchText) { newValue in
-                            // Only update searchFilters.query if we have other filters
-                            // Otherwise, use simple search for text-only queries
-                            if searchFilters.startDate != nil || 
-                               searchFilters.endDate != nil || 
-                               !searchFilters.participantNames.isEmpty || 
-                               !searchFilters.messageContent.isEmpty {
-                                searchFilters.query = newValue
-                            }
-                            
-                            // Auto-search as user types (macOS 13.0 compatible)
-                            if !newValue.isEmpty || searchFilters.hasFilters {
-                                Task {
-                                    await performSearch()
-                                }
-                            } else {
-                                // Clear results when search is empty and no filters
-                                chats = []
-                                selectedChatId = nil
-                            }
+                        .onChange(of: viewModel.searchText) { newValue in
+                            viewModel.onSearchTextChange(newValue)
                         }
                         .onSubmit {
                             Task {
-                                await performSearch()
+                                await viewModel.performSearch()
                             }
                         }
                     
@@ -71,7 +47,7 @@ struct ChatListView: View {
                 .padding(.top)
                 
                 // Inline status/loading indicator
-                if isLoading {
+                if viewModel.isLoading {
                     HStack(spacing: 8) {
                         ProgressView()
                             .controlSize(.small)
@@ -88,21 +64,19 @@ struct ChatListView: View {
                 
                 // Inline advanced search filters (always visible)
                 VStack(alignment: .leading, spacing: 8) {
-                    SearchFiltersView(filters: $searchFilters)
-                        .onChange(of: searchFilters) { _ in
-                            Task { await performSearch() }
+                    SearchFiltersView(filters: $viewModel.searchFilters)
+                        .onChange(of: viewModel.searchFilters) { _ in
+                            Task { await viewModel.performSearch() }
                         }
                     
-                    if searchFilters.hasFilters {
+                    if viewModel.searchFilters.hasFilters {
                         HStack {
                             Label("Filters active", systemImage: "line.3.horizontal.decrease.circle.fill")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             Spacer()
                             Button("Clear Filters") {
-                                searchFilters = SearchFilters()
-                                searchText = ""
-                                Task { await loadAllChats() }
+                                viewModel.clearFilters()
                             }
                             .buttonStyle(.borderless)
                             .font(.caption)
@@ -113,10 +87,10 @@ struct ChatListView: View {
                 .padding(.bottom, 8)
                 
                 // Chat list
-                if isLoading {
+                if viewModel.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let error = error {
+                } else if let error = viewModel.error {
                     VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.largeTitle)
@@ -170,7 +144,7 @@ struct ChatListView: View {
                         if !errorMessage.contains("Full Disk Access") {
                             Button("Retry") {
                                 Task {
-                                    await loadAllChats()
+                                    await viewModel.loadAllChats()
                                 }
                             }
                             .buttonStyle(.borderedProminent)
@@ -178,7 +152,7 @@ struct ChatListView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding()
-                } else if chats.isEmpty && !searchText.isEmpty {
+                } else if viewModel.chats.isEmpty && !viewModel.searchText.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "message.fill")
                             .font(.largeTitle)
@@ -191,7 +165,7 @@ struct ChatListView: View {
                                 .foregroundColor(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if chats.isEmpty && searchText.isEmpty {
+                } else if viewModel.chats.isEmpty && viewModel.searchText.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "magnifyingglass")
                             .font(.largeTitle)
@@ -207,9 +181,9 @@ struct ChatListView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List(selection: $selectedChatId) {
-                        ForEach(chats) { chat in
-                            ChatRow(chat: chat, isSelected: selectedChats.contains(chat.id))
+                    List(selection: $viewModel.selectedChatId) {
+                        ForEach(viewModel.chats) { chat in
+                            ChatRow(chat: chat, isSelected: viewModel.selectedChats.contains(chat.id))
                             .tag(chat.id)
                         }
                     }
@@ -222,19 +196,14 @@ struct ChatListView: View {
                     Button("Create Playlist") {
                         showingPlaylistCreation = true
                     }
-                    .disabled(selectedChats.isEmpty)
+                    .disabled(viewModel.selectedChats.isEmpty)
                 }
             }
             .sheet(isPresented: $showingPlaylistCreation) {
-                PlaylistCreationView(selectedChatIds: Array(selectedChats))
+                PlaylistCreationView(selectedChatIds: Array(viewModel.selectedChats))
             }
             .task {
-                // Only load once; avoid reloading on every tab revisit
-                if !hasLoadedOnce {
-                    checkPermissions()
-                    await loadAllChats()
-                    hasLoadedOnce = true
-                }
+                viewModel.onAppear()
             }
         } detail: {
             if let selectedChat = selectedChat {

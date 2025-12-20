@@ -16,13 +16,13 @@ struct ContentView: View {
         Group {
             if backendManager.isBackendRunning {
                 TabView(selection: $selectedTab) {
-                    ChatListView()
+                    ChatListView(apiClient: apiClient)
                         .tabItem {
                             Label("Chats", systemImage: "message.fill")
                         }
                         .tag(0)
                     
-                    PlaylistListView()
+                    PlaylistListView(apiClient: apiClient)
                         .tabItem {
                             Label("Playlists", systemImage: "music.note.list")
                         }

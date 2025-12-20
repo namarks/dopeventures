@@ -9,10 +9,12 @@ import SwiftUI
 
 struct ChatDetailView: View {
     let chat: Chat
-    @EnvironmentObject var apiClient: APIClient
-    @State private var messages: [Message] = []
-    @State private var isLoading = false
-    @State private var error: Error?
+    @StateObject private var viewModel: ChatDetailViewModel
+    
+    init(chat: Chat, apiClient: APIClient) {
+        self.chat = chat
+        _viewModel = StateObject(wrappedValue: ChatDetailViewModel(chatId: chat.id, apiClient: apiClient))
+    }
     
     var body: some View {
         ScrollView {
@@ -58,13 +60,13 @@ struct ChatDetailView: View {
                         Text("Recent Messages")
                             .font(.headline)
                         Spacer()
-                        if isLoading {
+                        if viewModel.isLoading {
                             ProgressView()
                                 .scaleEffect(0.8)
                         }
                     }
                     
-                    if let error = error {
+                    if let error = viewModel.error {
                         VStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle")
                                 .foregroundColor(.orange)
@@ -75,14 +77,14 @@ struct ChatDetailView: View {
                                 .foregroundColor(.secondary)
                             Button("Retry") {
                                 Task {
-                                    await loadMessages()
+                                    await viewModel.loadMessages()
                                 }
                             }
                             .buttonStyle(.bordered)
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                    } else if messages.isEmpty && !isLoading {
+                    } else if viewModel.messages.isEmpty && !viewModel.isLoading {
                         VStack(spacing: 8) {
                             Image(systemName: "message.fill")
                                 .font(.largeTitle)
@@ -95,7 +97,7 @@ struct ChatDetailView: View {
                         .padding()
                     } else {
                         LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(messages) { message in
+                            ForEach(viewModel.messages) { message in
                                 MessageRow(message: message)
                             }
                         }
@@ -108,21 +110,8 @@ struct ChatDetailView: View {
         .navigationTitle(chat.displayName)
         .task(id: chat.id) {
             // Reload messages when the selected chat changes
-            await loadMessages()
+            await viewModel.loadMessages()
         }
-    }
-    
-    private func loadMessages() async {
-        isLoading = true
-        error = nil
-        
-        do {
-            messages = try await apiClient.getRecentMessages(chatId: chat.id)
-        } catch {
-            self.error = error
-        }
-        
-        isLoading = false
     }
 }
 
@@ -183,8 +172,7 @@ struct MessageRow: View {
             messageCount: 42,
             lastMessageDate: Date(),
             hasSpotifyLinks: true
-        ))
-        .environmentObject(APIClient())
+        ), apiClient: APIClient())
     }
 }
 

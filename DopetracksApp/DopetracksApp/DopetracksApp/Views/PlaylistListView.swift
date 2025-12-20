@@ -8,19 +8,19 @@
 import SwiftUI
 
 struct PlaylistListView: View {
-    @EnvironmentObject var apiClient: APIClient
-    @State private var playlists: [Playlist] = []
-    @State private var isLoading = false
-    @State private var error: Error?
-    @State private var hasLoadedOnce = false
+    @StateObject private var viewModel: PlaylistListViewModel
+    
+    init(apiClient: APIClient) {
+        _viewModel = StateObject(wrappedValue: PlaylistListViewModel(apiClient: apiClient))
+    }
     
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading {
+                if viewModel.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let error = error {
+                } else if let error = viewModel.error {
                     VStack(spacing: 12) {
                         Image(systemName: "exclamationmark.triangle")
                             .font(.largeTitle)
@@ -32,13 +32,13 @@ struct PlaylistListView: View {
                             .foregroundColor(.secondary)
                         Button("Retry") {
                             Task {
-                                await loadPlaylists()
+                                await viewModel.loadPlaylists()
                             }
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding()
-                } else if playlists.isEmpty {
+                } else if viewModel.playlists.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "music.note.list")
                             .font(.largeTitle)
@@ -52,33 +52,16 @@ struct PlaylistListView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List(playlists) { playlist in
+                    List(viewModel.playlists) { playlist in
                         PlaylistRow(playlist: playlist)
                     }
                 }
             }
             .navigationTitle("Playlists")
             .task {
-                // Avoid reloading every time user reopens the tab
-                if !hasLoadedOnce {
-                    await loadPlaylists()
-                    hasLoadedOnce = true
-                }
+                viewModel.onAppear()
             }
         }
-    }
-    
-    private func loadPlaylists() async {
-        isLoading = true
-        error = nil
-        
-        do {
-            playlists = try await apiClient.getUserPlaylists()
-        } catch {
-            self.error = error
-        }
-        
-        isLoading = false
     }
 }
 
@@ -112,7 +95,6 @@ struct PlaylistRow: View {
 }
 
 #Preview {
-    PlaylistListView()
-        .environmentObject(APIClient())
+    PlaylistListView(apiClient: APIClient())
 }
 
