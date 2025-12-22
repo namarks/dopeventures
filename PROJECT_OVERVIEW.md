@@ -89,12 +89,11 @@
    - Single-user setup (no authentication needed)
 
 3. **Service Layer** (`services/`)
-   - `session_storage.py`: In-memory session data caching
+   - (removed) `session_storage.py`: deprecated in-memory cache
 
 4. **Processing Layer** (`processing/`)
-   - `imessage_data_processing/`: Extract and clean Messages data
+   - `imessage_data_processing/`: Prepared-store ingestion and queries
    - `spotify_interaction/`: Spotify API integration
-   - `prepare_data_main.py`: Main data preparation pipeline
 
 5. **Data Layer** (`database/`)
    - `models.py`: SQLAlchemy ORM models
@@ -143,20 +142,16 @@ dopeventures/
   - Initialization and health checks
 
 #### Services
-- **`packages/dopetracks/services/session_storage.py`**
+- (removed) **`packages/dopetracks/services/session_storage.py`**
   - In-memory session data storage (temporary caching)
 
 #### Data Processing
-- **`packages/dopetracks/processing/prepare_data_main.py`**
-  - Main data preparation entry point (used by deprecated endpoint)
-  - Orchestrates extraction and cleaning
-
 - **`packages/dopetracks/processing/imessage_data_processing/`**
-  - `optimized_queries.py`: **NEW** - Direct SQL queries for on-demand processing
-  - `data_pull.py`: Extract messages from chat.db
-  - `data_cleaning.py`: Clean and normalize data
+  - `optimized_queries.py`: Direct SQL queries for on-demand processing
+  - `parsing_utils.py`: Shared attributedBody/text/link parsing helpers
+  - `prepared_messages.py`: Prepared-store schema, helpers, and search
+  - `ingestion.py`: Incremental ingestion/CLI for prepared store
   - `data_enrichment.py`: Enrich with additional metadata
-  - `generate_summary_stats.py`: Generate statistics
 
 - **`packages/dopetracks/processing/spotify_interaction/`**
   - `spotify_db_manager.py`: Spotify URL processing and caching
@@ -188,7 +183,7 @@ dopeventures/
   - Used if user wants to process a different Messages database
 
 - **Session Data**: 
-  - In-memory: `session_storage` (temporary caching)
+  - In-memory: `session_storage` (deprecated/removed)
 
 #### Database Files
 - **Main DB**: `~/.dopetracks/local.db` (user data directory)
@@ -247,7 +242,7 @@ Local cache for processed data.
 ## Key Components
 
 ### Session Storage
-**Location**: `services/session_storage.py`
+**Location**: (removed)
 
 - **In-Memory Caching**: Temporary session data storage
 - **Data Types**: Messages, contacts, handles data

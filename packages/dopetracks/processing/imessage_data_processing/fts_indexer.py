@@ -1,6 +1,7 @@
 """
 Full-Text Search (FTS) indexer for Messages database.
 Creates and maintains a separate FTS database for fast message search.
+Legacy helper; prefer the prepared store's built-in FTS when available.
 """
 import os
 import sqlite3
@@ -10,7 +11,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
-from . import data_enrichment as de
+from . import parsing_utils as pu
 from .optimized_queries import convert_to_apple_timestamp
 
 logger = logging.getLogger(__name__)
@@ -177,15 +178,12 @@ def populate_fts_database(
             
             try:
                 # Extract text from attributedBody
-                batch['extracted_text'] = batch['attributedBody'].apply(
-                    lambda x: de.parse_AttributeBody(x).get('text', '') if x else ''
-                )
-                
+                batch["parsed_body"] = batch["attributedBody"].apply(pu.parse_attributed_body)
+
                 # Combine text sources
-                batch['final_text'] = batch.apply(
-                    lambda row: row['text'] if pd.notna(row['text']) and row['text'] != ''
-                    else row['extracted_text'],
-                    axis=1
+                batch["final_text"] = batch.apply(
+                    lambda row: pu.finalize_text(row["text"], row["parsed_body"]),
+                    axis=1,
                 )
                 
                 # Insert into FTS table

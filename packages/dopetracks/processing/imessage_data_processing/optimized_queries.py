@@ -1,6 +1,8 @@
 """
 Optimized SQL queries for on-demand data extraction from chat.db.
 These queries filter at the database level instead of processing everything upfront.
+Many helpers accept an optional prepared_db_path to reuse the prepared store
+instead of reparsing attributedBody on every call.
 """
 import os
 import sqlite3
@@ -9,6 +11,10 @@ import re
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import logging
+from pathlib import Path
+
+from . import parsing_utils as pu
+from . import prepared_messages as pm
 
 logger = logging.getLogger(__name__)
 
@@ -61,20 +67,72 @@ def get_user_db_path() -> Optional[str]:
     
     return None
 
-def get_recent_messages_for_chat(db_path: str, chat_id: int, limit: int = 5) -> List[Dict[str, Any]]:
+def get_recent_messages_for_chat(
+    db_path: str,
+    chat_id: int,
+    limit: int = 5,
+    offset: int = 0,
+    order: str = "desc",
+    search: Optional[str] = None,
+    prepared_db_path: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
     Get recent messages from a chat to help user identify which chat entry to use.
     Returns preview of most recent messages.
     
     Parses attributedBody for complete message text (not just text field).
     """
-    from . import data_enrichment as de
-    
+    # Prefer prepared store if available to avoid reparsing attributedBody
+    if prepared_db_path and os.path.exists(prepared_db_path):
+        try:
+            prepared_messages = pm.get_recent_messages_prepared(
+                Path(prepared_db_path),
+                chat_id=chat_id,
+                limit=limit,
+                offset=offset,
+                order=order,
+                search=search,
+            )
+            return [
+                {
+                    "text": msg["text"],
+                    "is_from_me": bool(msg["is_from_me"]),
+                    "sender_name": msg.get("sender_handle") or "Unknown",
+                    "sender_full_name": msg.get("sender_handle") or "Unknown",
+                    "sender_first_name": None,
+                    "sender_last_name": None,
+                    "sender_unique_id": None,
+                    "date": msg["date"],
+                }
+                for msg in prepared_messages
+                if msg.get("text")
+            ]
+        except Exception as e:
+            logger.warning(f"Prepared DB read failed, falling back to source DB: {e}")
+
     conn = sqlite3.connect(db_path)
     
+    # Normalize order param
+    order = order.lower()
+    if order not in ("asc", "desc"):
+        order = "desc"
+
+    # Parse cache for attributedBody -> text keyed by message_id
+    global _message_text_cache
+    try:
+        _message_text_cache
+    except NameError:
+        _message_text_cache = {}
+    MAX_CACHE = 5000
+
+    # We fetch more rows than requested so search filtering (on parsed attributedBody)
+    # still returns results, then slice in Python.
+    query_limit = max(limit + offset + 200, 500 if search else 0)
+
     # Get messages with both text and attributedBody, including handle info for sender names
-    query = """
+    query = f"""
         SELECT 
+            message.ROWID as message_id,
             message.text,
             message.attributedBody,
             message.is_from_me,
@@ -86,23 +144,46 @@ def get_recent_messages_for_chat(db_path: str, chat_id: int, limit: int = 5) -> 
         LEFT JOIN handle ON message.handle_id = handle.ROWID
         WHERE chat_message_join.chat_id = ?
         AND (message.text IS NOT NULL OR message.attributedBody IS NOT NULL)
-        ORDER BY message.date DESC
+        ORDER BY message.date {order.upper()}
         LIMIT ?
     """
+
+    params: List[Any] = [chat_id, query_limit]
     
-    df = pd.read_sql_query(query, conn, params=[chat_id, limit])
+    df = pd.read_sql_query(query, conn, params=params)
     conn.close()
     
-    # Parse attributedBody for messages that have it
-    df['extracted_text'] = df['attributedBody'].apply(de.parse_AttributeBody)
+    # Parse attributedBody for messages that have it, with cache
+    def parse_body(body, msg_id):
+        if msg_id in _message_text_cache:
+            return _message_text_cache[msg_id]
+        parsed = pu.parse_attributed_body(body)
+        if len(_message_text_cache) > MAX_CACHE:
+            _message_text_cache.pop(next(iter(_message_text_cache)))
+        _message_text_cache[msg_id] = parsed
+        return parsed
+
+    df["parsed_body"] = [
+        parse_body(body, msg_id) for body, msg_id in zip(df["attributedBody"], df["message_id"])
+    ]
     
     # Create final_text (text field OR extracted from attributedBody)
-    df['final_text'] = df.apply(
-        lambda row: row['text'] if pd.notna(row['text']) and row['text'] != ''
-        else row['extracted_text'].get('text', None) if isinstance(row['extracted_text'], dict) 
-        else None,
-        axis=1
+    df["final_text"] = df.apply(
+        lambda row: pu.finalize_text(row["text"], row["parsed_body"]),
+        axis=1,
     )
+    
+    # Apply search filtering on parsed final_text to catch attributedBody content
+    if search:
+        search_lower = str(search).lower()
+        df = df[
+            df['final_text'].astype(str).str.lower().str.contains(search_lower, na=False)
+            | df['text'].astype(str).str.lower().str.contains(search_lower, na=False)
+        ]
+    
+    # Re-sort and apply offset/limit in Python after filtering
+    df = df.sort_values(by="date_utc", ascending=(order == "asc"))
+    df = df.iloc[offset:offset + limit]
     
     messages = []
     # Import contact info function
@@ -180,7 +261,7 @@ def get_recent_messages_for_chat(db_path: str, chat_id: int, limit: int = 5) -> 
     
     return messages
 
-def get_chat_list(db_path: str) -> List[Dict[str, Any]]:
+def get_chat_list(db_path: str, prepared_db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Get list of all chats with basic statistics.
     Fast query - no message processing needed.
@@ -221,7 +302,12 @@ def get_chat_list(db_path: str) -> List[Dict[str, Any]]:
     results = []
     for _, row in df.iterrows():
         # Get recent messages for this chat (available in details view)
-        recent_messages = get_recent_messages_for_chat(db_path, int(row['chat_id']), limit=5)
+        recent_messages = get_recent_messages_for_chat(
+            db_path,
+            int(row["chat_id"]),
+            limit=5,
+            prepared_db_path=prepared_db_path,
+        )
         
         member_count_val = int(row['member_count']) if pd.notna(row['member_count']) else 0
         name_val = row['chat_identifier'] if member_count_val == 1 else (row['display_name'] or row['chat_identifier'])
@@ -356,8 +442,6 @@ def query_messages_with_urls(
     Args:
         chat_ids: List of chat ROWIDs (not names) - more precise than names
     """
-    from . import data_enrichment as de
-    
     start_ts = convert_to_apple_timestamp(start_date)
     end_ts = convert_to_apple_timestamp(end_date)
     
@@ -411,25 +495,23 @@ def query_messages_with_urls(
     
     # Parse attributedBody for messages that have it
     # This extracts text from the binary field
-    df['extracted_text'] = df['attributedBody'].apply(de.parse_AttributeBody)
-    
+    df["parsed_body"] = df["attributedBody"].apply(pu.parse_attributed_body)
+
     # Create final_text column (text field OR extracted from attributedBody)
-    df['final_text'] = df.apply(
-        lambda row: row['text'] if pd.notna(row['text']) and row['text'] != ''
-        else row['extracted_text'].get('text', None) if isinstance(row['extracted_text'], dict) 
-        else None,
-        axis=1
+    df["final_text"] = df.apply(
+        lambda row: pu.finalize_text(row["text"], row["parsed_body"]),
+        axis=1,
     )
     
     # Filter to only messages with ANY URLs (http or https)
     url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
-    df['has_url'] = df['final_text'].astype(str).str.contains(url_pattern, case=False, na=False, regex=True)
+    df["has_url"] = df["final_text"].astype(str).str.contains(url_pattern, case=False, na=False, regex=True)
     
     # Return only messages with URLs
     df_filtered = df[df['has_url']].copy()
     
     # Clean up temporary columns
-    df_filtered = df_filtered.drop(columns=['extracted_text', 'has_url'])
+    df_filtered = df_filtered.drop(columns=["parsed_body", "has_url"])
     
     return df_filtered
 
@@ -450,8 +532,6 @@ def query_spotify_messages(
     Args:
         chat_ids: List of chat ROWIDs (not names) - more precise than names
     """
-    from . import data_enrichment as de
-    
     start_ts = convert_to_apple_timestamp(start_date)
     end_ts = convert_to_apple_timestamp(end_date)
     
@@ -504,26 +584,23 @@ def query_spotify_messages(
         df = df[df['associated_message_type'].isna() | (df['associated_message_type'] == 0)].copy()
     
     # Parse attributedBody for messages that have it
-    # This extracts text from the binary field
-    df['extracted_text'] = df['attributedBody'].apply(de.parse_AttributeBody)
+    df["parsed_body"] = df["attributedBody"].apply(pu.parse_attributed_body)
     
     # Create final_text column (text field OR extracted from attributedBody)
-    df['final_text'] = df.apply(
-        lambda row: row['text'] if pd.notna(row['text']) and row['text'] != ''
-        else row['extracted_text'].get('text', None) if isinstance(row['extracted_text'], dict) 
-        else None,
-        axis=1
+    df["final_text"] = df.apply(
+        lambda row: pu.finalize_text(row["text"], row["parsed_body"]),
+        axis=1,
     )
     
     # Now filter to only messages with Spotify links in final_text
     spotify_pattern = r'https?://(open\.spotify\.com|spotify\.link)/[^\s<>"{}|\\^`\[\]]+'
-    df['has_spotify'] = df['final_text'].astype(str).str.contains(spotify_pattern, case=False, na=False, regex=True)
+    df["has_spotify"] = df["final_text"].astype(str).str.contains(spotify_pattern, case=False, na=False, regex=True)
     
     # Return only messages with Spotify links
     df_filtered = df[df['has_spotify']].copy()
     
     # Clean up temporary columns
-    df_filtered = df_filtered.drop(columns=['extracted_text', 'has_spotify'])
+    df_filtered = df_filtered.drop(columns=["parsed_body", "has_spotify"])
     
     return df_filtered
 
@@ -783,7 +860,8 @@ def advanced_chat_search(
     end_date: Optional[str] = None,
     participant_names: Optional[List[str]] = None,
     message_content: Optional[str] = None,
-    limit_to_recent: Optional[int] = None
+    limit_to_recent: Optional[int] = None,
+    prepared_db_path: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Advanced chat search with multiple filter criteria:
@@ -794,14 +872,14 @@ def advanced_chat_search(
     
     Returns chats that match ALL specified criteria.
     """
-    from . import data_enrichment as de
-    
     logger.info(f"advanced_chat_search called: query={query}, start_date={start_date}, end_date={end_date}, message_content={message_content}")
     conn = sqlite3.connect(db_path)
+    use_prepared = bool(prepared_db_path and os.path.exists(prepared_db_path))
     
     # Build WHERE conditions dynamically
     conditions = []
     params = []
+    chat_ids: List[int] = []
     
     # Step 1: Find handle IDs for participant search
     participant_handle_ids = []
@@ -978,6 +1056,21 @@ def advanced_chat_search(
     # This requires loading messages and parsing attributedBody
     # LIMIT: Only process up to 10,000 messages to prevent timeout
     logger.info(f"Step 4: message_content={message_content}, chat_ids count={len(chat_ids) if chat_ids else 0}")
+    if message_content and chat_ids and use_prepared:
+        try:
+            chat_ids = pm.filter_chat_ids_by_message_content(
+                Path(prepared_db_path),  # type: ignore[arg-type]
+                search_term=message_content,
+                chat_ids=chat_ids,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except Exception as e:
+            logger.warning(f"Prepared DB content filter failed, falling back to source DB: {e}")
+        if not chat_ids:
+            conn.close()
+            return []
+
     if message_content and chat_ids:
         # Check if FTS is available
         use_fts = False
@@ -1075,12 +1168,10 @@ def advanced_chat_search(
                     chunk = messages_df.iloc[i:i+chunk_size].copy()
                     
                     # Parse attributedBody for this chunk
-                    chunk['extracted_text'] = chunk['attributedBody'].apply(de.parse_AttributeBody)
-                    chunk['final_text'] = chunk.apply(
-                        lambda row: row['text'] if pd.notna(row['text']) and row['text'] != ''
-                        else row['extracted_text'].get('text', None) if isinstance(row['extracted_text'], dict)
-                        else None,
-                        axis=1
+                    chunk["parsed_body"] = chunk["attributedBody"].apply(pu.parse_attributed_body)
+                    chunk["final_text"] = chunk.apply(
+                        lambda row: pu.finalize_text(row["text"], row["parsed_body"]),
+                        axis=1,
                     )
                     
                     # Filter by message content
@@ -1188,18 +1279,18 @@ def advanced_chat_search_streaming(
     end_date: Optional[str] = None,
     participant_names: Optional[List[str]] = None,
     message_content: Optional[str] = None,
-    limit_to_recent: Optional[int] = None
+    limit_to_recent: Optional[int] = None,
+    prepared_db_path: Optional[str] = None,
 ):
     """
     Streaming version of advanced_chat_search that yields results as they're found.
     Processes chats in batches and yields results incrementally.
     Limits to most recent chats by default.
     """
-    from . import data_enrichment as de
-    
     conn = None
     try:
         conn = sqlite3.connect(db_path)
+        use_prepared = bool(prepared_db_path and os.path.exists(prepared_db_path))
         # Step 1: Find handle IDs for participant search
         participant_handle_ids = []
         if participant_names:
@@ -1298,6 +1389,20 @@ def advanced_chat_search_streaming(
             filtered_chats = pd.read_sql_query(filter_query, conn, params=chat_ids + [search_pattern, search_pattern])
             chat_ids = filtered_chats['chat_id'].tolist() if not filtered_chats.empty else []
         
+        if message_content and chat_ids and use_prepared:
+            try:
+                chat_ids = pm.filter_chat_ids_by_message_content(
+                    Path(prepared_db_path),  # type: ignore[arg-type]
+                    search_term=message_content,
+                    chat_ids=chat_ids,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            except Exception as e:
+                logger.warning(f"Prepared DB content filter failed (streaming), falling back: {e}")
+            if not chat_ids:
+                return
+
         if not chat_ids:
             return
         
@@ -1332,8 +1437,8 @@ def advanced_chat_search_streaming(
             
             df = pd.read_sql_query(stats_query, conn, params=batch_chat_ids)
             
-            # If message_content is specified, filter this batch
-            if message_content and not df.empty:
+            # If message_content is specified, filter this batch unless prepared DB already filtered
+            if message_content and not df.empty and not use_prepared:
                 # Check if FTS is available
                 use_fts = False
                 if FTS_AVAILABLE:
@@ -1410,17 +1515,15 @@ def advanced_chat_search_streaming(
                                 # Parse attributedBody with error handling
                                 def safe_parse_attributed_body(attributed_body):
                                     try:
-                                        return de.parse_AttributeBody(attributed_body)
+                                        return pu.parse_attributed_body(attributed_body)
                                     except Exception as e:
                                         logger.debug(f"Error parsing attributedBody: {e}")
                                         return {}
-                                
-                                chunk['extracted_text'] = chunk['attributedBody'].apply(safe_parse_attributed_body)
-                                chunk['final_text'] = chunk.apply(
-                                    lambda row: row['text'] if pd.notna(row['text']) and row['text'] != ''
-                                    else row['extracted_text'].get('text', None) if isinstance(row['extracted_text'], dict)
-                                    else None,
-                                    axis=1
+
+                                chunk["parsed_body"] = chunk["attributedBody"].apply(safe_parse_attributed_body)
+                                chunk["final_text"] = chunk.apply(
+                                    lambda row: pu.finalize_text(row["text"], row["parsed_body"]),
+                                    axis=1,
                                 )
                                 
                                 matching_chunk = chunk[
@@ -1443,7 +1546,12 @@ def advanced_chat_search_streaming(
             # Yield results for this batch
             for _, row in df.iterrows():
                 try:
-                    recent_messages = get_recent_messages_for_chat(db_path, int(row['chat_id']), limit=5)
+                    recent_messages = get_recent_messages_for_chat(
+                        db_path,
+                        int(row["chat_id"]),
+                        limit=5,
+                        prepared_db_path=prepared_db_path,
+                    )
                     
                     member_count_val = int(row['member_count']) if pd.notna(row['member_count']) else 0
                     name_val = row['chat_identifier'] if member_count_val == 1 else (row['display_name'] or row['chat_identifier'])

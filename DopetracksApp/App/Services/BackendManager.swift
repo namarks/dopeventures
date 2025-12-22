@@ -35,6 +35,29 @@ class BackendManager: ObservableObject {
         return nil
     }
     
+    /// Ensure backend is running; attempts start and waits up to timeout.
+    @discardableResult
+    func ensureBackendRunning(timeout: TimeInterval = 30) async -> Bool {
+        await startBackend()
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await MainActor.run(body: { self.isBackendRunning }) {
+                return true
+            }
+            // Re-check health in case start failed silently
+            if await checkBackendHealth() {
+                await MainActor.run {
+                    self.isBackendRunning = true
+                    self.isStarting = false
+                    self.error = nil
+                }
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+        }
+        return await MainActor.run(body: { self.isBackendRunning })
+    }
+    
     func startBackend() async {
         guard !isBackendRunning else { return }
         
@@ -78,14 +101,14 @@ class BackendManager: ObservableObject {
         } else {
             // Development mode: use system Python or venv Python
             // Get path to launch script
-            // File structure: dopeventures/DopetracksApp/DopetracksApp/DopetracksApp/Services/BackendManager.swift
-            // Need to go up 4 levels to reach project root (dopeventures/)
+            // File structure: dopeventures/DopetracksApp/App/Services/BackendManager.swift
+            // Go up 4 levels to reach project root (dopeventures/)
             let currentFile = URL(fileURLWithPath: #file) // BackendManager.swift
-            let servicesDir = currentFile.deletingLastPathComponent() // Services/
-            let appDir = servicesDir.deletingLastPathComponent() // DopetracksApp/
-            let dopetracksAppDir = appDir.deletingLastPathComponent() // DopetracksApp/
-            let outerDopetracksAppDir = dopetracksAppDir.deletingLastPathComponent() // DopetracksApp/
-            let projectRoot = outerDopetracksAppDir.deletingLastPathComponent() // dopeventures/
+            let projectRoot = currentFile
+                .deletingLastPathComponent() // Services/
+                .deletingLastPathComponent() // App/
+                .deletingLastPathComponent() // DopetracksApp/
+                .deletingLastPathComponent() // dopeventures/
             
             // First, try to find and use venv Python
             let venvPython = projectRoot

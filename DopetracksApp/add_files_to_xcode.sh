@@ -4,16 +4,16 @@
 echo "📋 Files that need to be added to Xcode project:"
 echo ""
 echo "Models folder:"
-ls -1 DopetracksApp/Models/*.swift 2>/dev/null | sed 's/^/  - /'
+ls -1 App/Models/*.swift 2>/dev/null | sed 's/^/  - /'
 echo ""
 echo "Services folder:"
-ls -1 DopetracksApp/Services/*.swift 2>/dev/null | sed 's/^/  - /'
+ls -1 App/Services/*.swift 2>/dev/null | sed 's/^/  - /'
 echo ""
 echo "Views folder:"
-ls -1 DopetracksApp/Views/*.swift 2>/dev/null | sed 's/^/  - /'
+ls -1 App/Views/*.swift 2>/dev/null | sed 's/^/  - /'
 echo ""
 echo "Root level files:"
-ls -1 DopetracksApp/*.swift 2>/dev/null | grep -v "DopetracksApp/DopetracksApp/" | sed 's/^/  - /'
+ls -1 App/*.swift 2>/dev/null | sed 's/^/  - /'
 echo ""
 echo "✅ To add these files in Xcode:"
 echo "   1. Right-click 'DopetracksApp' group in Project Navigator"

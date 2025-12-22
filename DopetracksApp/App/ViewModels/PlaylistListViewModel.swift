@@ -12,7 +12,7 @@ final class PlaylistListViewModel: ObservableObject {
     @Published var playlists: [Playlist] = []
     @Published var isLoading = false
     @Published var error: Error?
-    @Published var hasLoadedOnce = false
+    private var hasLoadedOnce = false
     
     private let apiClient: APIClient
     
@@ -22,8 +22,8 @@ final class PlaylistListViewModel: ObservableObject {
     
     func onAppear() {
         guard !hasLoadedOnce else { return }
-        Task { await loadPlaylists() }
         hasLoadedOnce = true
+        Task { await loadPlaylists() }
     }
     
     func loadPlaylists() async {

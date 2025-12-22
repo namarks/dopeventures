@@ -10,12 +10,19 @@ import SwiftUI
 @main
 struct DopetracksApp: App {
     @StateObject private var backendManager = BackendManager()
-    @StateObject private var apiClient = APIClient()
+    @StateObject private var apiClient: APIClient
+    @StateObject private var chatListViewModel: ChatListViewModel
     @Environment(\.scenePhase) private var scenePhase
+    
+    init() {
+        let api = APIClient()
+        _apiClient = StateObject(wrappedValue: api)
+        _chatListViewModel = StateObject(wrappedValue: ChatListViewModel(apiClient: api))
+    }
     
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(chatListViewModel: chatListViewModel)
                 .environmentObject(backendManager)
                 .environmentObject(apiClient)
                 .onAppear {

@@ -21,7 +21,7 @@ Based on the screenshot, these files need to be added:
 1. **In Xcode Project Navigator**, expand the `Views` folder
 2. **Right-click** on the `Views` folder (or select it and right-click)
 3. Select **"Add Files to 'DopetracksApp'..."**
-4. Navigate to: `DopetracksApp/DopetracksApp/Views/`
+4. Navigate to: `DopetracksApp/App/Views/`
 5. **Select all 4 view files**:
    - ChatListView.swift
    - PlaylistCreationView.swift
@@ -36,7 +36,7 @@ Based on the screenshot, these files need to be added:
 8. **Repeat for Models folder** (if not already added):
    - Right-click `Models` folder
    - Add Files to 'DopetracksApp'
-   - Navigate to `DopetracksApp/DopetracksApp/Models/`
+   - Navigate to `DopetracksApp/App/Models/`
    - Select all 4 model files
    - Same settings as above
 

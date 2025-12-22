@@ -37,7 +37,7 @@ You need to create an Xcode project to build and run the app:
 7. **Save location**: `/Users/nmarks/root_code_repo/dopeventures/DopetracksApp/`
 
 8. **Add existing files**:
-   - Drag all files from `DopetracksApp/DopetracksApp/` into the Xcode project
+   - Drag all files from `DopetracksApp/App/` into the Xcode project
    - Make sure "Copy items if needed" is unchecked (files are already in place)
    - Add to target: `DopetracksApp`
 
@@ -72,9 +72,9 @@ For a standalone app, you need to bundle the Python backend:
 
 2. Copy backend executable to Xcode project:
    ```bash
-   mkdir -p DopetracksApp/DopetracksApp/Resources/Backend
+   mkdir -p DopetracksApp/App/Resources/Backend
    cp dist/Dopetracks.app/Contents/MacOS/Dopetracks \
-      DopetracksApp/DopetracksApp/Resources/Backend/
+      DopetracksApp/App/Resources/Backend/
    ```
 
 3. Update `BackendManager.swift` to use the bundled path:

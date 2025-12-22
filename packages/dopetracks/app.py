@@ -15,7 +15,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Response, Form, Up
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone, timedelta
 
 # Add the package to Python path for imports
@@ -27,7 +27,14 @@ from .config import settings
 from .database.connection import get_db, init_database, check_database_health
 from .database.models import SpotifyToken
 from .utils.helpers import get_db_path, validate_db_path
-from .services.session_storage import session_storage
+from .processing.imessage_data_processing.prepared_messages import (
+    chat_search_prepared,
+)
+from .processing.imessage_data_processing.optimized_queries import (
+    advanced_chat_search,
+    advanced_chat_search_streaming,
+)
+from .processing.imessage_data_processing.ingestion import ingest_prepared_store
 
 # Determine log file path (use proper directory for bundled apps)
 if getattr(sys, 'frozen', False):
@@ -61,6 +68,28 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Simple in-memory TTL cache for chat list
+CHAT_CACHE_TTL_SECONDS = 30
+_chat_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+# Path to prepared DB (populated via ingestion)
+PREPARED_DB_PATH: Optional[str] = None
+
+
+def _refresh_prepared_db(source_db_path: str, force_rebuild: bool = False) -> Optional[str]:
+    """Run incremental ingestion and update global prepared DB path."""
+    global PREPARED_DB_PATH, _chat_cache
+    result = ingest_prepared_store(
+        source_db_path=source_db_path,
+        base_dir=None,
+        force_rebuild=force_rebuild,
+    )
+    prepared_db_path = result.get("prepared_db_path")
+    if prepared_db_path and prepared_db_path != PREPARED_DB_PATH:
+        _chat_cache.clear()
+    if prepared_db_path:
+        PREPARED_DB_PATH = prepared_db_path
+    return PREPARED_DB_PATH
 
 # FTS indexer imports
 try:
@@ -102,8 +131,19 @@ async def lifespan(app: FastAPI):
     # Start database initialization in background
     db_init_task = asyncio.create_task(init_db_async())
     
-    # Start session storage cleanup task
-    session_storage.start_cleanup_task()
+    # Prepare messages database (incremental)
+    try:
+        db_path = get_db_path()
+        if db_path and os.path.exists(db_path):
+            prepared_db = _refresh_prepared_db(db_path)
+            if prepared_db:
+                logger.info(f"Prepared DB ready at {prepared_db}")
+            else:
+                logger.warning("Prepared DB update skipped: ingestion returned no path.")
+        else:
+            logger.warning("Prepared DB update skipped: Messages database not found or inaccessible.")
+    except Exception as e:
+        logger.error(f"Error updating prepared DB: {e}", exc_info=True)
     
     logger.info("Application startup complete (database initializing in background)")
     yield
@@ -113,9 +153,6 @@ async def lifespan(app: FastAPI):
         await db_init_task
     except Exception as e:
         logger.warning(f"Database initialization had errors: {e}")
-    
-    # Stop session storage cleanup task
-    session_storage.stop_cleanup_task()
     
     logger.info("Application shutdown")
 
@@ -424,6 +461,7 @@ async def get_all_chats(db: Session = Depends(get_db)):
     """Get all chats with basic statistics."""
     try:
         from .processing.imessage_data_processing.optimized_queries import get_chat_list
+        start_time = time.perf_counter()
         
         db_path = get_db_path()
         if not db_path:
@@ -440,9 +478,24 @@ async def get_all_chats(db: Session = Depends(get_db)):
                 detail=f"Messages database not found at {db_path}"
             )
         
+        # Refresh prepared DB incrementally
+        prepared_db = _refresh_prepared_db(db_path)
+
+        now = time.monotonic()
+        cache_key = f"{db_path}|{prepared_db or ''}"
+        cache_entry = _chat_cache.get(cache_key)
+        if cache_entry:
+            ts, cached = cache_entry
+            if now - ts < CHAT_CACHE_TTL_SECONDS:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                logger.info(f"get_all_chats: Served {len(cached)} chats from cache in {elapsed_ms:.0f} ms (TTL {CHAT_CACHE_TTL_SECONDS}s)")
+                return cached
+        
         logger.info(f"get_all_chats: Loading all chats from database {db_path}")
-        results = get_chat_list(db_path)
-        logger.info(f"get_all_chats: Found {len(results)} chats")
+        results = get_chat_list(db_path, prepared_db_path=prepared_db)
+        _chat_cache[cache_key] = (now, results)
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(f"get_all_chats: Found {len(results)} chats in {elapsed_ms:.0f} ms (cached for {CHAT_CACHE_TTL_SECONDS}s)")
         return results
         
     except HTTPException:
@@ -493,6 +546,45 @@ async def chat_search_optimized(
             detail=f"Error searching chats: {str(e)}"
         )
 
+# Prepared chat search (uses prepared_messages.db)
+@app.get("/chat-search-prepared")
+async def chat_search_prepared_endpoint(
+    query: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    participant_names: Optional[str] = None,  # currently unused in prepared search
+    message_content: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    try:
+        source_db = get_db_path()
+        if not source_db or not os.path.exists(source_db):
+            raise HTTPException(status_code=400, detail="No Messages database found")
+        prepared_db = _refresh_prepared_db(source_db)
+        if not prepared_db:
+            raise HTTPException(status_code=500, detail="Failed to prepare messages database")
+        
+        participant_list = None
+        if participant_names:
+            participant_list = [name.strip() for name in participant_names.split(',') if name.strip()]
+        
+        results = chat_search_prepared(
+            prepared_db,
+            query,
+            start_date,
+            end_date,
+            participant_list,
+            message_content,
+            limit_to_recent=5000
+        )
+        logger.info(f"chat_search_prepared: Found {len(results)} results")
+        return results
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in chat_search_prepared: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Advanced chat search endpoint (streaming)
 @app.get("/chat-search-advanced")
 async def chat_search_advanced(
@@ -506,21 +598,17 @@ async def chat_search_advanced(
 ):
     """Advanced chat search with multiple filter criteria. Supports streaming results."""
     try:
-        from .processing.imessage_data_processing.optimized_queries import advanced_chat_search, advanced_chat_search_streaming
-        
-        db_path = get_db_path()
-        if not db_path:
-            logger.error("chat_search_advanced: get_db_path() returned None - check logs for details")
+        source_db = get_db_path()
+        if not source_db or not os.path.exists(source_db):
+            raise HTTPException(status_code=400, detail="No Messages database found")
+
+        # Keep prepared DB up-to-date and reuse it for message-content filtering
+        prepared_db = _refresh_prepared_db(source_db)
+        if not prepared_db or not os.path.exists(prepared_db):
+            logger.error("chat_search_advanced: prepared DB not found")
             raise HTTPException(
-                status_code=400,
-                detail="No Messages database found. Please grant Full Disk Access in System Preferences > Security & Privacy > Privacy > Full Disk Access, or upload your Messages database file manually."
-            )
-        
-        if not os.path.exists(db_path):
-            logger.error(f"chat_search_advanced: Database path does not exist: {db_path}")
-            raise HTTPException(
-                status_code=404,
-                detail=f"Messages database not found at {db_path}"
+                status_code=500,
+                detail="Prepared messages database not found. Please retry startup."
             )
         
         # Parse participant names (comma-separated)
@@ -543,13 +631,14 @@ async def chat_search_advanced(
                         try:
                             result_count = 0
                             for result in advanced_chat_search_streaming(
-                                db_path,
-                                query,
-                                start_date,
-                                end_date,
-                                participant_list,
-                                message_content,
-                                limit_to_recent=None  # No limit - process all chats
+                                db_path=source_db,
+                                query=query,
+                                start_date=start_date,
+                                end_date=end_date,
+                                participant_names=participant_list,
+                                message_content=message_content,
+                                limit_to_recent=None,
+                                prepared_db_path=prepared_db,
                             ):
                                 result_count += 1
                                 result_queue.put(result)
@@ -629,22 +718,25 @@ async def chat_search_advanced(
                 results = await asyncio.wait_for(
                     loop.run_in_executor(
                         None,
-                        lambda: advanced_chat_search(
-                            db_path,
-                            query,
-                            start_date,
-                            end_date,
-                            participant_list,
-                            message_content,
-                            limit_to_recent=None  # No limit - process all chats
+                        lambda: list(
+                            advanced_chat_search(
+                                db_path=source_db,
+                                query=query,
+                                start_date=start_date,
+                                end_date=end_date,
+                                participant_names=participant_list,
+                                message_content=message_content,
+                                limit_to_recent=None,
+                                prepared_db_path=prepared_db,
+                            )
                         ),
                     ),
-                    timeout=60.0
+                    timeout=120.0
                 )
                 logger.info(f"chat_search_advanced: Found {len(results)} results")
                 return results
             except asyncio.TimeoutError:
-                logger.error("chat_search_advanced: Search operation timed out after 60 seconds")
+                logger.error("chat_search_advanced: Search operation timed out after 120 seconds")
                 raise HTTPException(
                     status_code=504,
                     detail="Search operation timed out. Try narrowing your search criteria (date range, participants, or message content)."
@@ -1099,17 +1191,75 @@ async def create_playlist_optimized_stream(
 
 # Get recent messages for a chat
 @app.get("/chat/{chat_id}/recent-messages")
-async def get_recent_messages(chat_id: int, limit: int = 5):
+async def get_recent_messages(
+    chat_id: int,
+    limit: int = 5,
+    offset: int = 0,
+    order: str = "desc",
+    search: Optional[str] = None,
+):
     """Get recent messages for a chat."""
     try:
-        from .processing.imessage_data_processing.optimized_queries import get_recent_messages_for_chat
-        
-        db_path = get_db_path()
-        if not db_path:
+        source_db = get_db_path()
+        if not source_db or not os.path.exists(source_db):
             raise HTTPException(status_code=400, detail="No Messages database found")
         
-        messages = get_recent_messages_for_chat(db_path, chat_id, limit)
-        return {"messages": messages}
+        prepared_db = _refresh_prepared_db(source_db)
+        if not prepared_db:
+            raise HTTPException(status_code=500, detail="Failed to prepare messages database")
+        
+        conn = sqlite3.connect(prepared_db)
+        try:
+            cur = conn.cursor()
+            order_dir = "DESC" if order.lower() != "asc" else "ASC"
+            params: List[Any] = [chat_id, limit, offset]
+            search_clause = ""
+            if search:
+                search_clause = "AND m.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)"
+                params = [chat_id, search, limit, offset]
+            query = f"""
+                SELECT
+                    m.message_id,
+                    m.text,
+                    m.date,
+                    m.sender_handle,
+                    m.is_from_me,
+                    m.has_spotify_link,
+                    m.spotify_url
+                FROM messages m
+                WHERE m.chat_id = ?
+                {search_clause}
+                ORDER BY m.date {order_dir}
+                LIMIT ?
+                OFFSET ?
+            """
+            cur.execute(query, params)
+            rows = cur.fetchall()
+            messages = []
+            for row in rows:
+                (
+                    message_id,
+                    text,
+                    date_val,
+                    sender_handle,
+                    is_from_me,
+                    has_spotify,
+                    spotify_url,
+                ) = row
+                messages.append(
+                    {
+                        "id": str(message_id),
+                        "text": text or "",
+                        "date": date_val,
+                        "sender": sender_handle,
+                        "is_from_me": bool(is_from_me),
+                        "has_spotify_link": bool(has_spotify),
+                        "spotify_url": spotify_url,
+                    }
+                )
+            return {"messages": messages}
+        finally:
+            conn.close()
     except Exception as e:
         logger.error(f"Error getting recent messages: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

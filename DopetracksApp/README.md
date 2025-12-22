@@ -12,22 +12,16 @@ This is the native Swift/SwiftUI implementation of Dopetracks for macOS.
 
 ```
 DopetracksApp/
-├── DopetracksApp/
-│   ├── DopetracksApp.swift          # App entry point
-│   ├── ContentView.swift            # Main view with navigation
+├── App/                              # App sources and resources
+│   ├── DopetracksApp.swift           # App entry point
+│   ├── ContentView.swift             # Main view with navigation
 │   ├── Models/                       # Data models
-│   │   ├── Chat.swift
-│   │   ├── Playlist.swift
-│   │   ├── Message.swift
-│   │   └── SpotifyProfile.swift
 │   ├── Services/                     # Business logic
-│   │   ├── APIClient.swift          # HTTP client for FastAPI
-│   │   └── BackendManager.swift     # Python backend process manager
-│   └── Views/                        # SwiftUI views
-│       ├── ChatListView.swift
-│       ├── PlaylistCreationView.swift
-│       ├── PlaylistListView.swift
-│       └── SettingsView.swift
+│   ├── ViewModels/                   # View models
+│   ├── Views/                        # SwiftUI views
+│   ├── Resources/                    # Bundled resources (e.g., backend)
+│   └── Assets.xcassets               # App assets
+├── DopetracksApp.xcodeproj           # Generated Xcode project
 └── README.md
 ```
 
@@ -43,7 +37,7 @@ DopetracksApp/
 
 1. **Open in Xcode**:
    ```bash
-   open DopetracksApp/DopetracksApp.xcodeproj
+   open DopetracksApp.xcodeproj
    ```
 
 2. **Configure Backend**:
@@ -53,6 +47,16 @@ DopetracksApp/
 3. **Build and Run**:
    - Select "DopetracksApp" scheme
    - Press Cmd+R to build and run
+
+### Auto-regenerate the Xcode project (optional)
+
+To keep the Xcode project in sync while editing files, you can watch for changes and rerun XcodeGen automatically:
+
+```bash
+cd DopetracksApp
+brew install fswatch   # if not installed
+./auto_regenerate.sh   # Ctrl+C to stop
+```
 
 ## Building for Distribution
 
@@ -66,7 +70,7 @@ DopetracksApp/
 2. Copy backend executable to Xcode project:
    ```bash
    cp -R dist/Dopetracks.app/Contents/MacOS/Dopetracks \
-        DopetracksApp/DopetracksApp/Resources/Backend/
+        DopetracksApp/App/Resources/Backend/
    ```
 
 3. Update `BackendManager.swift` to use bundled executable path

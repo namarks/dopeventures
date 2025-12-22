@@ -14,8 +14,9 @@ class APIClient: ObservableObject {
     
     init() {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 60
+        // Allow longer searches (message content/filters can be slow on large DBs)
+        config.timeoutIntervalForRequest = 120
+        config.timeoutIntervalForResource = 240
         self.session = URLSession(configuration: config)
     }
     
@@ -51,6 +52,9 @@ class APIClient: ObservableObject {
         }
         
         guard httpResponse.statusCode == 200 else {
+            if let detail = decodeDetail(from: data) {
+                throw APIError.httpErrorWithMessage(httpResponse.statusCode, detail)
+            }
             throw APIError.httpError(httpResponse.statusCode)
         }
         
@@ -60,7 +64,7 @@ class APIClient: ObservableObject {
     }
     
     func searchChats(query: String) async throws -> [Chat] {
-        var components = URLComponents(string: "\(baseURL)/chat-search-optimized")!
+        var components = URLComponents(string: "\(baseURL)/chat-search-prepared")!
         components.queryItems = [URLQueryItem(name: "query", value: query)]
         
         guard let url = components.url else {
@@ -83,6 +87,7 @@ class APIClient: ObservableObject {
     }
     
     func advancedSearch(filters: SearchFilters, stream: Bool = true) async throws -> AsyncThrowingStream<Chat, Error> {
+        // Use the streaming-capable endpoint so the UI can render results as they arrive.
         var components = URLComponents(string: "\(baseURL)/chat-search-advanced")!
         var queryItems = filters.toQueryItems()
         queryItems.append(URLQueryItem(name: "stream", value: stream ? "true" : "false"))
@@ -210,8 +215,28 @@ class APIClient: ObservableObject {
         }
     }
     
-    func getRecentMessages(chatId: String) async throws -> [Message] {
-        let url = URL(string: "\(baseURL)/chat/\(chatId)/recent-messages")!
+    func getMessages(
+        chatId: String,
+        limit: Int = 50,
+        offset: Int = 0,
+        order: MessageSortOrder = .newestFirst,
+        search: String? = nil
+    ) async throws -> [Message] {
+        var components = URLComponents(string: "\(baseURL)/chat/\(chatId)/recent-messages")!
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "limit", value: "\(limit)"),
+            URLQueryItem(name: "offset", value: "\(offset)"),
+            URLQueryItem(name: "order", value: order.rawValue)
+        ]
+        if let search, !search.isEmpty {
+            items.append(URLQueryItem(name: "search", value: search))
+        }
+        components.queryItems = items
+        
+        guard let url = components.url else {
+            throw APIError.invalidURL
+        }
+        
         let (data, response) = try await session.data(from: url)
         
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -315,6 +340,7 @@ enum APIError: LocalizedError {
     case invalidURL
     case invalidResponse
     case httpError(Int)
+    case httpErrorWithMessage(Int, String)
     case decodingError(Error)
     
     var errorDescription: String? {
@@ -325,6 +351,8 @@ enum APIError: LocalizedError {
             return "Invalid response from server"
         case .httpError(let code):
             return "HTTP error: \(code)"
+        case .httpErrorWithMessage(let code, let message):
+            return "HTTP \(code): \(message)"
         case .decodingError(let error):
             return "Failed to decode response: \(error.localizedDescription)"
         }
@@ -349,5 +377,16 @@ struct MessagesResponse: Decodable {
 
 struct PlaylistsResponse: Decodable {
     let playlists: [Playlist]
+}
+
+private struct APIErrorDetail: Decodable {
+    let detail: String
+}
+
+private func decodeDetail(from data: Data) -> String? {
+    guard let detail = try? JSONDecoder().decode(APIErrorDetail.self, from: data).detail else {
+        return nil
+    }
+    return detail
 }
 

@@ -3,111 +3,112 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0E19A0706A3F02336C2D8675 /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = B447941C02CD969CA881367B /* Chat.swift */; };
-		20E8CB0611EEB8725D39417C /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50FC2F11ACC7FA7458551059 /* PermissionManager.swift */; };
-		366FD70046DB2F593050957B /* Playlist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09CCE4E95323680892C1C1AF /* Playlist.swift */; };
-		493CFE1A1F055FF1461E9112 /* PlaylistCreationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E7CE5DF2FA8AAEB1BE30445 /* PlaylistCreationView.swift */; };
-		4A688040F1F7684B9C28A795 /* BackendManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E900990CBC392E97DA9314D /* BackendManager.swift */; };
-		71A476478B44451CA7F6E50E /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1932E63B2CB57632AB2B7780 /* Message.swift */; };
-		A29F3C95C6709BABDD1C2056 /* SearchFilters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66D186F394F8992B62663BAA /* SearchFilters.swift */; };
-		AD4274D19DE9C02EC9FCAC6F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 388823AAF30AB09343F28ABA /* SettingsView.swift */; };
-		B61869BB8C784516FFD778E4 /* DopetracksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF2BDE7A3C13D46998C8AB6C /* DopetracksApp.swift */; };
-		CC6F43A2697559B9526F1668 /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9BC3F45AFBC3192CD92E6CE /* ChatListView.swift */; };
-		CDA349A840832F26A60622ED /* SearchFiltersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D1FFFE22F0E00143E4D8FAC /* SearchFiltersView.swift */; };
-		D5E139566CE5010F7207784D /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A05AF3E6E40FF4E05DA0FA6A /* APIClient.swift */; };
-		D9422E74173F983D6A56C79E /* ChatDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0B8B0031D5B87A7D8B49C3 /* ChatDetailView.swift */; };
-		DA911D2C0A57BB719313C33B /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34D2BEC36A1A4B33EBD699A7 /* ContentView.swift */; };
-		DE87BF5DFB364828E3971E12 /* PlaylistListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C55A29CA6888F2761EABBAB /* PlaylistListView.swift */; };
-		F1AE0A8EBEFA622680A37400 /* SpotifyProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F35BCB7BC206AFE33A0CC9 /* SpotifyProfile.swift */; };
+		1DD3C342BDA2FC525BA63E71 /* SearchFiltersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34C2BF924EB38A4A459AE7EB /* SearchFiltersView.swift */; };
+		2130917B436EDB55294198E1 /* PlaylistListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633BE4E1F80D05BCA7534CE7 /* PlaylistListView.swift */; };
+		3341BA5CA31DF76A35FC9C20 /* ChatListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116A72218D5D5241BE86F646 /* ChatListView.swift */; };
+		36E5F9154701624042B95DEF /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF427AE7FDB62B4D0E93BF4F /* Chat.swift */; };
+		3A461B8F369A2080E0EDFE34 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905FE75BAC2DF00921C50790 /* ContentView.swift */; };
+		4134F8EA83DE06CA9F26E999 /* Playlist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 783798EBDBBE4972418C3890 /* Playlist.swift */; };
+		47D1A1C96F7EAE5F0D72E9FC /* PlaylistListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 187C879120BBDE7A3CD03560 /* PlaylistListViewModel.swift */; };
+		4D2666DE73F19EE1F9BB0A3A /* DopetracksApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46CD35CCEE049CB149DCDACA /* DopetracksApp.swift */; };
+		7051EA8A1074B074E9066E86 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0BD2F776C2AD677B6C74ADD /* APIClient.swift */; };
+		8012D49AF590A2BD9113C13D /* ChatDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D3E05C77DB86BAFD55E4EC1 /* ChatDetailViewModel.swift */; };
+		8A81FC548EA73EFDF89CE79F /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E33A7F66505E2893486A7A8 /* PermissionManager.swift */; };
+		8FFC71241BC3ED4990EAB622 /* BackendManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 753E6E79CBB78E44EA9D7703 /* BackendManager.swift */; };
+		93CF7619B13897AB0257C0FF /* ChatDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E74FD766CB31A84201A1F3D0 /* ChatDetailView.swift */; };
+		9B8615DC4D60641D10BFD679 /* SpotifyProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51E6AA3A6206ACB6CC2ADDB6 /* SpotifyProfile.swift */; };
+		A065B1DF1F72F5B55CD149CF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DBEAED06129E3D360B33B91 /* SettingsView.swift */; };
+		B5CA8E867563E7A336B80071 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = 199B6B5CD22727FE9003145F /* Message.swift */; };
+		B93D0867F32664B5F1DBCE9C /* ChatListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39A8F0E691BE96D1996A4D7A /* ChatListViewModel.swift */; };
+		BF0C25046B25453A958E6A5C /* SearchFilters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5735329DF061B1BF69B0F538 /* SearchFilters.swift */; };
+		DA147891C0F1CD202DEE07F2 /* StartupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4473BCC103D015950A454175 /* StartupView.swift */; };
+		FAEFCBC0D09367959F79E97B /* PlaylistCreationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83E9C1A6EBD033AD3F2C59A2 /* PlaylistCreationView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		09CCE4E95323680892C1C1AF /* Playlist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Playlist.swift; sourceTree = "<group>"; };
-		0E900990CBC392E97DA9314D /* BackendManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendManager.swift; sourceTree = "<group>"; };
-		1932E63B2CB57632AB2B7780 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
-		2C55A29CA6888F2761EABBAB /* PlaylistListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistListView.swift; sourceTree = "<group>"; };
-		34D2BEC36A1A4B33EBD699A7 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		388823AAF30AB09343F28ABA /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		3D1FFFE22F0E00143E4D8FAC /* SearchFiltersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFiltersView.swift; sourceTree = "<group>"; };
-		3E7CE5DF2FA8AAEB1BE30445 /* PlaylistCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistCreationView.swift; sourceTree = "<group>"; };
-		3F0B8B0031D5B87A7D8B49C3 /* ChatDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDetailView.swift; sourceTree = "<group>"; };
-		48F35BCB7BC206AFE33A0CC9 /* SpotifyProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotifyProfile.swift; sourceTree = "<group>"; };
-		50FC2F11ACC7FA7458551059 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
-		66D186F394F8992B62663BAA /* SearchFilters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFilters.swift; sourceTree = "<group>"; };
+		116A72218D5D5241BE86F646 /* ChatListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListView.swift; sourceTree = "<group>"; };
+		187C879120BBDE7A3CD03560 /* PlaylistListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistListViewModel.swift; sourceTree = "<group>"; };
+		199B6B5CD22727FE9003145F /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		2DBEAED06129E3D360B33B91 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		34C2BF924EB38A4A459AE7EB /* SearchFiltersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFiltersView.swift; sourceTree = "<group>"; };
+		39A8F0E691BE96D1996A4D7A /* ChatListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListViewModel.swift; sourceTree = "<group>"; };
+		4473BCC103D015950A454175 /* StartupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupView.swift; sourceTree = "<group>"; };
+		46CD35CCEE049CB149DCDACA /* DopetracksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DopetracksApp.swift; sourceTree = "<group>"; };
+		51E6AA3A6206ACB6CC2ADDB6 /* SpotifyProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotifyProfile.swift; sourceTree = "<group>"; };
+		5735329DF061B1BF69B0F538 /* SearchFilters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFilters.swift; sourceTree = "<group>"; };
+		5E33A7F66505E2893486A7A8 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
+		633BE4E1F80D05BCA7534CE7 /* PlaylistListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistListView.swift; sourceTree = "<group>"; };
+		6D3E05C77DB86BAFD55E4EC1 /* ChatDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDetailViewModel.swift; sourceTree = "<group>"; };
+		753E6E79CBB78E44EA9D7703 /* BackendManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendManager.swift; sourceTree = "<group>"; };
+		783798EBDBBE4972418C3890 /* Playlist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Playlist.swift; sourceTree = "<group>"; };
+		83E9C1A6EBD033AD3F2C59A2 /* PlaylistCreationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistCreationView.swift; sourceTree = "<group>"; };
 		88E711C922A1FB7CA56B490B /* DopetracksApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DopetracksApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A05AF3E6E40FF4E05DA0FA6A /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
-		B447941C02CD969CA881367B /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
-		D9BC3F45AFBC3192CD92E6CE /* ChatListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatListView.swift; sourceTree = "<group>"; };
-		DF2BDE7A3C13D46998C8AB6C /* DopetracksApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DopetracksApp.swift; sourceTree = "<group>"; };
+		905FE75BAC2DF00921C50790 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		E74FD766CB31A84201A1F3D0 /* ChatDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDetailView.swift; sourceTree = "<group>"; };
+		F0BD2F776C2AD677B6C74ADD /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		FF427AE7FDB62B4D0E93BF4F /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		18FB5C09EBEEFB1DA790673A /* Views */ = {
+		0356ACF1A387EC8C39B6ABEF /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				3F0B8B0031D5B87A7D8B49C3 /* ChatDetailView.swift */,
-				D9BC3F45AFBC3192CD92E6CE /* ChatListView.swift */,
-				3E7CE5DF2FA8AAEB1BE30445 /* PlaylistCreationView.swift */,
-				2C55A29CA6888F2761EABBAB /* PlaylistListView.swift */,
-				3D1FFFE22F0E00143E4D8FAC /* SearchFiltersView.swift */,
-				388823AAF30AB09343F28ABA /* SettingsView.swift */,
+				FF427AE7FDB62B4D0E93BF4F /* Chat.swift */,
+				199B6B5CD22727FE9003145F /* Message.swift */,
+				783798EBDBBE4972418C3890 /* Playlist.swift */,
+				5735329DF061B1BF69B0F538 /* SearchFilters.swift */,
+				51E6AA3A6206ACB6CC2ADDB6 /* SpotifyProfile.swift */,
 			);
-			path = Views;
-			sourceTree = "<group>";
-		};
-		2C37BC3CD8FF81EC14E57A2A /* DopetracksApp */ = {
-			isa = PBXGroup;
-			children = (
-				DF2BDE7A3C13D46998C8AB6C /* DopetracksApp.swift */,
-			);
-			path = DopetracksApp;
-			sourceTree = "<group>";
-		};
-		4488659A72E5FE4ED9FC0E44 /* DopetracksApp */ = {
-			isa = PBXGroup;
-			children = (
-				34D2BEC36A1A4B33EBD699A7 /* ContentView.swift */,
-				95CE883897AA6557C812C3AA /* Models */,
-				979A6E9295DD585C1F59815F /* Services */,
-				18FB5C09EBEEFB1DA790673A /* Views */,
-			);
-			name = DopetracksApp;
-			path = DopetracksApp/DopetracksApp;
+			path = Models;
 			sourceTree = "<group>";
 		};
 		4C8D941BD9E74E7B0E95D7A8 = {
 			isa = PBXGroup;
 			children = (
-				2C37BC3CD8FF81EC14E57A2A /* DopetracksApp */,
-				4488659A72E5FE4ED9FC0E44 /* DopetracksApp */,
+				5B64847DB32DB8429CE6C916 /* App */,
 				E91C10F210B7B2A6DBCB88CB /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		95CE883897AA6557C812C3AA /* Models */ = {
+		5B64847DB32DB8429CE6C916 /* App */ = {
 			isa = PBXGroup;
 			children = (
-				B447941C02CD969CA881367B /* Chat.swift */,
-				1932E63B2CB57632AB2B7780 /* Message.swift */,
-				09CCE4E95323680892C1C1AF /* Playlist.swift */,
-				66D186F394F8992B62663BAA /* SearchFilters.swift */,
-				48F35BCB7BC206AFE33A0CC9 /* SpotifyProfile.swift */,
+				905FE75BAC2DF00921C50790 /* ContentView.swift */,
+				46CD35CCEE049CB149DCDACA /* DopetracksApp.swift */,
+				0356ACF1A387EC8C39B6ABEF /* Models */,
+				FDEEB7055C97C76C3B278424 /* Services */,
+				A2546DB4806AF95C132C2E5A /* ViewModels */,
+				A10832BC2629C3A4B386A442 /* Views */,
 			);
-			path = Models;
+			path = App;
 			sourceTree = "<group>";
 		};
-		979A6E9295DD585C1F59815F /* Services */ = {
+		A10832BC2629C3A4B386A442 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				A05AF3E6E40FF4E05DA0FA6A /* APIClient.swift */,
-				0E900990CBC392E97DA9314D /* BackendManager.swift */,
-				50FC2F11ACC7FA7458551059 /* PermissionManager.swift */,
+				E74FD766CB31A84201A1F3D0 /* ChatDetailView.swift */,
+				116A72218D5D5241BE86F646 /* ChatListView.swift */,
+				83E9C1A6EBD033AD3F2C59A2 /* PlaylistCreationView.swift */,
+				633BE4E1F80D05BCA7534CE7 /* PlaylistListView.swift */,
+				34C2BF924EB38A4A459AE7EB /* SearchFiltersView.swift */,
+				2DBEAED06129E3D360B33B91 /* SettingsView.swift */,
+				4473BCC103D015950A454175 /* StartupView.swift */,
 			);
-			path = Services;
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A2546DB4806AF95C132C2E5A /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				6D3E05C77DB86BAFD55E4EC1 /* ChatDetailViewModel.swift */,
+				39A8F0E691BE96D1996A4D7A /* ChatListViewModel.swift */,
+				187C879120BBDE7A3CD03560 /* PlaylistListViewModel.swift */,
+			);
+			path = ViewModels;
 			sourceTree = "<group>";
 		};
 		E91C10F210B7B2A6DBCB88CB /* Products */ = {
@@ -116,6 +117,16 @@
 				88E711C922A1FB7CA56B490B /* DopetracksApp.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		FDEEB7055C97C76C3B278424 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				F0BD2F776C2AD677B6C74ADD /* APIClient.swift */,
+				753E6E79CBB78E44EA9D7703 /* BackendManager.swift */,
+				5E33A7F66505E2893486A7A8 /* PermissionManager.swift */,
+			);
+			path = Services;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -145,7 +156,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					0796D003CADA0DD5C38A1E0C = {
 						DevelopmentTeam = "";
@@ -162,7 +173,6 @@
 			);
 			mainGroup = 4C8D941BD9E74E7B0E95D7A8;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -176,22 +186,26 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D5E139566CE5010F7207784D /* APIClient.swift in Sources */,
-				4A688040F1F7684B9C28A795 /* BackendManager.swift in Sources */,
-				0E19A0706A3F02336C2D8675 /* Chat.swift in Sources */,
-				D9422E74173F983D6A56C79E /* ChatDetailView.swift in Sources */,
-				CC6F43A2697559B9526F1668 /* ChatListView.swift in Sources */,
-				DA911D2C0A57BB719313C33B /* ContentView.swift in Sources */,
-				B61869BB8C784516FFD778E4 /* DopetracksApp.swift in Sources */,
-				71A476478B44451CA7F6E50E /* Message.swift in Sources */,
-				20E8CB0611EEB8725D39417C /* PermissionManager.swift in Sources */,
-				366FD70046DB2F593050957B /* Playlist.swift in Sources */,
-				493CFE1A1F055FF1461E9112 /* PlaylistCreationView.swift in Sources */,
-				DE87BF5DFB364828E3971E12 /* PlaylistListView.swift in Sources */,
-				A29F3C95C6709BABDD1C2056 /* SearchFilters.swift in Sources */,
-				CDA349A840832F26A60622ED /* SearchFiltersView.swift in Sources */,
-				AD4274D19DE9C02EC9FCAC6F /* SettingsView.swift in Sources */,
-				F1AE0A8EBEFA622680A37400 /* SpotifyProfile.swift in Sources */,
+				7051EA8A1074B074E9066E86 /* APIClient.swift in Sources */,
+				8FFC71241BC3ED4990EAB622 /* BackendManager.swift in Sources */,
+				36E5F9154701624042B95DEF /* Chat.swift in Sources */,
+				93CF7619B13897AB0257C0FF /* ChatDetailView.swift in Sources */,
+				8012D49AF590A2BD9113C13D /* ChatDetailViewModel.swift in Sources */,
+				3341BA5CA31DF76A35FC9C20 /* ChatListView.swift in Sources */,
+				B93D0867F32664B5F1DBCE9C /* ChatListViewModel.swift in Sources */,
+				3A461B8F369A2080E0EDFE34 /* ContentView.swift in Sources */,
+				4D2666DE73F19EE1F9BB0A3A /* DopetracksApp.swift in Sources */,
+				B5CA8E867563E7A336B80071 /* Message.swift in Sources */,
+				8A81FC548EA73EFDF89CE79F /* PermissionManager.swift in Sources */,
+				4134F8EA83DE06CA9F26E999 /* Playlist.swift in Sources */,
+				FAEFCBC0D09367959F79E97B /* PlaylistCreationView.swift in Sources */,
+				2130917B436EDB55294198E1 /* PlaylistListView.swift in Sources */,
+				47D1A1C96F7EAE5F0D72E9FC /* PlaylistListViewModel.swift in Sources */,
+				BF0C25046B25453A958E6A5C /* SearchFilters.swift in Sources */,
+				1DD3C342BDA2FC525BA63E71 /* SearchFiltersView.swift in Sources */,
+				A065B1DF1F72F5B55CD149CF /* SettingsView.swift in Sources */,
+				9B8615DC4D60641D10BFD679 /* SpotifyProfile.swift in Sources */,
+				DA147891C0F1CD202DEE07F2 /* StartupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -232,9 +246,11 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -255,6 +271,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -265,10 +282,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "";
+				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
-				INFOPLIST_FILE = DopetracksApp/DopetracksApp/Info.plist;
+				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -285,10 +303,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "";
+				CODE_SIGN_IDENTITY = "-";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = "";
-				INFOPLIST_FILE = DopetracksApp/DopetracksApp/Info.plist;
+				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -335,9 +354,11 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -351,6 +372,7 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;

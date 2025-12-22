@@ -5,14 +5,7 @@ set -e
 
 cd "$(dirname "$0")"
 
-echo "🧹 Cleaning up existing Xcode project..."
-if [ -d "DopetracksApp/DopetracksApp.xcodeproj" ]; then
-    # Backup existing project (just in case)
-    BACKUP_NAME="DopetracksApp.xcodeproj.backup.$(date +%Y%m%d_%H%M%S)"
-    echo "📦 Backing up to: $BACKUP_NAME"
-    mv "DopetracksApp/DopetracksApp.xcodeproj" "DopetracksApp/$BACKUP_NAME" 2>/dev/null || true
-    echo "✅ Backed up existing project"
-fi
+echo "🧹 Cleaning up existing Xcode project... (no backup created)"
 
 echo ""
 echo "🔧 Checking XcodeGen installation..."

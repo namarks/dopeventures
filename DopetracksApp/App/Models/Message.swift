@@ -7,6 +7,18 @@
 
 import Foundation
 
+enum MessageSortOrder: String, CaseIterable, Codable {
+    case newestFirst = "desc"
+    case oldestFirst = "asc"
+    
+    var label: String {
+        switch self {
+        case .newestFirst: return "Newest"
+        case .oldestFirst: return "Oldest"
+        }
+    }
+}
+
 struct Message: Identifiable, Decodable {
     let id: String
     let text: String

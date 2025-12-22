@@ -10,6 +10,8 @@ import SwiftUI
 struct ChatDetailView: View {
     let chat: Chat
     @StateObject private var viewModel: ChatDetailViewModel
+    @State private var searchText: String = ""
+    @State private var sortOrder: MessageSortOrder = .newestFirst
     
     init(chat: Chat, apiClient: APIClient) {
         self.chat = chat
@@ -54,6 +56,32 @@ struct ChatDetailView: View {
                 
                 Divider()
                 
+                // Filters
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        TextField("Search messages...", text: $searchText)
+                            .textFieldStyle(.roundedBorder)
+                            .onSubmit {
+                                Task { await viewModel.refreshWithFilters(search: searchText, sort: sortOrder) }
+                            }
+                        Button("Apply") {
+                            Task { await viewModel.refreshWithFilters(search: searchText, sort: sortOrder) }
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    
+                    Picker("Sort", selection: $sortOrder) {
+                        ForEach(MessageSortOrder.allCases, id: \.self) { order in
+                            Text(order.label).tag(order)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: sortOrder) { newValue in
+                        Task { await viewModel.refreshWithFilters(search: searchText, sort: newValue) }
+                    }
+                }
+                .padding(.horizontal)
+                
                 // Messages section
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -77,7 +105,7 @@ struct ChatDetailView: View {
                                 .foregroundColor(.secondary)
                             Button("Retry") {
                                 Task {
-                                    await viewModel.loadMessages()
+                                    await viewModel.loadInitial()
                                 }
                             }
                             .buttonStyle(.bordered)
@@ -99,6 +127,27 @@ struct ChatDetailView: View {
                         LazyVStack(alignment: .leading, spacing: 12) {
                             ForEach(viewModel.messages) { message in
                                 MessageRow(message: message)
+                                    .onAppear {
+                                        if message.id == viewModel.messages.last?.id {
+                                            Task { await viewModel.loadMore() }
+                                        }
+                                    }
+                            }
+                            
+                            if viewModel.isLoadingMore {
+                                HStack {
+                                    ProgressView()
+                                    Text("Loading more…")
+                                        .foregroundColor(.secondary)
+                                        .font(.caption)
+                                }
+                                .frame(maxWidth: .infinity)
+                            } else if viewModel.hasMore {
+                                Button("Load more") {
+                                    Task { await viewModel.loadMore() }
+                                }
+                                .buttonStyle(.bordered)
+                                .frame(maxWidth: .infinity)
                             }
                         }
                     }
@@ -108,9 +157,12 @@ struct ChatDetailView: View {
             .padding()
         }
         .navigationTitle(chat.displayName)
+        .id(chat.id) // Force a fresh StateObject when chat changes so messages refresh
         .task(id: chat.id) {
             // Reload messages when the selected chat changes
-            await viewModel.loadMessages()
+            searchText = ""
+            sortOrder = .newestFirst
+            await viewModel.loadInitial()
         }
     }
 }

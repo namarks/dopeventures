@@ -18,7 +18,7 @@ final class ChatListViewModel: ObservableObject {
     @Published var selectedChatId: Chat.ID?
     @Published var hasFullDiskAccess = false
     @Published var searchFilters = SearchFilters()
-    @Published var hasLoadedOnce = false
+    private var hasLoadedOnce = false
     
     private var currentSearchTask: Task<Void, Never>?
     let apiClient: APIClient
@@ -29,47 +29,73 @@ final class ChatListViewModel: ObservableObject {
     
     func onAppear() {
         guard !hasLoadedOnce else { return }
-        checkPermissions()
-        Task { await loadAllChats() }
         hasLoadedOnce = true
+        
+        Task { @MainActor in
+            hasFullDiskAccess = PermissionManager.shared.checkFullDiskAccess()
+        }
+        
+        Task { _ = await loadAllChats() }
+
+        // Default-select the most recent chat on first load
+        Task { @MainActor in
+            if selectedChatId == nil, let first = chats.first {
+                selectedChatId = first.id
+            }
+        }
     }
     
     func onSearchTextChange(_ newValue: String) {
-        if searchFilters.startDate != nil ||
-            searchFilters.endDate != nil ||
-            !searchFilters.participantNames.isEmpty ||
-            !searchFilters.messageContent.isEmpty {
-            searchFilters.query = newValue
-        }
-        
-        if !newValue.isEmpty || searchFilters.hasFilters {
-            Task { await performSearch() }
-        } else {
-            chats = []
-            selectedChatId = nil
+        // Defer mutations off the immediate view update cycle to avoid
+        // "Publishing changes from within view updates is not allowed".
+        Task { @MainActor in
+            if searchFilters.startDate != nil ||
+                searchFilters.endDate != nil ||
+                !searchFilters.participantNames.isEmpty ||
+                !searchFilters.messageContent.isEmpty {
+                searchFilters.query = newValue
+            }
+            
+            if !newValue.isEmpty || searchFilters.hasFilters {
+                await performSearch()
+            } else {
+                chats = []
+                selectedChatId = nil
+            }
         }
     }
     
     func clearFilters() {
         searchFilters = SearchFilters()
         searchText = ""
-        Task { await loadAllChats() }
+        selectedChats = []
+        selectedChatId = nil
+        Task { _ = await loadAllChats() }
     }
     
     func refreshPermissions() {
         checkPermissions()
     }
     
-    func loadAllChats() async {
+    @discardableResult
+    func loadAllChats() async -> Bool {
         isLoading = true
         error = nil
         do {
             let fetched = try await apiClient.getAllChats()
             chats = sortChats(fetched)
+            hasLoadedOnce = true
+            // Auto-select first chat when none is selected
+            if selectedChatId == nil, let first = chats.first {
+                selectedChatId = first.id
+            }
+            isLoading = false
+            return true
         } catch {
             self.error = error
+            isLoading = false
+            return false
         }
-        isLoading = false
     }
     
     func performSearch() async {
@@ -79,7 +105,6 @@ final class ChatListViewModel: ObservableObject {
             await MainActor.run {
                 isLoading = true
                 error = nil
-                chats = []
             }
             do {
                 try Task.checkCancellation()
@@ -124,7 +149,9 @@ final class ChatListViewModel: ObservableObject {
                     return
                 }
             } catch is CancellationError {
-                // ignore
+                await MainActor.run {
+                    isLoading = false
+                }
             } catch {
                 await MainActor.run {
                     self.error = error
