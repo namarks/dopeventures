@@ -1,0 +1,1034 @@
+"""Chat search helpers for Messages data."""
+from __future__ import annotations
+
+import logging
+import os
+import sqlite3
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
+
+from . import prepared_messages as pm
+from . import parsing_utils as pu
+from .contacts_provider import clean_phone_number, get_contacts_db_path
+from .fts_provider import get_fts_db_path, is_available as fts_module_available, is_fts_available, search_fts
+from .message_parsing import add_parsed_text_columns
+from .message_queries import get_recent_messages_for_chat
+from .time_utils import convert_to_apple_timestamp
+
+logger = logging.getLogger(__name__)
+
+
+def search_chats_by_name(db_path: str, query: str) -> List[Dict[str, Any]]:
+    """
+    Search chats by name, identifier, or member names.
+    Fast query for chat search functionality.
+
+    Searches across:
+    - Chat display name
+    - Chat identifier (phone numbers, email addresses)
+    - Member phone numbers/emails (via handle table)
+    - Member contact names (via Contacts database)
+    """
+    search_pattern = f"%{query}%"
+
+    with sqlite3.connect(db_path) as conn:
+        # First, find handle IDs that match the search query (phone numbers/emails)
+        handle_query = """
+            SELECT DISTINCT handle.ROWID as handle_id
+            FROM handle
+            WHERE handle.id LIKE ? OR handle.uncanonicalized_id LIKE ?
+        """
+        handle_matches = pd.read_sql_query(
+            handle_query, conn, params=[search_pattern, search_pattern]
+        )
+        handle_ids = handle_matches["handle_id"].tolist() if not handle_matches.empty else []
+
+        contacts_db_path = get_contacts_db_path()
+        if contacts_db_path:
+            contacts_conn = sqlite3.connect(contacts_db_path)
+
+            # Search for contacts by name
+            contact_name_query = """
+                SELECT DISTINCT
+                    ZABCDRECORD.ZFIRSTNAME as first_name,
+                    ZABCDRECORD.ZLASTNAME as last_name,
+                    ZABCDPHONENUMBER.ZFULLNUMBER as phone_number,
+                    ZABCDEMAILADDRESS.ZADDRESS as email
+                FROM ZABCDRECORD
+                LEFT JOIN ZABCDPHONENUMBER ON ZABCDRECORD.Z_PK = ZABCDPHONENUMBER.ZOWNER
+                LEFT JOIN ZABCDEMAILADDRESS ON ZABCDRECORD.Z_PK = ZABCDEMAILADDRESS.ZOWNER
+                WHERE (
+                    (ZABCDRECORD.ZFIRSTNAME IS NOT NULL AND ZABCDRECORD.ZFIRSTNAME LIKE ?)
+                    OR (ZABCDRECORD.ZLASTNAME IS NOT NULL AND ZABCDRECORD.ZLASTNAME LIKE ?)
+                    OR (ZABCDRECORD.ZFIRSTNAME || ' ' || ZABCDRECORD.ZLASTNAME LIKE ?)
+                )
+            """
+            contact_matches = pd.read_sql_query(
+                contact_name_query,
+                contacts_conn,
+                params=[search_pattern, search_pattern, search_pattern],
+            )
+            contacts_conn.close()
+
+            # Get phone numbers and emails from matching contacts
+            contact_phones = []
+            contact_emails = []
+            for _, row in contact_matches.iterrows():
+                if pd.notna(row["phone_number"]):
+                    # Clean phone number for matching
+                    cleaned_phone = clean_phone_number(str(row["phone_number"]))
+                    if cleaned_phone:
+                        contact_phones.append(cleaned_phone)
+                if pd.notna(row["email"]):
+                    contact_emails.append(str(row["email"]).lower())
+
+            # Find handles in Messages database that match these contact phone numbers/emails
+            if contact_phones or contact_emails:
+                handle_search_conditions = []
+                handle_search_params = []
+
+                # Search for handles matching contact phone numbers
+                for phone in contact_phones:
+                    # Try different phone number formats
+                    handle_search_conditions.append(
+                        "(handle.id LIKE ? OR handle.uncanonicalized_id LIKE ?)"
+                    )
+                    handle_search_params.extend([f"%{phone}%", f"%{phone}%"])
+
+                # Search for handles matching contact emails
+                for email in contact_emails:
+                    handle_search_conditions.append(
+                        "(LOWER(handle.id) = ? OR LOWER(handle.uncanonicalized_id) = ?)"
+                    )
+                    handle_search_params.extend([email, email])
+
+                if handle_search_conditions:
+                    contact_handle_query = f"""
+                        SELECT DISTINCT handle.ROWID as handle_id
+                        FROM handle
+                        WHERE {' OR '.join(handle_search_conditions)}
+                    """
+                    contact_handle_matches = pd.read_sql_query(
+                        contact_handle_query,
+                        conn,
+                        params=handle_search_params,
+                    )
+                    contact_handle_ids = (
+                        contact_handle_matches["handle_id"].tolist()
+                        if not contact_handle_matches.empty
+                        else []
+                    )
+                    # Add to existing handle_ids (avoid duplicates)
+                    handle_ids = list(set(handle_ids + contact_handle_ids))
+
+        # Build the main search query
+        # Search in: chat.display_name, chat.chat_identifier, and member handles
+        if handle_ids:
+            # If we found matching handles, include them in the search
+            handle_placeholders = ",".join(["?"] * len(handle_ids))
+            # Use a subquery to find chats that match any criteria
+            search_query = f"""
+                SELECT DISTINCT chat.ROWID as chat_id
+                FROM chat
+                WHERE (
+                    chat.display_name LIKE ?
+                    OR chat.chat_identifier LIKE ?
+                )
+                UNION
+                SELECT DISTINCT chat.ROWID as chat_id
+                FROM chat
+                JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+                JOIN message ON chat_message_join.message_id = message.ROWID
+                WHERE message.handle_id IN ({handle_placeholders})
+            """
+            params = [search_pattern, search_pattern] + handle_ids
+        else:
+            # No matching handles, just search chat name and identifier
+            search_query = """
+                SELECT DISTINCT chat.ROWID as chat_id
+                FROM chat
+                WHERE (
+                    chat.display_name LIKE ?
+                    OR chat.chat_identifier LIKE ?
+                )
+            """
+            params = [search_pattern, search_pattern]
+
+        # Get matching chat IDs first
+        matching_chats = pd.read_sql_query(search_query, conn, params=params)
+
+        if matching_chats.empty:
+            return []
+
+        chat_ids = matching_chats["chat_id"].tolist()
+        chat_id_placeholders = ",".join(["?"] * len(chat_ids))
+
+        # Now get full statistics for matching chats
+        stats_query = f"""
+            SELECT 
+                chat.ROWID as chat_id,
+                chat.display_name,
+                chat.chat_identifier,
+                COUNT(DISTINCT message.ROWID) as message_count,
+                (
+                  COUNT(DISTINCT chat_handle_join.handle_id)
+                  + CASE WHEN SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END
+                ) as member_count,
+                COUNT(DISTINCT CASE WHEN message.is_from_me = 1 THEN message.ROWID END) as user_message_count,
+                MAX(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as last_message_date
+            FROM chat
+            LEFT JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+            LEFT JOIN message ON chat_message_join.message_id = message.ROWID
+            LEFT JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
+            WHERE chat.ROWID IN ({chat_id_placeholders})
+            GROUP BY chat.ROWID, chat.display_name, chat.chat_identifier
+            HAVING message_count > 0
+            ORDER BY last_message_date DESC
+            LIMIT 50
+        """
+
+        df = pd.read_sql_query(stats_query, conn, params=chat_ids)
+
+    # Don't deduplicate - show all matches so user can choose which chat entry to use
+    df = df.sort_values("message_count", ascending=False)
+
+    results = []
+    for _, row in df.iterrows():
+        # Get recent messages to help user identify which chat entry this is
+        # This parses attributedBody for display purposes (to help user pick the right chat)
+        recent_messages = get_recent_messages_for_chat(db_path, int(row["chat_id"]), limit=5)
+
+        member_count_val = int(row["member_count"]) if pd.notna(row["member_count"]) else 0
+        name_val = (
+            row["chat_identifier"]
+            if member_count_val == 1
+            else (row["display_name"] or row["chat_identifier"])
+        )
+        results.append(
+            {
+                "chat_id": int(row["chat_id"]),
+                "name": name_val,
+                "chat_identifier": row["chat_identifier"],
+                "members": member_count_val,
+                "total_messages": int(row["message_count"]),
+                "user_messages": int(row["user_message_count"]) if pd.notna(row["user_message_count"]) else 0,
+                "last_message_date": row["last_message_date"],
+                "recent_messages": recent_messages,  # Available but not shown in main table - shown in details view
+                # Note: Spotify link counts are NOT included here - they require parsing attributedBody
+                # Spotify links are only extracted when chats are selected for playlist creation
+            }
+        )
+
+    return results
+
+
+def advanced_chat_search(
+    db_path: str,
+    query: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    participant_names: Optional[List[str]] = None,
+    message_content: Optional[str] = None,
+    limit_to_recent: Optional[int] = None,
+    prepared_db_path: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Advanced chat search with multiple filter criteria:
+    - Text query (chat name, identifier, or participant)
+    - Date range (messages within this range)
+    - Participants (people in the chat)
+    - Message content (specific words in messages)
+
+    Returns chats that match ALL specified criteria.
+    """
+    logger.info(
+        "advanced_chat_search called: query=%s, start_date=%s, end_date=%s, message_content=%s",
+        query,
+        start_date,
+        end_date,
+        message_content,
+    )
+    use_prepared = bool(prepared_db_path and os.path.exists(prepared_db_path))
+
+    with sqlite3.connect(db_path) as conn:
+        # Build WHERE conditions dynamically
+        chat_ids: List[int] = []
+
+        # Step 1: Find handle IDs for participant search
+        participant_handle_ids = []
+        if participant_names:
+            for name in participant_names:
+                # Search in handle table
+                handle_query = """
+                    SELECT DISTINCT handle.ROWID as handle_id
+                    FROM handle
+                    WHERE handle.id LIKE ? OR handle.uncanonicalized_id LIKE ?
+                """
+                search_pattern = f"%{name}%"
+                handle_matches = pd.read_sql_query(
+                    handle_query, conn, params=[search_pattern, search_pattern]
+                )
+                if not handle_matches.empty:
+                    participant_handle_ids.extend(handle_matches["handle_id"].tolist())
+
+                contacts_db_path = get_contacts_db_path()
+                if contacts_db_path and os.path.exists(contacts_db_path):
+                    contacts_conn = sqlite3.connect(contacts_db_path)
+                    contact_name_query = """
+                        SELECT DISTINCT
+                            ZABCDPHONENUMBER.ZFULLNUMBER as phone_number,
+                            ZABCDEMAILADDRESS.ZADDRESS as email
+                        FROM ZABCDRECORD
+                        LEFT JOIN ZABCDPHONENUMBER ON ZABCDRECORD.Z_PK = ZABCDPHONENUMBER.ZOWNER
+                        LEFT JOIN ZABCDEMAILADDRESS ON ZABCDRECORD.Z_PK = ZABCDEMAILADDRESS.ZOWNER
+                        WHERE (
+                            (ZABCDRECORD.ZFIRSTNAME IS NOT NULL AND ZABCDRECORD.ZFIRSTNAME LIKE ?)
+                            OR (ZABCDRECORD.ZLASTNAME IS NOT NULL AND ZABCDRECORD.ZLASTNAME LIKE ?)
+                            OR (ZABCDRECORD.ZFIRSTNAME || ' ' || ZABCDRECORD.ZLASTNAME LIKE ?)
+                        )
+                    """
+                    contact_matches = pd.read_sql_query(
+                        contact_name_query,
+                        contacts_conn,
+                        params=[search_pattern, search_pattern, search_pattern],
+                    )
+                    contacts_conn.close()
+
+                    # Find handles matching these contacts
+                    for _, row in contact_matches.iterrows():
+                        if pd.notna(row["phone_number"]):
+                            cleaned_phone = clean_phone_number(str(row["phone_number"]))
+                            if cleaned_phone:
+                                handle_search = """
+                                    SELECT DISTINCT handle.ROWID as handle_id
+                                    FROM handle
+                                    WHERE handle.id LIKE ? OR handle.uncanonicalized_id LIKE ?
+                                """
+                                handle_matches = pd.read_sql_query(
+                                    handle_search,
+                                    conn,
+                                    params=[f"%{cleaned_phone}%", f"%{cleaned_phone}%"],
+                                )
+                                if not handle_matches.empty:
+                                    participant_handle_ids.extend(
+                                        handle_matches["handle_id"].tolist()
+                                    )
+                        if pd.notna(row["email"]):
+                            email = str(row["email"]).lower()
+                            handle_search = """
+                                SELECT DISTINCT handle.ROWID as handle_id
+                                FROM handle
+                                WHERE LOWER(handle.id) = ? OR LOWER(handle.uncanonicalized_id) = ?
+                            """
+                            handle_matches = pd.read_sql_query(
+                                handle_search,
+                                conn,
+                                params=[email, email],
+                            )
+                            if not handle_matches.empty:
+                                participant_handle_ids.extend(
+                                    handle_matches["handle_id"].tolist()
+                                )
+
+            participant_handle_ids = list(set(participant_handle_ids))  # Remove duplicates
+
+        # Step 2: Build query to find matching chat IDs based on message criteria
+        # NOTE: If only message_content is provided (no date/participant filters), we skip text filtering here
+        # and check attributedBody for all chats in Step 4. This is because many messages only have content
+        # in attributedBody, not in the text field.
+        message_conditions = []
+        message_params = []
+
+        # Date range filter
+        if start_date or end_date:
+            if start_date and end_date:
+                start_ts = convert_to_apple_timestamp(start_date)
+                end_ts = convert_to_apple_timestamp(end_date)
+                message_conditions.append("message.date BETWEEN ? AND ?")
+                message_params.extend([start_ts, end_ts])
+            elif start_date:
+                start_ts = convert_to_apple_timestamp(start_date)
+                message_conditions.append("message.date >= ?")
+                message_params.append(start_ts)
+            elif end_date:
+                end_ts = convert_to_apple_timestamp(end_date)
+                message_conditions.append("message.date <= ?")
+                message_params.append(end_ts)
+
+        # Participant filter
+        if participant_handle_ids:
+            handle_placeholders = ",".join(["?"] * len(participant_handle_ids))
+            message_conditions.append(f"message.handle_id IN ({handle_placeholders})")
+            message_params.extend(participant_handle_ids)
+
+        # Find chat IDs that have messages matching the criteria
+        # If message_content is provided, we need to check attributedBody in Step 4,
+        # so we should get all chats (or chats matching date/participant filters) without filtering by text
+        if message_content and not (start_date or end_date or participant_handle_ids):
+            # Only message_content filter - get all chats, will filter by content in Step 4
+            chat_ids_query = "SELECT DISTINCT chat.ROWID as chat_id FROM chat"
+            matching_chats = pd.read_sql_query(chat_ids_query, conn)
+            chat_ids = matching_chats["chat_id"].tolist() if not matching_chats.empty else []
+            logger.info(
+                "Step 2: Got %s chats (message_content only, will check attributedBody in Step 4)",
+                len(chat_ids),
+            )
+        elif message_conditions:
+            # We have date/participant filters
+            # If message_content is also provided, we'll check it in Step 4 (attributedBody), not here
+            # Base condition: message must have text or attributedBody
+            message_conditions.append(
+                "(message.text IS NOT NULL OR message.attributedBody IS NOT NULL)"
+            )
+            message_conditions.append(
+                "(message.associated_message_type IS NULL OR message.associated_message_type = 0)"
+            )
+
+            message_where = " AND ".join(message_conditions)
+            chat_id_query = f"""
+                SELECT DISTINCT chat.ROWID as chat_id
+                FROM chat
+                JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+                JOIN message ON chat_message_join.message_id = message.ROWID
+                WHERE {message_where}
+            """
+            matching_chats = pd.read_sql_query(chat_id_query, conn, params=message_params)
+
+            if matching_chats.empty:
+                logger.warning("Step 2: No chats found matching date/participant filters")
+                return []
+
+            chat_ids = matching_chats["chat_id"].tolist()
+            logger.info(
+                "Step 2: Found %s chats matching message criteria (date/participant filters, message_content will be checked in Step 4)",
+                len(chat_ids),
+            )
+        else:
+            # No message filters - get all chats
+            chat_ids_query = "SELECT DISTINCT chat.ROWID as chat_id FROM chat"
+            matching_chats = pd.read_sql_query(chat_ids_query, conn)
+            chat_ids = matching_chats["chat_id"].tolist() if not matching_chats.empty else []
+            logger.info("Step 2: No message filters, got %s total chats", len(chat_ids))
+
+        # Step 3: Limit to most recent chats if specified
+        if limit_to_recent is not None and chat_ids and len(chat_ids) > limit_to_recent:
+            # Get most recent chats by last_message_date
+            chat_id_placeholders = ",".join(["?"] * len(chat_ids))
+            recent_query = f"""
+                SELECT DISTINCT chat.ROWID as chat_id,
+                       MAX(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as last_message_date
+                FROM chat
+                LEFT JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+                LEFT JOIN message ON chat_message_join.message_id = message.ROWID
+                WHERE chat.ROWID IN ({chat_id_placeholders})
+                GROUP BY chat.ROWID
+                ORDER BY last_message_date DESC
+                LIMIT {limit_to_recent}
+            """
+            recent_chats = pd.read_sql_query(recent_query, conn, params=chat_ids)
+            chat_ids = (
+                recent_chats["chat_id"].tolist() if not recent_chats.empty else chat_ids[:limit_to_recent]
+            )
+            logger.info("Limited to %s most recent chats", len(chat_ids))
+
+        # Step 4: If message_content was specified, we need to check attributedBody too
+        # This requires loading messages and parsing attributedBody
+        # LIMIT: Only process up to 10,000 messages to prevent timeout
+        logger.info(
+            "Step 4: message_content=%s, chat_ids count=%s",
+            message_content,
+            len(chat_ids) if chat_ids else 0,
+        )
+        if message_content and chat_ids and use_prepared:
+            try:
+                chat_ids = pm.filter_chat_ids_by_message_content(
+                    Path(prepared_db_path),  # type: ignore[arg-type]
+                    search_term=message_content,
+                    chat_ids=chat_ids,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Prepared DB content filter failed, falling back to source DB: %s",
+                    exc,
+                )
+            if not chat_ids:
+                return []
+
+        if message_content and chat_ids:
+            # Check if FTS is available
+            use_fts = False
+            if fts_module_available():
+                fts_db_path = get_fts_db_path(db_path)
+                if fts_db_path:
+                    use_fts = is_fts_available(fts_db_path)
+
+            if use_fts and fts_db_path:
+                logger.info("Using FTS for message content search")
+                # Use FTS search - much faster!
+                end_ts = None
+                if end_date:
+                    end_ts = convert_to_apple_timestamp(end_date)
+
+                matching_messages = search_fts(
+                    fts_db_path=fts_db_path,
+                    search_term=message_content,
+                    chat_ids=chat_ids,
+                    start_date=start_date,
+                    end_date=end_ts,
+                    limit=10000,
+                )
+
+                if not matching_messages.empty:
+                    valid_chat_ids_set = set(matching_messages["chat_id"].unique().tolist())
+                    chat_ids = [cid for cid in chat_ids if cid in valid_chat_ids_set]
+                else:
+                    chat_ids = []
+            else:
+                # Fall back to original method (parsing attributedBody)
+                logger.info("FTS not available, using fallback method")
+                max_messages_to_process = 10000
+
+                # Get messages from matching chats to check attributedBody
+                chat_id_placeholders = ",".join(["?"] * len(chat_ids))
+                message_check_query = f"""
+                    SELECT 
+                        chat.ROWID as chat_id,
+                        message.text,
+                        message.attributedBody,
+                        message.date
+                    FROM chat
+                    JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+                    JOIN message ON chat_message_join.message_id = message.ROWID
+                    WHERE chat.ROWID IN ({chat_id_placeholders})
+                    AND (message.text IS NOT NULL OR message.attributedBody IS NOT NULL)
+                    AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+                """
+
+                # Add date range if specified - IMPORTANT: when checking message_content with date range,
+                # we need to check messages WITHIN the date range that contain the content
+                # Parameters must be in order: chat_ids first (for IN clause), then date params
+                message_params_check = list(chat_ids)
+                if start_date or end_date:
+                    if start_date and end_date:
+                        start_ts = convert_to_apple_timestamp(start_date)
+                        end_ts = convert_to_apple_timestamp(end_date)
+                        message_check_query += " AND message.date BETWEEN ? AND ?"
+                        message_params_check.extend([start_ts, end_ts])  # Add dates after chat_ids
+                    elif start_date:
+                        start_ts = convert_to_apple_timestamp(start_date)
+                        message_check_query += " AND message.date >= ?"
+                        message_params_check.append(start_ts)
+                    else:
+                        end_ts = convert_to_apple_timestamp(end_date)
+                        message_check_query += " AND message.date <= ?"
+                        message_params_check.append(end_ts)
+
+                # Increase limit if we have date range (to ensure we check enough messages)
+                if start_date or end_date:
+                    max_messages_to_process = 50000  # More messages when date range is specified
+
+                # Add LIMIT to prevent processing too many messages
+                # When checking message content, we need to check enough messages to find matches
+                message_check_query += f" LIMIT {max_messages_to_process}"
+
+                messages_df = pd.read_sql_query(
+                    message_check_query, conn, params=message_params_check
+                )
+
+                logger.info(
+                    "Step 4: Checking %s messages for content '%s' in %s chats (date range: %s to %s)",
+                    len(messages_df),
+                    message_content,
+                    len(chat_ids),
+                    start_date,
+                    end_date,
+                )
+
+                if messages_df.empty:
+                    logger.warning(
+                        "Step 4: No messages found in date range for %s chats. This might mean messages with '%s' are outside the date range.",
+                        len(chat_ids),
+                        message_content,
+                    )
+                    return []
+
+                if not messages_df.empty:
+                    # Parse attributedBody (this is the expensive operation)
+                    # Process in chunks to avoid memory issues
+                    chunk_size = 1000
+                    valid_chat_ids_set = set()
+
+                    for i in range(0, len(messages_df), chunk_size):
+                        chunk = messages_df.iloc[i : i + chunk_size].copy()
+
+                        # Parse attributedBody for this chunk
+                        chunk = add_parsed_text_columns(chunk)
+
+                        # Filter by message content
+                        matching_chunk = chunk[
+                            chunk["final_text"].astype(str).str.contains(
+                                message_content, case=False, na=False
+                            )
+                        ]
+
+                        # Collect chat IDs that have matching messages
+                        if not matching_chunk.empty:
+                            valid_chat_ids_set.update(
+                                matching_chunk["chat_id"].unique().tolist()
+                            )
+
+                    # Filter chat_ids to only those with matching messages
+                    if valid_chat_ids_set:
+                        chat_ids = [cid for cid in chat_ids if cid in valid_chat_ids_set]
+                    else:
+                        # No messages found with the content in the specified date range
+                        chat_ids = []
+
+            if not chat_ids:
+                return []
+
+        # Step 4: Apply text query filter (chat name, identifier) if provided
+        if query:
+            search_pattern = f"%{query}%"
+            chat_id_placeholders = ",".join(["?"] * len(chat_ids)) if chat_ids else "NULL"
+
+            if chat_ids:
+                filter_query = f"""
+                    SELECT DISTINCT chat.ROWID as chat_id
+                    FROM chat
+                    WHERE chat.ROWID IN ({chat_id_placeholders})
+                    AND (chat.display_name LIKE ? OR chat.chat_identifier LIKE ?)
+                """
+                filtered_chats = pd.read_sql_query(
+                    filter_query, conn, params=chat_ids + [search_pattern, search_pattern]
+                )
+            else:
+                filter_query = """
+                    SELECT DISTINCT chat.ROWID as chat_id
+                    FROM chat
+                    WHERE chat.display_name LIKE ? OR chat.chat_identifier LIKE ?
+                """
+                filtered_chats = pd.read_sql_query(
+                    filter_query, conn, params=[search_pattern, search_pattern]
+                )
+
+            if filtered_chats.empty:
+                return []
+
+            chat_ids = filtered_chats["chat_id"].tolist()
+
+        if not chat_ids:
+            return []
+
+        # Step 5: Get full statistics for matching chats (same as search_chats_by_name)
+        chat_id_placeholders = ",".join(["?"] * len(chat_ids))
+        stats_query = f"""
+            SELECT 
+                chat.ROWID as chat_id,
+                chat.display_name,
+                chat.chat_identifier,
+                COUNT(DISTINCT message.ROWID) as message_count,
+                (
+                  COUNT(DISTINCT chat_handle_join.handle_id)
+                  + CASE WHEN SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END
+                ) as member_count,
+                COUNT(DISTINCT CASE WHEN message.is_from_me = 1 THEN message.ROWID END) as user_message_count,
+                MAX(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as last_message_date
+            FROM chat
+            LEFT JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+            LEFT JOIN message ON chat_message_join.message_id = message.ROWID
+            LEFT JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
+            WHERE chat.ROWID IN ({chat_id_placeholders})
+            GROUP BY chat.ROWID, chat.display_name, chat.chat_identifier
+            HAVING message_count > 0
+            ORDER BY message_count DESC
+            LIMIT 100
+        """
+
+        df = pd.read_sql_query(stats_query, conn, params=chat_ids)
+
+    results = []
+    for _, row in df.iterrows():
+        recent_messages = get_recent_messages_for_chat(
+            db_path, int(row["chat_id"]), limit=5
+        )
+
+        member_count_val = int(row["member_count"]) if pd.notna(row["member_count"]) else 0
+        name_val = (
+            row["chat_identifier"]
+            if member_count_val == 1
+            else (row["display_name"] or row["chat_identifier"])
+        )
+        results.append(
+            {
+                "chat_id": int(row["chat_id"]),
+                "name": name_val,
+                "chat_identifier": row["chat_identifier"],
+                "members": member_count_val,
+                "total_messages": int(row["message_count"]),
+                "user_messages": int(row["user_message_count"]) if pd.notna(row["user_message_count"]) else 0,
+                "last_message_date": row["last_message_date"],
+                "recent_messages": recent_messages,
+            }
+        )
+
+    return results
+
+
+def advanced_chat_search_streaming(
+    db_path: str,
+    query: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    participant_names: Optional[List[str]] = None,
+    message_content: Optional[str] = None,
+    limit_to_recent: Optional[int] = None,
+    prepared_db_path: Optional[str] = None,
+):
+    """
+    Streaming version of advanced_chat_search that yields results as they're found.
+    Processes chats in batches and yields results incrementally.
+    Limits to most recent chats by default.
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        use_prepared = bool(prepared_db_path and os.path.exists(prepared_db_path))
+        # Step 1: Find handle IDs for participant search
+        participant_handle_ids = []
+        if participant_names:
+            for name in participant_names:
+                handle_query = """
+                    SELECT DISTINCT handle.ROWID as handle_id
+                    FROM handle
+                    WHERE handle.id LIKE ? OR handle.uncanonicalized_id LIKE ?
+                """
+                search_pattern = f"%{name}%"
+                handle_matches = pd.read_sql_query(
+                    handle_query, conn, params=[search_pattern, search_pattern]
+                )
+                if not handle_matches.empty:
+                    participant_handle_ids.extend(handle_matches["handle_id"].tolist())
+
+            participant_handle_ids = list(set(participant_handle_ids))
+
+        # Step 2: Find initial chat IDs based on message criteria
+        message_conditions = []
+        message_params = []
+
+        if start_date or end_date:
+            if start_date and end_date:
+                start_ts = convert_to_apple_timestamp(start_date)
+                end_ts = convert_to_apple_timestamp(end_date)
+                message_conditions.append("message.date BETWEEN ? AND ?")
+                message_params.extend([start_ts, end_ts])
+            elif start_date:
+                start_ts = convert_to_apple_timestamp(start_date)
+                message_conditions.append("message.date >= ?")
+                message_params.append(start_ts)
+            elif end_date:
+                end_ts = convert_to_apple_timestamp(end_date)
+                message_conditions.append("message.date <= ?")
+                message_params.append(end_ts)
+
+        if participant_handle_ids:
+            handle_placeholders = ",".join(["?"] * len(participant_handle_ids))
+            message_conditions.append(f"message.handle_id IN ({handle_placeholders})")
+            message_params.extend(participant_handle_ids)
+
+        # DON'T filter by message.text LIKE when message_content is provided
+        # Many messages only have content in attributedBody, not in the text field
+        # We'll check both text and attributedBody in Step 5 (batch processing)
+
+        message_conditions.append("(message.text IS NOT NULL OR message.attributedBody IS NOT NULL)")
+        message_conditions.append("(message.associated_message_type IS NULL OR message.associated_message_type = 0)")
+
+        # Get all potential chat IDs first
+        # If only message_content is provided (no date/participant filters), get all chats
+        if message_content and not (start_date or end_date or participant_handle_ids):
+            # Only message_content filter - get all chats, will filter by content in Step 5
+            all_chats = pd.read_sql_query(
+                "SELECT DISTINCT chat.ROWID as chat_id FROM chat", conn
+            )
+            chat_ids = all_chats["chat_id"].tolist() if not all_chats.empty else []
+        elif message_conditions:
+            message_where = " AND ".join(message_conditions)
+            chat_id_query = f"""
+                SELECT DISTINCT chat.ROWID as chat_id
+                FROM chat
+                JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+                JOIN message ON chat_message_join.message_id = message.ROWID
+                WHERE {message_where}
+            """
+            matching_chats = pd.read_sql_query(chat_id_query, conn, params=message_params)
+            chat_ids = matching_chats["chat_id"].tolist() if not matching_chats.empty else []
+        else:
+            all_chats = pd.read_sql_query(
+                "SELECT DISTINCT chat.ROWID as chat_id FROM chat", conn
+            )
+            chat_ids = all_chats["chat_id"].tolist() if not all_chats.empty else []
+
+        # Step 3: Limit to most recent chats (if limit specified)
+        if limit_to_recent and chat_ids and len(chat_ids) > limit_to_recent:
+            chat_id_placeholders = ",".join(["?"] * len(chat_ids))
+            recent_query = f"""
+                SELECT DISTINCT chat.ROWID as chat_id,
+                       MAX(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as last_message_date
+                FROM chat
+                LEFT JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+                LEFT JOIN message ON chat_message_join.message_id = message.ROWID
+                WHERE chat.ROWID IN ({chat_id_placeholders})
+                GROUP BY chat.ROWID
+                ORDER BY last_message_date DESC
+                LIMIT {limit_to_recent}
+            """
+            recent_chats = pd.read_sql_query(recent_query, conn, params=chat_ids)
+            chat_ids = (
+                recent_chats["chat_id"].tolist()
+                if not recent_chats.empty
+                else chat_ids[:limit_to_recent]
+            )
+
+        # Step 4: Apply text query filter if provided
+        if query and chat_ids:
+            search_pattern = f"%{query}%"
+            chat_id_placeholders = ",".join(["?"] * len(chat_ids))
+            filter_query = f"""
+                SELECT DISTINCT chat.ROWID as chat_id
+                FROM chat
+                WHERE chat.ROWID IN ({chat_id_placeholders})
+                AND (chat.display_name LIKE ? OR chat.chat_identifier LIKE ?)
+            """
+            filtered_chats = pd.read_sql_query(
+                filter_query, conn, params=chat_ids + [search_pattern, search_pattern]
+            )
+            chat_ids = filtered_chats["chat_id"].tolist() if not filtered_chats.empty else []
+
+        if message_content and chat_ids and use_prepared:
+            try:
+                chat_ids = pm.filter_chat_ids_by_message_content(
+                    Path(prepared_db_path),  # type: ignore[arg-type]
+                    search_term=message_content,
+                    chat_ids=chat_ids,
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Prepared DB content filter failed (streaming), falling back: %s", exc
+                )
+            if not chat_ids:
+                return
+
+        if not chat_ids:
+            return
+
+        # Step 5: Process chats in batches and yield results as they're found
+        batch_size = 10
+        for i in range(0, len(chat_ids), batch_size):
+            batch_chat_ids = chat_ids[i : i + batch_size]
+            chat_id_placeholders = ",".join(["?"] * len(batch_chat_ids))
+
+            # Get statistics for this batch
+            stats_query = f"""
+                SELECT 
+                    chat.ROWID as chat_id,
+                    chat.display_name,
+                    chat.chat_identifier,
+                    COUNT(DISTINCT message.ROWID) as message_count,
+                    (
+                      COUNT(DISTINCT chat_handle_join.handle_id)
+                      + CASE WHEN SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END
+                    ) as member_count,
+                    COUNT(DISTINCT CASE WHEN message.is_from_me = 1 THEN message.ROWID END) as user_message_count,
+                    MAX(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as last_message_date
+                FROM chat
+                LEFT JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+                LEFT JOIN message ON chat_message_join.message_id = message.ROWID
+                LEFT JOIN chat_handle_join ON chat.ROWID = chat_handle_join.chat_id
+                WHERE chat.ROWID IN ({chat_id_placeholders})
+                GROUP BY chat.ROWID, chat.display_name, chat.chat_identifier
+                HAVING message_count > 0
+                ORDER BY last_message_date DESC
+            """
+
+            df = pd.read_sql_query(stats_query, conn, params=batch_chat_ids)
+
+            # If message_content is specified, filter this batch unless prepared DB already filtered
+            if message_content and not df.empty and not use_prepared:
+                # Check if FTS is available
+                use_fts = False
+                fts_db_path = None
+                if fts_module_available():
+                    fts_db_path = get_fts_db_path(db_path)
+                    if fts_db_path:
+                        use_fts = is_fts_available(fts_db_path)
+
+                if use_fts and fts_db_path:
+                    # Use FTS search - much faster!
+                    end_ts = None
+                    if end_date:
+                        end_ts = convert_to_apple_timestamp(end_date)
+
+                    matching_messages = search_fts(
+                        fts_db_path=fts_db_path,
+                        search_term=message_content,
+                        chat_ids=batch_chat_ids,
+                        start_date=start_date,
+                        end_date=end_ts,
+                        limit=5000,
+                    )
+
+                    if not matching_messages.empty:
+                        valid_chat_ids_set = set(
+                            matching_messages["chat_id"].unique().tolist()
+                        )
+                        df = df[df["chat_id"].isin(valid_chat_ids_set)]
+                    else:
+                        # No matches in this batch
+                        df = pd.DataFrame()
+                else:
+                    # Fall back to original method (parsing attributedBody)
+                    batch_chat_id_placeholders = ",".join(["?"] * len(batch_chat_ids))
+                    message_check_query = f"""
+                        SELECT 
+                            chat.ROWID as chat_id,
+                            message.text,
+                            message.attributedBody
+                        FROM chat
+                        JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
+                        JOIN message ON chat_message_join.message_id = message.ROWID
+                        WHERE chat.ROWID IN ({batch_chat_id_placeholders})
+                        AND (message.text IS NOT NULL OR message.attributedBody IS NOT NULL)
+                        AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
+                    """
+
+                    # Add date range if specified
+                    message_params_check = list(batch_chat_ids)
+                    if start_date or end_date:
+                        if start_date and end_date:
+                            start_ts = convert_to_apple_timestamp(start_date)
+                            end_ts = convert_to_apple_timestamp(end_date)
+                            message_check_query += " AND message.date BETWEEN ? AND ?"
+                            message_params_check.extend([start_ts, end_ts])
+                        elif start_date:
+                            start_ts = convert_to_apple_timestamp(start_date)
+                            message_check_query += " AND message.date >= ?"
+                            message_params_check.append(start_ts)
+                        else:
+                            end_ts = convert_to_apple_timestamp(end_date)
+                            message_check_query += " AND message.date <= ?"
+                            message_params_check.append(end_ts)
+
+                    message_check_query += " LIMIT 5000"
+
+                    messages_df = pd.read_sql_query(
+                        message_check_query, conn, params=message_params_check
+                    )
+
+                    if not messages_df.empty:
+                        # Parse attributedBody in chunks
+                        chunk_size = 500
+                        valid_chat_ids_set = set()
+
+                        for j in range(0, len(messages_df), chunk_size):
+                            try:
+                                chunk = messages_df.iloc[j : j + chunk_size].copy()
+
+                                # Parse attributedBody with error handling
+                                def safe_parse_attributed_body(attributed_body):
+                                    try:
+                                        return pu.parse_attributed_body(attributed_body)
+                                    except Exception as exc:
+                                        logger.debug("Error parsing attributedBody: %s", exc)
+                                        return {}
+
+                                chunk["parsed_body"] = chunk["attributedBody"].apply(
+                                    safe_parse_attributed_body
+                                )
+                                chunk["final_text"] = chunk.apply(
+                                    lambda row: pu.finalize_text(row["text"], row["parsed_body"]),
+                                    axis=1,
+                                )
+
+                                matching_chunk = chunk[
+                                    chunk["final_text"].astype(str).str.contains(
+                                        message_content, case=False, na=False
+                                    )
+                                ]
+
+                                if not matching_chunk.empty:
+                                    valid_chat_ids_set.update(
+                                        matching_chunk["chat_id"].unique().tolist()
+                                    )
+                            except Exception as exc:
+                                logger.error(
+                                    "Error processing message chunk %s-%s: %s",
+                                    j,
+                                    j + chunk_size,
+                                    exc,
+                                    exc_info=True,
+                                )
+                                # Continue with next chunk instead of crashing
+                                continue
+
+                        # Filter df to only chats with matching messages
+                        if valid_chat_ids_set:
+                            df = df[df["chat_id"].isin(valid_chat_ids_set)]
+                        else:
+                            df = pd.DataFrame()
+
+            # Yield results for this batch
+            for _, row in df.iterrows():
+                try:
+                    recent_messages = get_recent_messages_for_chat(
+                        db_path,
+                        int(row["chat_id"]),
+                        limit=5,
+                        prepared_db_path=prepared_db_path,
+                    )
+
+                    member_count_val = (
+                        int(row["member_count"]) if pd.notna(row["member_count"]) else 0
+                    )
+                    name_val = (
+                        row["chat_identifier"]
+                        if member_count_val == 1
+                        else (row["display_name"] or row["chat_identifier"])
+                    )
+                    result = {
+                        "chat_id": int(row["chat_id"]),
+                        "name": name_val,
+                        "chat_identifier": row["chat_identifier"],
+                        "members": member_count_val,
+                        "total_messages": int(row["message_count"]),
+                        "user_messages": int(row["user_message_count"]) if pd.notna(row["user_message_count"]) else 0,
+                        "last_message_date": row["last_message_date"],
+                        "recent_messages": recent_messages,
+                    }
+
+                    yield result
+                except Exception as exc:
+                    logger.error(
+                        "Error processing chat %s: %s",
+                        row.get("chat_id", "unknown"),
+                        exc,
+                        exc_info=True,
+                    )
+                    # Continue with next chat instead of crashing
+                    continue
+
+    except Exception as exc:
+        logger.error("Error in advanced_chat_search_streaming: %s", exc, exc_info=True)
+        # Re-raise to be caught by the endpoint
+        raise
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception as exc:
+                logger.error("Error closing database connection: %s", exc)
