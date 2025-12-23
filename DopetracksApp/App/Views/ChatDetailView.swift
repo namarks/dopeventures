@@ -171,47 +171,84 @@ struct MessageRow: View {
     let message: Message
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                if let sender = message.sender {
-                    Text(sender)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                } else {
-                    Text("Unknown")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                HStack(spacing: 4) {
-                    Text(message.date, style: .time)
-                    Text("•")
-                    Text(message.date, style: .relative)
-                }
-                .font(.caption2)
-                .foregroundColor(.secondary)
+        HStack(alignment: .top, spacing: 10) {
+            // Avatar / initials
+            ZStack {
+                Circle()
+                    .fill(message.isFromMe ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.15))
+                    .frame(width: 34, height: 34)
+                Text(message.initials)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+                    .foregroundColor(message.isFromMe ? .accentColor : .primary)
             }
             
-            Text(message.text)
-                .font(.body)
-                .textSelection(.enabled)
-            
-            if message.hasSpotifyLink, let spotifyUrl = message.spotifyUrl {
-                HStack {
-                    Image(systemName: "music.note")
-                        .foregroundColor(.green)
-                    Link("Open in Spotify", destination: URL(string: spotifyUrl)!)
-                        .font(.caption)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(message.displaySender)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Text(message.date, style: .time)
+                        Text("•")
+                        Text(message.date, style: .relative)
+                    }
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
                 }
-                .padding(.top, 4)
+                
+                Text(message.text)
+                    .font(.body)
+                    .lineSpacing(2)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                
+                if message.hasSpotifyLink, let spotifyUrl = message.spotifyUrl {
+                    HStack(spacing: 6) {
+                        Image(systemName: "music.note")
+                            .foregroundColor(.green)
+                        Link("Open in Spotify", destination: URL(string: spotifyUrl)!)
+                            .font(.caption)
+                    }
+                }
+                
+                if !message.reactions.isEmpty {
+                    let grouped = Dictionary(grouping: message.reactions, by: { $0.type })
+                    HStack(spacing: 6) {
+                        ForEach(grouped.keys.sorted(), id: \.self) { key in
+                            let emoji = reactionEmoji(key)
+                            let count = grouped[key]?.count ?? 0
+                            HStack(spacing: 4) {
+                                Text(emoji)
+                                Text("\(count)")
+                                    .font(.caption2)
+                            }
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 8)
+                            .background(Color(NSColor.windowBackgroundColor))
+                            .cornerRadius(8)
+                        }
+                    }
+                }
             }
         }
-        .padding()
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
         .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(8)
+        .cornerRadius(10)
+    }
+    
+    private func reactionEmoji(_ type: String) -> String {
+        switch type.lowercased() {
+        case "loved": return "❤️"
+        case "liked": return "👍"
+        case "disliked": return "👎"
+        case "laughed": return "😂"
+        case "emphasized": return "❗️"
+        case "questioned": return "❓"
+        default: return "💬"
+        }
     }
 }
 

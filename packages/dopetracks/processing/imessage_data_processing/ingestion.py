@@ -41,7 +41,10 @@ def ingest_messages(source_db_path: str, prepared_db_path: Path, batch_size: int
                     message.is_from_me,
                     message.handle_id,
                     handle.id as sender_contact,
-                    datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime") as date_utc
+                    datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime") as date_utc,
+                    message.associated_message_type,
+                    message.associated_message_guid,
+                    message.guid
                 FROM message
                 JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
                 LEFT JOIN handle ON message.handle_id = handle.ROWID

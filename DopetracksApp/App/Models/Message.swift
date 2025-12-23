@@ -27,6 +27,26 @@ struct Message: Identifiable, Decodable {
     let isFromMe: Bool
     let hasSpotifyLink: Bool
     let spotifyUrl: String?
+    let reactions: [Reaction]
+    
+    // Computed for UI
+    var displaySender: String {
+        if isFromMe { return "You" }
+        return sender?.isEmpty == false ? sender! : "Unknown"
+    }
+    
+    var initials: String {
+        let components = displaySender
+            .split(separator: " ")
+            .map { String($0) }
+        let first = components.first?.prefix(1) ?? ""
+        let second = components.dropFirst().first?.prefix(1) ?? ""
+        let candidate = (first + second)
+        if candidate.isEmpty, let c = displaySender.first {
+            return String(c)
+        }
+        return candidate.uppercased()
+    }
     
     enum CodingKeys: String, CodingKey {
         case text
@@ -36,6 +56,7 @@ struct Message: Identifiable, Decodable {
         case isFromMe = "is_from_me"
         case hasSpotifyLink = "has_spotify_link"
         case spotifyUrl = "spotify_url"
+        case reactions
     }
     
     init(from decoder: Decoder) throws {
@@ -72,6 +93,42 @@ struct Message: Identifiable, Decodable {
         // These fields may not be in the API response, default to false/nil
         self.hasSpotifyLink = (try? container.decode(Bool.self, forKey: .hasSpotifyLink)) ?? false
         self.spotifyUrl = try? container.decode(String.self, forKey: .spotifyUrl)
+        self.reactions = (try? container.decode([Reaction].self, forKey: .reactions)) ?? []
+    }
+}
+
+struct Reaction: Identifiable, Decodable {
+    let id: String
+    let type: String
+    let sender: String
+    let isFromMe: Bool
+    let date: Date
+    
+    enum CodingKeys: String, CodingKey {
+        case type
+        case sender
+        case isFromMe = "is_from_me"
+        case date
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.type = try container.decode(String.self, forKey: .type)
+        self.sender = try container.decode(String.self, forKey: .sender)
+        self.isFromMe = (try? container.decode(Bool.self, forKey: .isFromMe)) ?? false
+        let dateString = try container.decode(String.self, forKey: .date)
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+        guard let parsedDate = formatter.date(from: dateString) else {
+            throw DecodingError.dataCorruptedError(forKey: .date, in: container, debugDescription: "Invalid date format: \(dateString)")
+        }
+        self.date = parsedDate
+        
+        // Build stable-ish id
+        self.id = "\(type)_\(sender)_\(dateString)"
     }
 }
 

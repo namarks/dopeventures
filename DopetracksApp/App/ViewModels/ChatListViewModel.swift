@@ -59,8 +59,8 @@ final class ChatListViewModel: ObservableObject {
             if !newValue.isEmpty || searchFilters.hasFilters {
                 await performSearch()
             } else {
-                chats = []
-                selectedChatId = nil
+                currentSearchTask?.cancel()
+                await loadAllChats()
             }
         }
     }

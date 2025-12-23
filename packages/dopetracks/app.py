@@ -9,6 +9,7 @@ import json
 import httpx
 import queue
 import time
+import sqlite3
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, Form, UploadFile, File
@@ -27,8 +28,12 @@ from .config import settings
 from .database.connection import get_db, init_database, check_database_health
 from .database.models import SpotifyToken
 from .utils.helpers import get_db_path, validate_db_path
+from .utils import dictionaries
 from .processing.imessage_data_processing.prepared_messages import (
     chat_search_prepared,
+)
+from .processing.contacts_data_processing.import_contact_info import (
+    get_contact_info_by_handle,
 )
 from .processing.imessage_data_processing.optimized_queries import (
     advanced_chat_search,
@@ -1225,7 +1230,10 @@ async def get_recent_messages(
                     m.sender_handle,
                     m.is_from_me,
                     m.has_spotify_link,
-                    m.spotify_url
+                    m.spotify_url,
+                    m.associated_message_type,
+                    m.associated_message_guid,
+                    m.message_guid
                 FROM messages m
                 WHERE m.chat_id = ?
                 {search_clause}
@@ -1235,7 +1243,7 @@ async def get_recent_messages(
             """
             cur.execute(query, params)
             rows = cur.fetchall()
-            messages = []
+            messages_raw = []
             for row in rows:
                 (
                     message_id,
@@ -1245,19 +1253,97 @@ async def get_recent_messages(
                     is_from_me,
                     has_spotify,
                     spotify_url,
+                    associated_message_type,
+                    associated_message_guid,
+                    message_guid,
                 ) = row
-                messages.append(
+                messages_raw.append(
                     {
                         "id": str(message_id),
                         "text": text or "",
                         "date": date_val,
-                        "sender": sender_handle,
+                        "sender_handle": sender_handle,
                         "is_from_me": bool(is_from_me),
                         "has_spotify_link": bool(has_spotify),
                         "spotify_url": spotify_url,
+                        "associated_message_type": associated_message_type,
+                        "associated_message_guid": associated_message_guid,
+                        "message_guid": message_guid,
                     }
                 )
-            return {"messages": messages}
+
+            # Split base messages and reactions
+            base_messages: Dict[str, Dict[str, Any]] = {}
+            reactions_by_target: Dict[str, List[Dict[str, Any]]] = {}
+
+            for msg in messages_raw:
+                assoc_type = msg.get("associated_message_type")
+                is_reaction = assoc_type not in (None, 0)
+                sender_handle = msg.get("sender_handle")
+
+                # Resolve sender name
+                sender_name = sender_handle or "Unknown"
+                if msg.get("is_from_me"):
+                    sender_name = "You"
+                else:
+                    if sender_name == "Unknown" or sender_name == sender_handle:
+                        try:
+                            info = get_contact_info_by_handle(sender_handle)
+                            if info and info.get("full_name"):
+                                sender_name = info["full_name"]
+                        except Exception:
+                            pass
+
+                if is_reaction:
+                    reaction_type = dictionaries.reaction_dict.get(assoc_type, "reaction")
+                    target_guid = msg.get("associated_message_guid")
+                    if not target_guid:
+                        continue
+                    reactions_by_target.setdefault(target_guid, []).append(
+                        {
+                            "type": reaction_type,
+                            "sender": sender_name,
+                            "is_from_me": msg.get("is_from_me", False),
+                            "date": msg.get("date"),
+                            "message_id": msg.get("id"),
+                        }
+                    )
+                else:
+                    key = msg.get("message_guid") or msg["id"]
+                    base_messages[key] = {
+                        "id": msg["id"],
+                        "text": msg["text"],
+                        "date": msg["date"],
+                        "sender": sender_handle,
+                        "sender_name": sender_name,
+                        "sender_full_name": sender_name,
+                        "is_from_me": msg["is_from_me"],
+                        "has_spotify_link": msg["has_spotify_link"],
+                        "spotify_url": msg["spotify_url"],
+                        "reactions": [],
+                        "message_guid": msg.get("message_guid"),
+                    }
+
+            # Attach reactions to targets
+            for target_guid, reacts in reactions_by_target.items():
+                target = base_messages.get(target_guid)
+                if target:
+                    target["reactions"].extend(reacts)
+
+            # Keep ordering of non-reaction messages
+            ordered = [
+                m for m in messages_raw
+                if m.get("associated_message_type") in (None, 0)
+            ]
+            result_messages = []
+            for m in ordered:
+                key = m.get("message_guid") or m["id"]
+                if key in base_messages:
+                    out = base_messages[key].copy()
+                    out.pop("message_guid", None)
+                    result_messages.append(out)
+
+            return {"messages": result_messages}
         finally:
             conn.close()
     except Exception as e:

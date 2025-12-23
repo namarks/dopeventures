@@ -15,6 +15,7 @@ from pathlib import Path
 
 from . import parsing_utils as pu
 from . import prepared_messages as pm
+from ..contacts_data_processing.import_contact_info import get_contact_info_by_handle
 
 logger = logging.getLogger(__name__)
 
@@ -193,8 +194,9 @@ def get_recent_messages_for_chat(
         except ImportError:
             logger.debug("Could not import contact info function: contacts_data_processing module not available")
             get_contact_info_by_handle = None
-        use_contact_info = True
-        logger.debug("Contact info import successful")
+        use_contact_info = get_contact_info_by_handle is not None
+        if use_contact_info:
+            logger.debug("Contact info import successful")
     except ImportError as e:
         logger.warning(f"Could not import contact info function: {e}")
         use_contact_info = False
@@ -267,6 +269,12 @@ def get_chat_list(db_path: str, prepared_db_path: Optional[str] = None) -> List[
     Fast query - no message processing needed.
     """
     conn = sqlite3.connect(db_path)
+    prepared_conn = None
+    if prepared_db_path and os.path.exists(prepared_db_path):
+        try:
+            prepared_conn = sqlite3.connect(prepared_db_path)
+        except Exception:
+            prepared_conn = None
     
     query = """
         SELECT 
@@ -301,18 +309,150 @@ def get_chat_list(db_path: str, prepared_db_path: Optional[str] = None) -> List[
     
     results = []
     for _, row in df.iterrows():
+        chat_id_val = int(row["chat_id"])
+
+        # Resolve participant handles (excluding "self" is fine because chat_handle_join stores others)
+        participant_handles: List[str] = []
+        try:
+            with sqlite3.connect(db_path) as c2:
+                cur = c2.cursor()
+                cur.execute(
+                    """
+                    SELECT h.id
+                    FROM chat_handle_join chj
+                    JOIN handle h ON chj.handle_id = h.ROWID
+                    WHERE chj.chat_id = ?
+                    """,
+                    (chat_id_val,),
+                )
+                participant_handles = [r[0] for r in cur.fetchall() if r and r[0]]
+        except Exception:
+            participant_handles = []
+
+        def candidate_handles(handle: str) -> List[str]:
+            """Generate normalized variants for phone lookups."""
+            if not handle:
+                return []
+            raw = str(handle)
+            digits = "".join(ch for ch in raw if ch.isdigit())
+            variants = [raw]
+            if digits:
+                variants.append(digits)
+                if len(digits) == 10:
+                    variants.append("+1" + digits)
+                if len(digits) > 10:
+                    variants.append(digits[-10:])
+            # Deduplicate preserving order
+            seen = set()
+            out = []
+            for v in variants:
+                if v not in seen:
+                    seen.add(v)
+                    out.append(v)
+            return out
+
+        def candidate_handles(handle: str) -> List[str]:
+            """Generate normalized variants for phone lookups."""
+            if not handle:
+                return []
+            raw = str(handle)
+            digits = "".join(ch for ch in raw if ch.isdigit())
+            variants = [raw]
+            if digits:
+                variants.append(digits)
+                if len(digits) == 10:
+                    variants.append("+1" + digits)
+                if len(digits) > 10:
+                    variants.append(digits[-10:])
+            # Deduplicate preserving order
+            seen = set()
+            out = []
+            for v in variants:
+                if v not in seen:
+                    seen.add(v)
+                    out.append(v)
+            return out
+
+        def prepared_lookup(name_handle: str) -> Optional[str]:
+            """Try both raw and digits-only against contacts.display_name."""
+            if not prepared_conn:
+                return None
+            try:
+                curp = prepared_conn.cursor()
+                for h in {name_handle, "".join(ch for ch in name_handle if ch.isdigit())}:
+                    if not h:
+                        continue
+                    curp.execute(
+                        "SELECT display_name FROM contacts WHERE contact_info = ? LIMIT 1",
+                        (h,),
+                    )
+                    rowp = curp.fetchone()
+                    if rowp and rowp[0]:
+                        return str(rowp[0])
+            except Exception:
+                pass
+            return None
+
+        # Helper to resolve a display name for a handle
+        def resolve_name(handle: str) -> str:
+            if not handle:
+                return ""
+            for h in candidate_handles(handle):
+                disp = prepared_lookup(h)
+                if disp:
+                    return disp
+                try:
+                    info = get_contact_info_by_handle(h)
+                    if info and info.get("full_name"):
+                        return info["full_name"]
+                except Exception:
+                    pass
+            return str(handle)
+
+        def resolve_first_name(handle: str) -> str:
+            if not handle:
+                return ""
+            for h in candidate_handles(handle):
+                disp = prepared_lookup(h)
+                if disp:
+                    disp = disp.strip()
+                    if disp:
+                        return disp.split(" ")[0]
+                try:
+                    info = get_contact_info_by_handle(h)
+                    if info:
+                        if info.get("first_name"):
+                            return info["first_name"]
+                        if info.get("full_name"):
+                            return str(info["full_name"]).split(" ")[0]
+                except Exception:
+                    pass
+            return str(handle)
+
+        participant_names = [resolve_name(h) for h in participant_handles if h]
+        participant_names = [n for n in participant_names if n]
+        participant_first_names = [resolve_first_name(h) for h in participant_handles if h]
+        participant_first_names = [n for n in participant_first_names if n]
+
         # Get recent messages for this chat (available in details view)
         recent_messages = get_recent_messages_for_chat(
             db_path,
-            int(row["chat_id"]),
+            chat_id_val,
             limit=5,
             prepared_db_path=prepared_db_path,
         )
         
         member_count_val = int(row['member_count']) if pd.notna(row['member_count']) else 0
-        name_val = row['chat_identifier'] if member_count_val == 1 else (row['display_name'] or row['chat_identifier'])
+        # If no display name, build one from participants (excluding self is implied by chat_handle_join)
+        if member_count_val > 1 and (row['display_name'] is None or str(row['display_name']).strip() == ""):
+            # Use up to 3 participant names to keep it short
+            display_pool = participant_first_names if participant_first_names else participant_names
+            name_val = ", ".join(display_pool[:3]) if display_pool else (row['chat_identifier'] or "Unnamed Chat")
+        else:
+            name_val = row['chat_identifier'] if member_count_val == 1 else (row['display_name'] or row['chat_identifier'])
+
         results.append({
-            "chat_id": int(row['chat_id']),
+            "chat_id": chat_id_val,
             "name": name_val,
             "chat_identifier": row['chat_identifier'],
             "members": member_count_val,
@@ -322,6 +462,8 @@ def get_chat_list(db_path: str, prepared_db_path: Optional[str] = None) -> List[
             "recent_messages": recent_messages  # Available but not shown in main table - shown in details view
         })
     
+    if prepared_conn:
+        prepared_conn.close()
     return results
 
 def extract_spotify_urls(text: str) -> List[str]:

@@ -7,7 +7,17 @@ from typing import Optional, List, Dict, Any, Tuple, Iterable
 from . import parsing_utils as pu
 
 PREPARED_DB_NAME = "prepared_messages.db"
-PREPARED_DB_VERSION = 2
+PREPARED_DB_VERSION = 3
+
+# Normalize handles for contacts table: digits-only for phones, lowercase for emails
+def _normalize_contact_handle(handle: Optional[str]) -> Optional[str]:
+    if not handle:
+        return handle
+    h = str(handle).strip()
+    if "@" in h:
+        return h.lower()
+    digits = "".join(ch for ch in h if ch.isdigit())
+    return digits or h
 
 # Meta keys tracked inside the prepared store
 META_KEYS = {
@@ -60,7 +70,10 @@ def _create_schema(cur: sqlite3.Cursor) -> None:
             text TEXT,
             has_spotify_link INTEGER DEFAULT 0,
             spotify_url TEXT,
-            content_hash TEXT
+            content_hash TEXT,
+            associated_message_type INTEGER,
+            associated_message_guid TEXT,
+            message_guid TEXT
         )
         """
     )
@@ -87,6 +100,8 @@ def _create_schema(cur: sqlite3.Cursor) -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_date ON messages(chat_id, date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_date ON messages(date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_content_hash ON messages(content_hash)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_assoc_guid ON messages(associated_message_guid)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_guid ON messages(message_guid)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_contacts_stable_id ON contacts(stable_id)")
     # Seed meta with defaults
     for key, value in META_KEYS.items():
@@ -296,7 +311,7 @@ def get_recent_messages_prepared(
             params = message_ids + [limit, offset]
             cur.execute(
                 f"""
-                SELECT message_id, chat_id, date, sender_handle, is_from_me, text, has_spotify_link, spotify_url
+                SELECT message_id, chat_id, date, sender_handle, is_from_me, text, has_spotify_link, spotify_url, associated_message_type, associated_message_guid, message_guid
                 FROM messages
                 WHERE message_id IN ({placeholders})
                 ORDER BY date {order_sql}
@@ -307,7 +322,7 @@ def get_recent_messages_prepared(
         else:
             cur.execute(
                 f"""
-                SELECT message_id, chat_id, date, sender_handle, is_from_me, text, has_spotify_link, spotify_url
+                SELECT message_id, chat_id, date, sender_handle, is_from_me, text, has_spotify_link, spotify_url, associated_message_type, associated_message_guid, message_guid
                 FROM messages
                 WHERE chat_id = ?
                 ORDER BY date {order_sql}
@@ -327,6 +342,9 @@ def get_recent_messages_prepared(
                 "text": row[5],
                 "has_spotify_link": bool(row[6]),
                 "spotify_url": row[7],
+                "associated_message_type": row[8],
+                "associated_message_guid": row[9],
+                "message_guid": row[10],
             }
             for row in rows
         ]
@@ -374,16 +392,35 @@ def get_chat_overview(
 
 
 def parse_message_row(row: Tuple[Any, ...]) -> Dict[str, Any]:
-    (
-        message_id,
-        chat_id,
-        text,
-        attributed_body,
-        is_from_me,
-        handle_id,
-        sender_contact,
-        date_utc,
-    ) = row
+    # Support both new (11 fields) and legacy (8 fields) shapes
+    if len(row) >= 11:
+        (
+            message_id,
+            chat_id,
+            text,
+            attributed_body,
+            is_from_me,
+            handle_id,
+            sender_contact,
+            date_utc,
+            associated_message_type,
+            associated_message_guid,
+            message_guid,
+        ) = row[:11]
+    else:
+        (
+            message_id,
+            chat_id,
+            text,
+            attributed_body,
+            is_from_me,
+            handle_id,
+            sender_contact,
+            date_utc,
+        ) = row
+        associated_message_type = None
+        associated_message_guid = None
+        message_guid = None
     parsed = pu.parse_message_fields(text, attributed_body, sender_contact, date_utc)
     return {
         "message_id": message_id,
@@ -395,6 +432,9 @@ def parse_message_row(row: Tuple[Any, ...]) -> Dict[str, Any]:
         "has_spotify_link": parsed["has_spotify"],
         "spotify_url": parsed["spotify_url"],
         "content_hash": parsed["content_hash"],
+        "associated_message_type": associated_message_type,
+        "associated_message_guid": associated_message_guid,
+        "message_guid": message_guid,
     }
 
 
@@ -417,14 +457,17 @@ def bulk_insert_messages(db_path: Path, messages: List[Dict[str, Any]]) -> None:
                 m["has_spotify_link"],
                 m["spotify_url"],
                 m.get("content_hash"),
+                m.get("associated_message_type"),
+                m.get("associated_message_guid"),
+                m.get("message_guid"),
             )
             for m in messages
         ]
         cur.executemany(
             """
             INSERT OR REPLACE INTO messages
-            (message_id, chat_id, date, sender_handle, is_from_me, text, has_spotify_link, spotify_url, content_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (message_id, chat_id, date, sender_handle, is_from_me, text, has_spotify_link, spotify_url, content_hash, associated_message_type, associated_message_guid, message_guid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
@@ -450,7 +493,7 @@ def bulk_upsert_contacts(db_path: Path, contacts: Iterable[Dict[str, Any]]) -> i
         rows = [
             (
                 c.get("handle_id"),
-                c.get("contact_info"),
+                _normalize_contact_handle(c.get("contact_info")),
                 c.get("display_name"),
                 c.get("avatar_path"),
                 c.get("stable_id"),
@@ -561,7 +604,10 @@ def load_new_messages_into_prepared_db(
                     message.is_from_me,
                     message.handle_id,
                     handle.id as sender_contact,
-                    datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime") as date_utc
+                    datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime") as date_utc,
+                    message.associated_message_type,
+                    message.associated_message_guid,
+                    message.guid
                 FROM message
                 JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
                 LEFT JOIN handle ON message.handle_id = handle.ROWID
