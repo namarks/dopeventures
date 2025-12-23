@@ -12,7 +12,7 @@ from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 from . import parsing_utils as pu
-from .optimized_queries import convert_to_apple_timestamp
+from .time_utils import convert_to_apple_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -388,4 +388,3 @@ def is_fts_available(fts_db_path: str) -> bool:
         return count > 0
     except Exception:
         return False
-
