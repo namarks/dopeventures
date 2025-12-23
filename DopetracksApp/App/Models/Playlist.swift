@@ -71,7 +71,31 @@ struct Playlist: Identifiable, Decodable {
         }
         
         // chat_ids won't exist in Spotify API response, default to empty array
-        chatIds = (try? container.decode([String].self, forKey: .chatIds)) ?? []
+        if let stringIds = try? container.decode([String].self, forKey: .chatIds) {
+            chatIds = stringIds
+        } else if let intIds = try? container.decode([Int].self, forKey: .chatIds) {
+            chatIds = intIds.map { String($0) }
+        } else {
+            chatIds = []
+        }
+    }
+    
+    init(
+        id: String,
+        name: String,
+        spotifyId: String?,
+        spotifyUrl: String?,
+        trackCount: Int,
+        createdAt: Date?,
+        chatIds: [String]
+    ) {
+        self.id = id
+        self.name = name
+        self.spotifyId = spotifyId
+        self.spotifyUrl = spotifyUrl
+        self.trackCount = trackCount
+        self.createdAt = createdAt
+        self.chatIds = chatIds
     }
 }
 

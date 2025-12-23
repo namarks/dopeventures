@@ -23,6 +23,7 @@ def _normalize_contact_handle(handle: Optional[str]) -> Optional[str]:
 META_KEYS = {
     "db_version": str(PREPARED_DB_VERSION),
     "last_processed_rowid": "0",
+    "last_processed_date": "0",
     "last_contact_rowid": "0",
     "last_full_reindex": "0",
 }
@@ -48,6 +49,7 @@ def _drop_schema(cur: sqlite3.Cursor) -> None:
     cur.execute("DROP TABLE IF EXISTS contacts")
     cur.execute("DROP TABLE IF EXISTS meta")
     cur.execute("DROP TABLE IF EXISTS messages_fts")
+    cur.execute("DROP TABLE IF EXISTS chat_groups")
 
 
 def _create_schema(cur: sqlite3.Cursor) -> None:
@@ -64,6 +66,7 @@ def _create_schema(cur: sqlite3.Cursor) -> None:
         CREATE TABLE IF NOT EXISTS messages (
             message_id INTEGER PRIMARY KEY,
             chat_id INTEGER,
+            canonical_chat_id TEXT,
             date TEXT,
             sender_handle TEXT,
             is_from_me INTEGER,
@@ -74,6 +77,16 @@ def _create_schema(cur: sqlite3.Cursor) -> None:
             associated_message_type INTEGER,
             associated_message_guid TEXT,
             message_guid TEXT
+        )
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS chat_groups (
+            canonical_chat_id TEXT PRIMARY KEY,
+            chat_ids TEXT,
+            member_count INTEGER,
+            last_message_date TEXT
         )
         """
     )
@@ -99,6 +112,7 @@ def _create_schema(cur: sqlite3.Cursor) -> None:
     # Indexes
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_date ON messages(chat_id, date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_date ON messages(date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_canonical_date ON messages(canonical_chat_id, date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_content_hash ON messages(content_hash)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_assoc_guid ON messages(associated_message_guid)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_guid ON messages(message_guid)")
@@ -109,6 +123,14 @@ def _create_schema(cur: sqlite3.Cursor) -> None:
             "INSERT OR IGNORE INTO meta(key, value) VALUES(?, ?)",
             (key, value),
         )
+
+
+def _table_has_column(cur: sqlite3.Cursor, table: str, column: str) -> bool:
+    try:
+        cur.execute(f"PRAGMA table_info({table})")
+        return any(row[1] == column for row in cur.fetchall())
+    except Exception:
+        return False
 
 
 def _ensure_schema(conn: sqlite3.Connection, force_rebuild: bool = False) -> None:
@@ -125,6 +147,19 @@ def _ensure_schema(conn: sqlite3.Connection, force_rebuild: bool = False) -> Non
             if current_version != str(PREPARED_DB_VERSION):
                 needs_rebuild = True
         else:
+            needs_rebuild = True
+    except Exception:
+        needs_rebuild = True
+
+    # Detect missing columns/tables (schema drift)
+    try:
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='messages'")
+        has_messages = cur.fetchone() is not None
+        if has_messages and not _table_has_column(cur, "messages", "canonical_chat_id"):
+            needs_rebuild = True
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chat_groups'")
+        has_chat_groups = cur.fetchone() is not None
+        if not has_chat_groups:
             needs_rebuild = True
     except Exception:
         needs_rebuild = True
@@ -210,8 +245,27 @@ def get_last_processed_rowid(db_path: Path) -> int:
     return _get_int_meta(db_path, "last_processed_rowid")
 
 
+def get_last_processed_date(db_path: Path) -> Optional[str]:
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        return _get_meta(cur, "last_processed_date", None)
+    finally:
+        conn.close()
+
+
 def set_last_processed_rowid(db_path: Path, rowid: int) -> None:
     _set_int_meta(db_path, "last_processed_rowid", rowid)
+
+
+def set_last_processed_date(db_path: Path, date_str: str) -> None:
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        _set_meta(cur, "last_processed_date", date_str)
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_last_contact_rowid(db_path: Path) -> int:
@@ -450,6 +504,7 @@ def bulk_insert_messages(db_path: Path, messages: List[Dict[str, Any]]) -> None:
             (
                 m["message_id"],
                 m["chat_id"],
+                m.get("canonical_chat_id"),
                 m["date"],
                 m["sender_handle"],
                 m["is_from_me"],
@@ -466,8 +521,8 @@ def bulk_insert_messages(db_path: Path, messages: List[Dict[str, Any]]) -> None:
         cur.executemany(
             """
             INSERT OR REPLACE INTO messages
-            (message_id, chat_id, date, sender_handle, is_from_me, text, has_spotify_link, spotify_url, content_hash, associated_message_type, associated_message_guid, message_guid)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (message_id, chat_id, canonical_chat_id, date, sender_handle, is_from_me, text, has_spotify_link, spotify_url, content_hash, associated_message_type, associated_message_guid, message_guid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
@@ -475,6 +530,40 @@ def bulk_insert_messages(db_path: Path, messages: List[Dict[str, Any]]) -> None:
         cur.executemany(
             "INSERT OR REPLACE INTO messages_fts(rowid, text) VALUES(?, ?)",
             [(m["message_id"], m["text"]) for m in messages],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def bulk_upsert_chat_groups(db_path: Path, groups: List[Dict[str, Any]]) -> None:
+    if not groups:
+        return
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.cursor()
+        rows = [
+            (
+                g["canonical_chat_id"],
+                ",".join(str(cid) for cid in g["chat_ids"]),
+                g.get("member_count"),
+                g.get("last_message_date"),
+            )
+            for g in groups
+        ]
+        cur.executemany(
+            """
+            INSERT INTO chat_groups(canonical_chat_id, chat_ids, member_count, last_message_date)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(canonical_chat_id) DO UPDATE SET
+              chat_ids=excluded.chat_ids,
+              member_count=excluded.member_count,
+              last_message_date=CASE
+                WHEN excluded.last_message_date > COALESCE(chat_groups.last_message_date, '') THEN excluded.last_message_date
+                ELSE chat_groups.last_message_date
+              END
+            """,
+            rows,
         )
         conn.commit()
     finally:

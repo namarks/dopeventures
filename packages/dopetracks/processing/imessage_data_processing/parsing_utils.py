@@ -1,5 +1,6 @@
 import hashlib
 import re
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
@@ -10,6 +11,25 @@ try:
     from ...utils import dictionaries  # type: ignore
 except Exception:
     dictionaries = None
+
+
+class MessageBodyCache:
+    """Simple LRU cache for parsed attributedBody payloads keyed by message id."""
+
+    def __init__(self, max_size: int = 5000):
+        self.max_size = max_size
+        self._cache: OrderedDict[int, Dict[str, Any]] = OrderedDict()
+
+    def get_parsed(self, message_id: int, attributed_body: Any) -> Dict[str, Any]:
+        if message_id in self._cache:
+            self._cache.move_to_end(message_id)
+            return self._cache[message_id]
+
+        parsed = parse_attributed_body(attributed_body)
+        self._cache[message_id] = parsed
+        if len(self._cache) > self.max_size:
+            self._cache.popitem(last=False)
+        return parsed
 
 
 def detect_reaction(associated_message_type: Any) -> str:
@@ -43,6 +63,83 @@ def finalize_text(text: Optional[str], parsed_body: Optional[Dict[str, Any]]) ->
     if parsed_text:
         return str(parsed_text)
     return ""
+
+
+def extract_spotify_urls(text: str) -> List[str]:
+    """Extract Spotify URLs from text using regex."""
+    if not text:
+        return []
+    pattern = r'https?://(open\.spotify\.com|spotify\.link)/[^\s<>"{}|\\^`\[\]]+'
+    return [match.group(0) for match in re.finditer(pattern, text)]
+
+
+def extract_all_urls(text: str) -> List[Dict[str, str]]:
+    """
+    Extract all URLs from text and categorize them by type.
+    Returns a list of dicts with 'url' and 'type' keys.
+    """
+    if not text:
+        return []
+
+    url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
+    matches = list(re.finditer(url_pattern, text))
+
+    categorized_urls = []
+    for match in matches:
+        url = match.group(0).rstrip('.,;!?)')
+
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+
+            def domain_matches(domain_value: str, pattern: str) -> bool:
+                domain_clean = domain_value.replace('www.', '')
+                pattern_clean = pattern.replace('www.', '')
+                return domain_clean == pattern_clean or domain_clean.endswith('.' + pattern_clean)
+
+            url_type = "other"
+            if domain_matches(domain, 'spotify.com') or domain_matches(domain, 'spotify.link'):
+                url_type = "spotify"
+            elif domain_matches(domain, 'youtube.com') or domain_matches(domain, 'youtu.be'):
+                url_type = "youtube"
+            elif domain_matches(domain, 'instagram.com') or domain_matches(domain, 'instagr.am'):
+                url_type = "instagram"
+            elif domain_matches(domain, 'music.apple.com') or domain_matches(domain, 'itunes.apple.com'):
+                url_type = "apple_music"
+            elif domain_matches(domain, 'tiktok.com'):
+                url_type = "tiktok"
+            elif domain_matches(domain, 'twitter.com') or domain_matches(domain, 'x.com'):
+                url_type = "twitter"
+            elif domain_matches(domain, 'facebook.com') or domain_matches(domain, 'fb.com'):
+                url_type = "facebook"
+            elif domain_matches(domain, 'soundcloud.com'):
+                url_type = "soundcloud"
+            elif domain_matches(domain, 'bandcamp.com'):
+                url_type = "bandcamp"
+            elif domain_matches(domain, 'tidal.com'):
+                url_type = "tidal"
+            elif domain_matches(domain, 'amazon.com') and ('music' in domain or '/music' in parsed.path):
+                url_type = "amazon_music"
+            elif domain_matches(domain, 'deezer.com'):
+                url_type = "deezer"
+            elif domain_matches(domain, 'pandora.com'):
+                url_type = "pandora"
+            elif domain_matches(domain, 'iheart.com'):
+                url_type = "iheart"
+            elif domain_matches(domain, 'tunein.com'):
+                url_type = "tunein"
+
+            categorized_urls.append({
+                "url": url,
+                "type": url_type
+            })
+        except Exception:
+            categorized_urls.append({
+                "url": url,
+                "type": "other"
+            })
+
+    return categorized_urls
 
 
 def extract_urls_by_type(text: str) -> Dict[str, List[str]]:

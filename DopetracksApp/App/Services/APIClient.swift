@@ -263,18 +263,26 @@ class APIClient: ObservableObject {
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         
-        let body: [String: Any] = [
-            "chat_ids": chatIds,
-            "start_date": startDate?.ISO8601Format() ?? "",
-            "end_date": endDate?.ISO8601Format() ?? "",
-            "playlist_name": playlistName
+        // Backend expects selected_chat_ids as a JSON string inside form data
+        let chatIdInts = chatIds.compactMap { Int($0) }
+        let chatIdsJSON = String(
+            data: try JSONSerialization.data(withJSONObject: chatIdInts),
+            encoding: .utf8
+        ) ?? "[]"
+        
+        var formItems: [URLQueryItem] = [
+            URLQueryItem(name: "playlist_name", value: playlistName),
+            URLQueryItem(name: "selected_chat_ids", value: chatIdsJSON),
+            URLQueryItem(name: "start_date", value: startDate?.ISO8601Format() ?? ""),
+            URLQueryItem(name: "end_date", value: endDate?.ISO8601Format() ?? "")
         ]
+        // Optional existing playlist support in the future
+        request.httpBody = formEncodedBody(from: formItems)
         
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        
-        let (data, response) = try await session.data(for: request)
+        // Consume streaming Server-Sent Events until we get a complete event
+        let (bytes, response) = try await session.bytes(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.invalidResponse
@@ -284,7 +292,63 @@ class APIClient: ObservableObject {
             throw APIError.httpError(httpResponse.statusCode)
         }
         
-        return try JSONDecoder().decode(Playlist.self, from: data)
+        var finalEvent: PlaylistStreamEvent?
+        
+        for try await line in bytes.lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Skip keep-alive/newline chatter
+            if trimmed.isEmpty { continue }
+            guard trimmed.hasPrefix("data: ") else { continue }
+            
+            let jsonString = String(trimmed.dropFirst(6)) // Remove "data: "
+            guard let jsonData = jsonString.data(using: .utf8) else { continue }
+            
+            do {
+                let event = try JSONDecoder().decode(PlaylistStreamEvent.self, from: jsonData)
+                
+                if let status = event.status?.lowercased() {
+                    if status == "error" {
+                        throw APIError.httpErrorWithMessage(
+                            httpResponse.statusCode,
+                            event.message ?? "Unknown error creating playlist"
+                        )
+                    }
+                    
+                    if status == "complete" {
+                        finalEvent = event
+                    }
+                }
+            } catch {
+                // Log and continue on non-critical decode issues so we can keep consuming the stream
+                print("⚠️ Failed to decode playlist event: \(error)")
+            }
+        }
+        
+        guard let event = finalEvent else {
+            throw APIError.invalidResponse
+        }
+        
+        if let playlist = event.playlist {
+            return playlist
+        }
+        
+        // Fallback: construct a minimal playlist from the final event payload
+        return Playlist(
+            id: event.playlistId ?? UUID().uuidString,
+            name: event.playlistName ?? playlistName,
+            spotifyId: event.playlistId,
+            spotifyUrl: event.playlistUrl,
+            trackCount: event.tracksAdded ?? 0,
+            createdAt: Date(),
+            chatIds: chatIds
+        )
+    }
+    
+    private func formEncodedBody(from items: [URLQueryItem]) -> Data? {
+        var components = URLComponents()
+        components.queryItems = items
+        return components.percentEncodedQuery?.data(using: .utf8)
     }
     
     // MARK: - User Profile
@@ -377,6 +441,57 @@ struct MessagesResponse: Decodable {
 
 struct PlaylistsResponse: Decodable {
     let playlists: [Playlist]
+}
+
+fileprivate struct PlaylistStreamEvent: Decodable {
+    let status: String?
+    let stage: String?
+    let message: String?
+    let progress: Int?
+    let tracksAdded: Int?
+    let totalTracksFound: Int?
+    let playlistId: String?
+    let playlistName: String?
+    let playlistUrl: String?
+    let playlist: Playlist?
+    let chatIds: [String]?
+    
+    enum CodingKeys: String, CodingKey {
+        case status
+        case stage
+        case message
+        case progress
+        case tracksAdded = "tracks_added"
+        case totalTracksFound = "total_tracks_found"
+        case playlistId = "playlist_id"
+        case playlistName = "playlist_name"
+        case playlistUrl = "playlist_url"
+        case playlist
+        case chatIds = "chat_ids"
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        status = try container.decodeIfPresent(String.self, forKey: .status)
+        stage = try container.decodeIfPresent(String.self, forKey: .stage)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        progress = try container.decodeIfPresent(Int.self, forKey: .progress)
+        tracksAdded = try container.decodeIfPresent(Int.self, forKey: .tracksAdded)
+        totalTracksFound = try container.decodeIfPresent(Int.self, forKey: .totalTracksFound)
+        playlistId = try container.decodeIfPresent(String.self, forKey: .playlistId)
+        playlistName = try container.decodeIfPresent(String.self, forKey: .playlistName)
+        playlistUrl = try container.decodeIfPresent(String.self, forKey: .playlistUrl)
+        playlist = try container.decodeIfPresent(Playlist.self, forKey: .playlist)
+        
+        if let stringIds = try? container.decode([String].self, forKey: .chatIds) {
+            chatIds = stringIds
+        } else if let intIds = try? container.decode([Int].self, forKey: .chatIds) {
+            chatIds = intIds.map { String($0) }
+        } else {
+            chatIds = nil
+        }
+    }
 }
 
 private struct APIErrorDetail: Decodable {

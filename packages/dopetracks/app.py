@@ -31,15 +31,20 @@ from .utils.helpers import get_db_path, validate_db_path
 from .utils import dictionaries
 from .processing.imessage_data_processing.prepared_messages import (
     chat_search_prepared,
+    get_last_processed_date,
 )
 from .processing.contacts_data_processing.import_contact_info import (
     get_contact_info_by_handle,
+)
+from .processing.imessage_data_processing.handle_utils import (
+    normalize_handle,
+    normalize_handle_variants,
 )
 from .processing.imessage_data_processing.optimized_queries import (
     advanced_chat_search,
     advanced_chat_search_streaming,
 )
-from .processing.imessage_data_processing.ingestion import ingest_prepared_store
+from .processing.imessage_data_processing.ingestion import ingest_prepared_store, get_source_max_date
 
 # Determine log file path (use proper directory for bundled apps)
 if getattr(sys, 'frozen', False):
@@ -79,6 +84,12 @@ CHAT_CACHE_TTL_SECONDS = 30
 _chat_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
 # Path to prepared DB (populated via ingestion)
 PREPARED_DB_PATH: Optional[str] = None
+PREPARED_STATUS: Dict[str, Any] = {
+    "last_prepared_date": None,
+    "source_max_date": None,
+    "staleness_seconds": None,
+    "last_check_ts": None,
+}
 
 
 def _refresh_prepared_db(source_db_path: str, force_rebuild: bool = False) -> Optional[str]:
@@ -96,6 +107,221 @@ def _refresh_prepared_db(source_db_path: str, force_rebuild: bool = False) -> Op
         PREPARED_DB_PATH = prepared_db_path
     return PREPARED_DB_PATH
 
+
+def _parse_naive_dt(dt_str: Optional[str]) -> Optional[datetime]:
+    if not dt_str or dt_str == "0":
+        return None
+    try:
+        return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        try:
+            return datetime.fromisoformat(dt_str)
+        except Exception:
+            return None
+
+
+def _compute_staleness_seconds(source_dt: Optional[str], prepared_dt: Optional[str]) -> Optional[int]:
+    src = _parse_naive_dt(source_dt)
+    prep = _parse_naive_dt(prepared_dt)
+    if not src or not prep:
+        return None
+    delta = (src - prep).total_seconds()
+    return int(delta) if delta > 0 else 0
+
+
+def _resolve_sender_name_from_prepared(prepared_db: str, sender_handle: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not sender_handle:
+        return None
+    variants = normalize_handle_variants(sender_handle)
+    if not variants:
+        return None
+    try:
+        conn = sqlite3.connect(prepared_db)
+        cur = conn.cursor()
+        placeholders = ",".join("?" * len(variants))
+        cur.execute(
+            f"""
+            SELECT contact_info, display_name
+            FROM contacts
+            WHERE contact_info IN ({placeholders})
+            LIMIT 1
+            """,
+            variants,
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            contact_info, display_name = row
+            return {
+                "full_name": display_name or contact_info,
+                "first_name": None,
+                "last_name": None,
+            }
+    except Exception:
+        return None
+    return None
+
+
+def _lookup_prepared_contact(prepared_db: str, handle: str) -> Optional[str]:
+    """Lookup display name in prepared contacts table using normalized variants."""
+    variants = normalize_handle_variants(handle)
+    if not variants:
+        return None
+    try:
+        conn = sqlite3.connect(prepared_db)
+        cur = conn.cursor()
+        placeholders = ",".join("?" * len(variants))
+        cur.execute(
+            f"SELECT display_name FROM contacts WHERE contact_info IN ({placeholders}) LIMIT 1",
+            variants,
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row and row[0]:
+            return row[0]
+    except Exception:
+        return None
+    return None
+
+
+def _resolve_handle_display(prepared_db: Optional[str], handle: Optional[str]) -> Optional[str]:
+    """Resolve a handle to display name using prepared contacts then AddressBook with variants."""
+    if not handle:
+        return None
+    variants = normalize_handle_variants(handle)
+    if prepared_db:
+        name = _lookup_prepared_contact(prepared_db, handle)
+        if name:
+            return name
+        # If not found on raw, try other variants explicitly
+        if len(variants) > 1:
+            try:
+                conn = sqlite3.connect(prepared_db)
+                cur = conn.cursor()
+                placeholders = ",".join("?" * len(variants))
+                cur.execute(
+                    f"SELECT display_name FROM contacts WHERE contact_info IN ({placeholders}) LIMIT 1",
+                    variants,
+                )
+                row = cur.fetchone()
+                conn.close()
+                if row and row[0]:
+                    return row[0]
+            except Exception:
+                pass
+    # AddressBook fallback with variants
+    for v in variants:
+        try:
+            info = get_contact_info_by_handle(v)
+            if info and info.get("full_name"):
+                return info["full_name"]
+        except Exception:
+            continue
+    return None
+
+
+def _build_participant_name_map(source_db: str, prepared_db: Optional[str], chat_ids: List[int]) -> Dict[str, str]:
+    """Resolve participant handles to names using prepared contacts then AddressBook."""
+    if not chat_ids:
+        return {}
+    mapping: Dict[str, str] = {}
+    placeholders = ",".join(["?"] * len(chat_ids))
+    try:
+        conn = sqlite3.connect(source_db)
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT DISTINCT h.id
+            FROM chat_handle_join chj
+            JOIN handle h ON chj.handle_id = h.ROWID
+            WHERE chj.chat_id IN ({placeholders})
+            """,
+            chat_ids,
+        )
+        handles = [r[0] for r in cur.fetchall() if r and r[0]]
+        conn.close()
+    except Exception:
+        handles = []
+
+    for raw_handle in handles:
+        display = _resolve_handle_display(prepared_db, raw_handle)
+        if display:
+            for v in normalize_handle_variants(raw_handle):
+                mapping[v] = display
+    return mapping
+
+
+def _find_equivalent_chat_ids(chat_id: int, source_db_path: str) -> Optional[List[int]]:
+    """
+    Find other chat_ids with identical participant sets (using source chat.db).
+    Returns None on error to fall back to the single chat_id.
+    """
+    try:
+        conn = sqlite3.connect(source_db_path)
+        try:
+            cur = conn.cursor()
+            # Get participant handles for the target chat
+            cur.execute(
+                """
+                SELECT h.id
+                FROM chat_handle_join chj
+                JOIN handle h ON chj.handle_id = h.ROWID
+                WHERE chj.chat_id = ?
+                """,
+                (chat_id,),
+            )
+            handles = [normalize_handle(r[0]) for r in cur.fetchall() if r and r[0]]
+            handles = [h for h in handles if h]
+            if not handles:
+                return None
+            handle_set = set(handles)
+
+            # Find other chats with exactly this participant set
+            placeholders = ",".join("?" * len(handle_set))
+            # Chats whose participant count matches and whose handles set matches
+            cur.execute(
+                f"""
+                WITH ch_participants AS (
+                    SELECT chj.chat_id, GROUP_CONCAT(DISTINCT h.id) AS handles_raw
+                    FROM chat_handle_join chj
+                    JOIN handle h ON chj.handle_id = h.ROWID
+                    GROUP BY chj.chat_id
+                )
+                SELECT chat_id
+                FROM ch_participants
+                WHERE chat_id IN (
+                    SELECT chat_id FROM chat_handle_join GROUP BY chat_id HAVING COUNT(DISTINCT handle_id)=?
+                )
+                """,
+                (len(handle_set),),
+            )
+            candidate_ids = [int(r[0]) for r in cur.fetchall()]
+            if not candidate_ids:
+                return [chat_id]
+
+            # Fetch handles for candidates and match sets
+            matches: List[int] = []
+            for cid in candidate_ids:
+                cur.execute(
+                    """
+                    SELECT h.id
+                    FROM chat_handle_join chj
+                    JOIN handle h ON chj.handle_id = h.ROWID
+                    WHERE chj.chat_id = ?
+                    """,
+                    (cid,),
+                )
+                ch_handles = [normalize_handle(r[0]) for r in cur.fetchall() if r and r[0]]
+                ch_handles = [h for h in ch_handles if h]
+                if set(ch_handles) == handle_set:
+                    matches.append(cid)
+
+            return matches or [chat_id]
+        finally:
+            conn.close()
+    except Exception:
+        return None
+
 # FTS indexer imports
 try:
     from .processing.imessage_data_processing.fts_indexer import (
@@ -108,6 +334,55 @@ try:
 except ImportError:
     FTS_AVAILABLE = False
     logger.warning("FTS indexer not available - will use fallback search method")
+
+
+async def _periodic_prepared_refresh(interval_seconds: int = 300):
+    """Background refresher that keeps prepared DB in sync and tracks staleness."""
+    global PREPARED_STATUS
+    while True:
+        try:
+            db_path = get_db_path()
+            if not db_path or not os.path.exists(db_path):
+                PREPARED_STATUS = {
+                    "last_prepared_date": None,
+                    "source_max_date": None,
+                    "staleness_seconds": None,
+                    "last_check_ts": time.time(),
+                }
+            else:
+                loop = asyncio.get_event_loop()
+                source_max_date = await loop.run_in_executor(None, get_source_max_date, db_path)
+
+                prepared_path = PREPARED_DB_PATH
+                prepared_date = None
+                if prepared_path and os.path.exists(prepared_path):
+                    prepared_date = get_last_processed_date(Path(prepared_path))
+
+                needs_refresh = False
+                if source_max_date and prepared_date:
+                    needs_refresh = source_max_date > prepared_date
+                elif source_max_date and not prepared_date:
+                    needs_refresh = True
+
+                if needs_refresh:
+                    await loop.run_in_executor(None, _refresh_prepared_db, db_path)
+                    prepared_path = PREPARED_DB_PATH
+                    if prepared_path and os.path.exists(prepared_path):
+                        prepared_date = get_last_processed_date(Path(prepared_path))
+
+                staleness = _compute_staleness_seconds(source_max_date, prepared_date)
+                PREPARED_STATUS = {
+                    "last_prepared_date": prepared_date,
+                    "source_max_date": source_max_date,
+                    "staleness_seconds": staleness,
+                    "last_check_ts": time.time(),
+                }
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning(f"Prepared DB refresh loop error: {exc}", exc_info=True)
+        await asyncio.sleep(interval_seconds)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -135,6 +410,7 @@ async def lifespan(app: FastAPI):
     
     # Start database initialization in background
     db_init_task = asyncio.create_task(init_db_async())
+    prepared_refresh_task = asyncio.create_task(_periodic_prepared_refresh(300))
     
     # Prepare messages database (incremental)
     try:
@@ -158,6 +434,12 @@ async def lifespan(app: FastAPI):
         await db_init_task
     except Exception as e:
         logger.warning(f"Database initialization had errors: {e}")
+    # Stop prepared refresh loop
+    try:
+        prepared_refresh_task.cancel()
+        await prepared_refresh_task
+    except Exception:
+        pass
     
     logger.info("Application shutdown")
 
@@ -205,6 +487,18 @@ async def health_check():
         "messages_db_path": db_path if db_path else None,
         "environment": "local",
         "version": "3.0.0-local"
+    }
+
+
+@app.get("/prepared-status")
+async def prepared_status():
+    """Return staleness info for the prepared DB."""
+    return {
+        "prepared_db_path": PREPARED_DB_PATH,
+        "last_prepared_date": PREPARED_STATUS.get("last_prepared_date"),
+        "source_max_date": PREPARED_STATUS.get("source_max_date"),
+        "staleness_seconds": PREPARED_STATUS.get("staleness_seconds"),
+        "last_check_ts": PREPARED_STATUS.get("last_check_ts"),
     }
 
 # Spotify OAuth endpoints
@@ -885,19 +1179,58 @@ async def open_full_disk_access():
 # Playlist creation endpoint (streaming)
 @app.post("/create-playlist-optimized-stream")
 async def create_playlist_optimized_stream(
-    playlist_name: str = Form(...),
-    start_date: str = Form(...),
-    end_date: str = Form(...),
-    selected_chat_ids: str = Form(...),
+    request: Request,
+    playlist_name: Optional[str] = Form(None),
+    start_date: Optional[str] = Form(None),
+    end_date: Optional[str] = Form(None),
+    selected_chat_ids: Optional[str] = Form(None),
     existing_playlist_id: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """Create playlist using optimized direct SQL queries with streaming progress."""
+    # Support JSON payloads (the macOS app posts JSON) and fall back to form data
+    if not all([playlist_name, start_date, end_date, selected_chat_ids]):
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = {}
+            playlist_name = playlist_name or payload.get("playlist_name") or payload.get("playlistName")
+            start_date = start_date or payload.get("start_date") or payload.get("startDate")
+            end_date = end_date or payload.get("end_date") or payload.get("endDate")
+            existing_playlist_id = existing_playlist_id or payload.get("existing_playlist_id") or payload.get("playlist_id")
+            if not selected_chat_ids:
+                chat_ids_value = payload.get("selected_chat_ids") or payload.get("chat_ids")
+                if isinstance(chat_ids_value, list):
+                    try:
+                        selected_chat_ids = json.dumps(chat_ids_value)
+                    except Exception:
+                        pass
+                elif isinstance(chat_ids_value, str):
+                    selected_chat_ids = chat_ids_value
+    
+    # Provide safe defaults when optional inputs are missing/blank
+    now_iso = datetime.now(timezone.utc).isoformat()
+    start_date = start_date or "2000-01-01T00:00:00+00:00"
+    end_date = end_date or now_iso
+    selected_chat_ids = selected_chat_ids or "[]"
+    playlist_name = playlist_name or "Dopetracks Playlist"
+    
     async def generate_progress():
         try:
+            # Validate date strings early to avoid crashing during conversion
+            try:
+                datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+                datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+            except Exception:
+                yield f"data: {json.dumps({'status': 'error', 'message': 'Invalid date format'})}\n\n"
+                await asyncio.sleep(0)
+                return
             from .processing.imessage_data_processing.optimized_queries import (
-                query_messages_with_urls, extract_spotify_urls, extract_all_urls
+                query_messages_with_urls
             )
+            from .processing.imessage_data_processing import parsing_utils as pu
             from .processing.spotify_interaction import spotify_db_manager as sdm
             from .processing.spotify_interaction import create_spotify_playlist as csp
             from .processing.contacts_data_processing.import_contact_info import get_contact_info_by_handle
@@ -948,8 +1281,8 @@ async def create_playlist_optimized_stream(
             for idx, row in messages_df.iterrows():
                 text = row.get(text_column)
                 if pd.notna(text) and text:
-                    spotify_urls = extract_spotify_urls(str(text))
-                    all_urls = extract_all_urls(str(text))
+                    spotify_urls = pu.extract_spotify_urls(str(text))
+                    all_urls = pu.extract_all_urls(str(text))
                     
                     # Determine sender and enrich with contact info
                     if bool(row.get('is_from_me', False)):
@@ -1178,13 +1511,13 @@ async def create_playlist_optimized_stream(
                         batch = track_ids[i:i+100]
                         sp.playlist_add_items(playlist['id'], batch)
                     
-                    yield f"data: {json.dumps({'status': 'complete', 'message': f'Successfully added {len(track_ids)} tracks to playlist', 'tracks_added': len(track_ids), 'total_tracks_found': len(track_urls), 'playlist_id': playlist['id'], 'playlist_name': playlist['name'], 'playlist_url': playlist.get('external_urls', {}).get('spotify'), 'track_details': track_details, 'skipped_urls': skipped_urls, 'other_links': other_links})}\n\n"
+                    yield f"data: {json.dumps({'status': 'complete', 'message': f'Successfully added {len(track_ids)} tracks to playlist', 'tracks_added': len(track_ids), 'total_tracks_found': len(track_urls), 'playlist_id': playlist['id'], 'playlist_name': playlist['name'], 'playlist_url': playlist.get('external_urls', {}).get('spotify'), 'playlist': playlist, 'chat_ids': chat_ids, 'track_details': track_details, 'skipped_urls': skipped_urls, 'other_links': other_links})}\n\n"
                     await asyncio.sleep(0)
                 except Exception as e:
                     yield f"data: {json.dumps({'status': 'error', 'message': f'Failed to add tracks to playlist: {str(e)}', 'tracks_added': 0, 'track_details': track_details})}\n\n"
                     await asyncio.sleep(0)
             else:
-                yield f"data: {json.dumps({'status': 'complete', 'message': 'No valid tracks to add', 'tracks_added': 0, 'total_tracks_found': len(track_urls), 'track_details': track_details, 'skipped_urls': skipped_urls, 'other_links': other_links})}\n\n"
+                yield f"data: {json.dumps({'status': 'complete', 'message': 'No valid tracks to add', 'tracks_added': 0, 'total_tracks_found': len(track_urls), 'playlist_id': playlist['id'], 'playlist_name': playlist['name'], 'playlist_url': playlist.get('external_urls', {}).get('spotify'), 'playlist': playlist, 'chat_ids': chat_ids, 'track_details': track_details, 'skipped_urls': skipped_urls, 'other_links': other_links})}\n\n"
                 await asyncio.sleep(0)
                 
         except Exception as e:
@@ -1198,6 +1531,8 @@ async def create_playlist_optimized_stream(
 @app.get("/chat/{chat_id}/recent-messages")
 async def get_recent_messages(
     chat_id: int,
+    chat_ids: Optional[str] = None,
+    canonical_chat_id: Optional[str] = None,
     limit: int = 5,
     offset: int = 0,
     order: str = "desc",
@@ -1213,15 +1548,50 @@ async def get_recent_messages(
         if not prepared_db:
             raise HTTPException(status_code=500, detail="Failed to prepare messages database")
         
+        chat_id_list: List[int] = [chat_id]
+        participant_name_map: Dict[str, str] = {}
+        if canonical_chat_id:
+            # Resolve chat_ids from prepared DB mapping
+            try:
+                conn_map = sqlite3.connect(prepared_db)
+                cur_map = conn_map.cursor()
+                cur_map.execute(
+                    "SELECT chat_ids FROM chat_groups WHERE canonical_chat_id = ?",
+                    (canonical_chat_id,),
+                )
+                row = cur_map.fetchone()
+                if row and row[0]:
+                    chat_id_list = [int(x) for x in row[0].split(",") if x.strip()]
+                cur_map.close()
+                conn_map.close()
+            except Exception:
+                pass
+        elif chat_ids:
+            try:
+                parsed_ids = [int(x) for x in chat_ids.split(",") if x.strip()]
+                if parsed_ids:
+                    chat_id_list = parsed_ids
+            except Exception:
+                pass
+        else:
+            # If client did not pass group ids, try to find equivalent chats by participants
+            equivalents = _find_equivalent_chat_ids(chat_id, source_db)
+            if equivalents:
+                chat_id_list = equivalents
+
+        # Build participant name map for better sender resolution
+        participant_name_map = _build_participant_name_map(source_db, prepared_db, chat_id_list)
+
+        placeholders = ",".join(["?"] * len(chat_id_list))
         conn = sqlite3.connect(prepared_db)
         try:
             cur = conn.cursor()
             order_dir = "DESC" if order.lower() != "asc" else "ASC"
-            params: List[Any] = [chat_id, limit, offset]
+            params: List[Any] = chat_id_list + [limit, offset]
             search_clause = ""
             if search:
                 search_clause = "AND m.rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)"
-                params = [chat_id, search, limit, offset]
+                params = chat_id_list + [search, limit, offset]
             query = f"""
                 SELECT
                     m.message_id,
@@ -1235,7 +1605,7 @@ async def get_recent_messages(
                     m.associated_message_guid,
                     m.message_guid
                 FROM messages m
-                WHERE m.chat_id = ?
+                WHERE m.chat_id IN ({placeholders})
                 {search_clause}
                 ORDER BY m.date {order_dir}
                 LIMIT ?
@@ -1286,13 +1656,23 @@ async def get_recent_messages(
                 if msg.get("is_from_me"):
                     sender_name = "You"
                 else:
-                    if sender_name == "Unknown" or sender_name == sender_handle:
-                        try:
-                            info = get_contact_info_by_handle(sender_handle)
-                            if info and info.get("full_name"):
-                                sender_name = info["full_name"]
-                        except Exception:
-                            pass
+                    # Try participant map first
+                    for v in normalize_handle_variants(sender_handle):
+                        if v in participant_name_map:
+                            sender_name = participant_name_map[v]
+                            break
+                    # First try prepared DB contacts
+                    if sender_name == sender_handle or sender_name == "Unknown":
+                        resolved = _resolve_sender_name_from_prepared(prepared_db, sender_handle)
+                        if resolved and resolved.get("full_name"):
+                            sender_name = resolved["full_name"]
+                        elif sender_name == "Unknown" or sender_name == sender_handle:
+                            try:
+                                info = get_contact_info_by_handle(sender_handle)
+                                if info and info.get("full_name"):
+                                    sender_name = info["full_name"]
+                            except Exception:
+                                pass
 
                 if is_reaction:
                     reaction_type = dictionaries.reaction_dict.get(assoc_type, "reaction")

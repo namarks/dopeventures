@@ -5,14 +5,19 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import sqlite3
 import time
+from collections import defaultdict
 
+from .handle_utils import normalize_handle, normalize_handle_variants
 from .prepared_messages import (
     ensure_prepared_db,
     parse_message_row,
     bulk_insert_messages,
     bulk_upsert_contacts,
+    bulk_upsert_chat_groups,
     get_last_processed_rowid,
     set_last_processed_rowid,
+    get_last_processed_date,
+    set_last_processed_date,
     get_last_contact_rowid,
     set_last_contact_rowid,
     set_last_full_reindex,
@@ -24,8 +29,12 @@ def ingest_messages(source_db_path: str, prepared_db_path: Path, batch_size: int
     Incrementally ingest messages using the last processed ROWID checkpoint.
     """
     last_rowid = get_last_processed_rowid(prepared_db_path)
+    last_date = get_last_processed_date(prepared_db_path)
     processed = 0
     max_rowid_seen = last_rowid
+    max_date_seen: Optional[str] = last_date
+    chat_to_canonical, canonical_members = _build_canonical_map(source_db_path)
+    canonical_last_date: Dict[str, str] = {}
 
     conn = sqlite3.connect(source_db_path)
     try:
@@ -58,7 +67,23 @@ def ingest_messages(source_db_path: str, prepared_db_path: Path, batch_size: int
             if not rows:
                 break
 
-            messages = [parse_message_row(row) for row in rows]
+            messages = []
+            for row in rows:
+                msg = parse_message_row(row)
+                chat_id = msg["chat_id"]
+                canonical = chat_to_canonical.get(chat_id)
+                if canonical:
+                    msg["canonical_chat_id"] = canonical
+                messages.append(msg)
+            # Track max date seen in this batch
+            for m in messages:
+                date_val = m.get("date")
+                if date_val and (max_date_seen is None or date_val > max_date_seen):
+                    max_date_seen = date_val
+                canonical = m.get("canonical_chat_id")
+                if canonical and date_val:
+                    if canonical not in canonical_last_date or date_val > canonical_last_date[canonical]:
+                        canonical_last_date[canonical] = date_val
             bulk_insert_messages(prepared_db_path, messages)
 
             processed += len(messages)
@@ -69,7 +94,40 @@ def ingest_messages(source_db_path: str, prepared_db_path: Path, batch_size: int
 
     if processed > 0:
         set_last_processed_rowid(prepared_db_path, max_rowid_seen)
+        if max_date_seen:
+            set_last_processed_date(prepared_db_path, max_date_seen)
+        if canonical_last_date:
+            group_rows = []
+            for canonical, last_date in canonical_last_date.items():
+                group_rows.append(
+                    {
+                        "canonical_chat_id": canonical,
+                        "chat_ids": canonical_members.get(canonical, []),
+                        "member_count": len(set(canonical_members.get(canonical, []))),
+                        "last_message_date": last_date,
+                    }
+                )
+            bulk_upsert_chat_groups(prepared_db_path, group_rows)
     return processed
+
+
+def get_source_max_date(source_db_path: str) -> Optional[str]:
+    """Return max message date as ISO string (localtime) from source DB."""
+    conn = sqlite3.connect(source_db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT datetime(MAX(message.date)/1000000000 + strftime("%s","2001-01-01"), "unixepoch", "localtime")
+            FROM message
+            """
+        )
+        row = cur.fetchone()
+        if row and row[0]:
+            return str(row[0])
+        return None
+    finally:
+        conn.close()
 
 
 def ingest_contacts(source_db_path: str, prepared_db_path: Path, batch_size: int = 500) -> int:
@@ -125,6 +183,42 @@ def ingest_contacts(source_db_path: str, prepared_db_path: Path, batch_size: int
     if processed > 0:
         set_last_contact_rowid(prepared_db_path, max_rowid_seen)
     return processed
+
+
+def _build_canonical_map(source_db_path: str) -> (Dict[int, str], Dict[str, list]):
+    """
+    Build mapping chat_id -> canonical_chat_id and canonical -> chat_ids list.
+    Canonical id is deterministic over normalized participant handles.
+    """
+    conn = sqlite3.connect(source_db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT chj.chat_id, h.id
+            FROM chat_handle_join chj
+            JOIN handle h ON chj.handle_id = h.ROWID
+            """
+        )
+        chat_handles: Dict[int, set] = defaultdict(set)
+        for chat_id, handle in cur.fetchall():
+            norm = normalize_handle(handle)
+            if norm:
+                chat_handles[int(chat_id)].add(norm)
+
+        chat_to_canonical: Dict[int, str] = {}
+        canonical_members: Dict[str, list] = defaultdict(list)
+        for cid, handles in chat_handles.items():
+            if handles:
+                canonical = "canon:" + ",".join(sorted(handles))
+            else:
+                canonical = f"canon:chat:{cid}"
+            chat_to_canonical[cid] = canonical
+            canonical_members[canonical].append(cid)
+
+        return chat_to_canonical, canonical_members
+    finally:
+        conn.close()
 
 
 def ingest_prepared_store(
