@@ -9,25 +9,25 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-# Add the parent dopetracks package to the path
-DOPETRACKS_PATH = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..", "dopetracks")
+# Add the packages directory to path so 'dopetracks' can be imported as a package
+PACKAGES_PATH = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..")
 )
-if DOPETRACKS_PATH not in sys.path:
-    sys.path.insert(0, DOPETRACKS_PATH)
+if PACKAGES_PATH not in sys.path:
+    sys.path.insert(0, PACKAGES_PATH)
 
-from processing.imessage_data_processing.imessage_db import (
+from dopetracks.processing.imessage_data_processing.imessage_db import (
     db_connection,
     get_user_db_path,
     convert_to_apple_timestamp,
 )
-from processing.imessage_data_processing.optimized_queries import (
+from dopetracks.processing.imessage_data_processing.optimized_queries import (
     get_chat_list,
     search_chats_by_name,
     get_recent_messages_for_chat,
     query_spotify_messages,
 )
-from processing.imessage_data_processing.parsing_utils import (
+from dopetracks.processing.imessage_data_processing.parsing_utils import (
     extract_spotify_urls,
     finalize_text,
     parse_attributed_body,
