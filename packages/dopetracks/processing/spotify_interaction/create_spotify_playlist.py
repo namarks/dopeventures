@@ -232,22 +232,19 @@ def main(PLAYLIST_NAME, TRACKS_TO_ADD):
     # Inputted songs
     spotify_ids_to_add = get_song_ids_from_cached_urls(TRACKS_TO_ADD)
 
-    # Existing songs in playlist
+    # Create/find playlist and add tracks (add_tracks_to_playlist handles deduplication)
     sp = sdm.authenticate_spotify(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, SCOPE)
     user_id = get_user_id(sp)
     playlist = find_or_create_playlist(sp, user_id, PLAYLIST_NAME, public=True)
-    existing_playlist_songs = get_all_playlist_items(sp, playlist['id'])
-    existing_playlist_song_ids = get_song_ids_from_spotify_items(existing_playlist_songs)
-    
-    # New songs to add
-    unique_ids = [tid for tid in spotify_ids_to_add if tid not in existing_playlist_song_ids]
-    
-    # Add songs
-    added_count = add_tracks_to_playlist(sp, playlist['id'], unique_ids)
+    added_count = add_tracks_to_playlist(sp, playlist['id'], spotify_ids_to_add)
     if added_count > 0:
         print(f"Added {added_count} new tracks to the playlist.")
     else:
         print("No new tracks were added to the playlist.")
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) < 3:
+        print("Usage: create_spotify_playlist.py <playlist_name> <track_url1> [track_url2 ...]")
+        sys.exit(1)
+    main(sys.argv[1], sys.argv[2:])

@@ -7,7 +7,7 @@ import os
 import sys
 
 # Add the packages directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'packages'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'packages'))
 
 from sqlalchemy.orm import Session
 from packages.dopetracks.database.connection import create_session_factory, get_db_session

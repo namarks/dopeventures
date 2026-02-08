@@ -8,13 +8,23 @@
 import Foundation
 import Combine
 
+@MainActor
 class BackendManager: ObservableObject {
     @Published var isBackendRunning = false
     @Published var isStarting = false
     @Published var error: Error?
-    
+
     private var backendProcess: Process?
     private var healthCheckTask: Task<Void, Never>?
+
+    // Reuse a single URLSession for health checks instead of creating one per call
+    private let healthCheckSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10.0
+        config.timeoutIntervalForResource = 20.0
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
     
     // Path to bundled Python backend executable
     private var backendExecutablePath: URL? {
@@ -41,30 +51,25 @@ class BackendManager: ObservableObject {
         await startBackend()
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if await MainActor.run(body: { self.isBackendRunning }) {
+            if isBackendRunning {
                 return true
             }
-            // Re-check health in case start failed silently
             if await checkBackendHealth() {
-                await MainActor.run {
-                    self.isBackendRunning = true
-                    self.isStarting = false
-                    self.error = nil
-                }
+                isBackendRunning = true
+                isStarting = false
+                error = nil
                 return true
             }
             try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
         }
-        return await MainActor.run(body: { self.isBackendRunning })
+        return isBackendRunning
     }
     
     func startBackend() async {
         guard !isBackendRunning else { return }
-        
-        await MainActor.run {
-            isStarting = true
-            error = nil
-        }
+
+        isStarting = true
+        error = nil
         
         // Check if backend is already running (for development mode)
         // Try multiple times with small delays to handle race conditions
@@ -83,10 +88,8 @@ class BackendManager: ObservableObject {
         
         if backendDetected {
             print("✅ Backend is already running, connecting to it")
-            await MainActor.run {
-                isBackendRunning = true
-                isStarting = false
-            }
+            isBackendRunning = true
+            isStarting = false
             startHealthCheck()
             return
         }
@@ -165,10 +168,8 @@ class BackendManager: ObservableObject {
             
             // Check if script exists
             if !FileManager.default.fileExists(atPath: finalScript.path) {
-                await MainActor.run {
-                    self.error = BackendError.processExited("Launch script not found at: \(finalScript.path). Searched from: \(currentFile.path)")
-                    self.isStarting = false
-                }
+                self.error = BackendError.processExited("Launch script not found at: \(finalScript.path). Searched from: \(currentFile.path)")
+                self.isStarting = false
                 return
             }
             
@@ -267,10 +268,8 @@ class BackendManager: ObservableObject {
                 try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
                 
                 if await checkBackendHealth() {
-                    await MainActor.run {
-                        isBackendRunning = true
-                        isStarting = false
-                    }
+                    isBackendRunning = true
+                    isStarting = false
                     startHealthCheck()
                     return
                 }
@@ -298,10 +297,8 @@ class BackendManager: ObservableObject {
             
             throw BackendError.timeout
         } catch {
-            await MainActor.run {
-                self.error = error
-                self.isStarting = false
-            }
+            self.error = error
+            self.isStarting = false
             backendProcess?.terminate()
             backendProcess = nil
         }
@@ -315,22 +312,16 @@ class BackendManager: ObservableObject {
         isBackendRunning = false
     }
     
-    private func checkBackendHealth() async -> Bool {
+    private nonisolated func checkBackendHealth() async -> Bool {
         do {
             let url = URL(string: "http://127.0.0.1:8888/health")!
             var request = URLRequest(url: url)
-            request.timeoutInterval = 10.0 // Increased timeout to handle slower startup
-            request.cachePolicy = .reloadIgnoringLocalCacheData // Don't use cached responses
-            
-            // Use a dedicated URLSession with appropriate configuration
-            let config = URLSessionConfiguration.default
-            config.timeoutIntervalForRequest = 10.0
-            config.timeoutIntervalForResource = 20.0
-            config.waitsForConnectivity = false // Don't wait for network connectivity
-            let session = URLSession(configuration: config)
-            
+            request.timeoutInterval = 10.0
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+
+            let session = await healthCheckSession
             let (_, response) = try await session.data(for: request)
-            
+
             if let httpResponse = response as? HTTPURLResponse {
                 let isHealthy = httpResponse.statusCode == 200
                 if !isHealthy {
@@ -339,7 +330,6 @@ class BackendManager: ObservableObject {
                 return isHealthy
             }
         } catch {
-            // Backend not ready yet - log for debugging
             if let urlError = error as? URLError {
                 print("Backend health check failed: \(urlError.localizedDescription) (code: \(urlError.code.rawValue))")
             } else {
@@ -351,36 +341,29 @@ class BackendManager: ObservableObject {
     
     private func startHealthCheck() {
         healthCheckTask?.cancel()
-        
+
         healthCheckTask = Task {
             // Give backend a bit more time to fully initialize before first health check
             try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-            
+
             while !Task.isCancelled {
                 // Check if process is still running
                 if let process = backendProcess, !process.isRunning {
-                    await MainActor.run {
-                        isBackendRunning = false
-                        error = BackendError.processExited("Backend process exited unexpectedly")
-                        backendProcess = nil
-                    }
+                    isBackendRunning = false
+                    error = BackendError.processExited("Backend process exited unexpectedly")
+                    backendProcess = nil
                     return
                 }
-                
+
                 let isHealthy = await checkBackendHealth()
-                
-                await MainActor.run {
-                    if !isHealthy && isBackendRunning {
-                        // Don't immediately mark as failed - retry once more
-                        // Sometimes the backend might be temporarily busy
-                        print("⚠️ Health check failed, will retry on next cycle")
-                    } else if isHealthy && !isBackendRunning {
-                        // Backend recovered
-                        isBackendRunning = true
-                        error = nil
-                    }
+
+                if !isHealthy && isBackendRunning {
+                    print("⚠️ Health check failed, will retry on next cycle")
+                } else if isHealthy && !isBackendRunning {
+                    isBackendRunning = true
+                    error = nil
                 }
-                
+
                 try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds between checks
             }
         }

@@ -32,7 +32,10 @@ struct DopetracksApp: App {
                     }
                 }
                 .onChange(of: scenePhase) { newPhase in
-                    if newPhase == .inactive || newPhase == .background {
+                    // Only stop backend when app is fully backgrounded or terminated.
+                    // On macOS, .inactive fires on every window focus loss, which would
+                    // kill the backend whenever the user switches apps.
+                    if newPhase == .background {
                         backendManager.stopBackend()
                     }
                 }

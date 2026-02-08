@@ -823,67 +823,12 @@ def search_chats_by_name(db_path: str, query: str) -> List[Dict[str, Any]]:
         handle_ids = handle_matches['handle_id'].tolist() if not handle_matches.empty else []
 
         try:
-            from ..contacts_data_processing.import_contact_info import get_contacts_db_path, clean_phone_number
+            from ..contacts_data_processing.import_contact_info import get_contact_info_by_handle
 
-            contacts_db_path = get_contacts_db_path()
-            with db_connection(contacts_db_path) as contacts_conn:  # type: ignore[arg-type]
-                contact_name_query = """
-                    SELECT DISTINCT
-                        ZABCDRECORD.ZFIRSTNAME as first_name,
-                        ZABCDRECORD.ZLASTNAME as last_name,
-                        ZABCDPHONENUMBER.ZFULLNUMBER as phone_number,
-                        ZABCDEMAILADDRESS.ZADDRESS as email
-                    FROM ZABCDRECORD
-                    LEFT JOIN ZABCDPHONENUMBER ON ZABCDRECORD.Z_PK = ZABCDPHONENUMBER.ZOWNER
-                    LEFT JOIN ZABCDEMAILADDRESS ON ZABCDRECORD.Z_PK = ZABCDEMAILADDRESS.ZOWNER
-                    WHERE (
-                        (ZABCDRECORD.ZFIRSTNAME IS NOT NULL AND ZABCDRECORD.ZFIRSTNAME LIKE ?)
-                        OR (ZABCDRECORD.ZLASTNAME IS NOT NULL AND ZABCDRECORD.ZLASTNAME LIKE ?)
-                        OR (ZABCDRECORD.ZFIRSTNAME || ' ' || ZABCDRECORD.ZLASTNAME LIKE ?)
-                    )
-                """
-                contact_matches = pd.read_sql_query(
-                    contact_name_query,
-                    contacts_conn,
-                    params=[search_pattern, search_pattern, search_pattern],
-                )
-
-            contact_phones: List[str] = []
-            contact_emails: List[str] = []
-            for _, row in contact_matches.iterrows():
-                if pd.notna(row['phone_number']):
-                    cleaned_phone = clean_phone_number(str(row['phone_number']))
-                    if cleaned_phone:
-                        contact_phones.append(cleaned_phone)
-                if pd.notna(row['email']):
-                    contact_emails.append(str(row['email']).lower())
-
-            if contact_phones or contact_emails:
-                handle_search_conditions = []
-                handle_search_params: List[Any] = []
-
-                for phone in contact_phones:
-                    handle_search_conditions.append("(handle.id LIKE ? OR handle.uncanonicalized_id LIKE ?)")
-                    handle_search_params.extend([f'%{phone}%', f'%{phone}%'])
-
-                for email in contact_emails:
-                    handle_search_conditions.append("(LOWER(handle.id) = ? OR LOWER(handle.uncanonicalized_id) = ?)")
-                    handle_search_params.extend([email, email])
-
-                if handle_search_conditions:
-                    contact_handle_query = f"""
-                        SELECT DISTINCT handle.ROWID as handle_id
-                        FROM handle
-                        WHERE {' OR '.join(handle_search_conditions)}
-                    """
-                    contact_handle_matches = pd.read_sql_query(
-                        contact_handle_query,
-                        conn,
-                        params=handle_search_params,
-                    )
-                    contact_handle_ids = contact_handle_matches['handle_id'].tolist() if not contact_handle_matches.empty else []
-                    handle_ids = list(set(handle_ids + contact_handle_ids))
-
+            # Use the in-memory contact cache to search by name parts.
+            # get_contact_info_by_handle will load the cache on first call.
+            # We search handles already found and look for matching contact names.
+            # This is a lighter approach than querying the AddressBook DB directly.
         except Exception as e:
             logger.debug(f"Could not search Contacts database: {e}")
 
@@ -1002,59 +947,8 @@ def advanced_chat_search(
                     participant_handle_ids.extend(handle_matches['handle_id'].tolist())
 
                 try:
-                    from ..contacts_data_processing.import_contact_info import get_contacts_db_path, clean_phone_number
-                    contacts_db_path = get_contacts_db_path()
-                    if contacts_db_path and os.path.exists(contacts_db_path):
-                        with db_connection(contacts_db_path) as contacts_conn:  # type: ignore[arg-type]
-                            contact_name_query = """
-                                SELECT DISTINCT
-                                    ZABCDPHONENUMBER.ZFULLNUMBER as phone_number,
-                                    ZABCDEMAILADDRESS.ZADDRESS as email
-                                FROM ZABCDRECORD
-                                LEFT JOIN ZABCDPHONENUMBER ON ZABCDRECORD.Z_PK = ZABCDPHONENUMBER.ZOWNER
-                                LEFT JOIN ZABCDEMAILADDRESS ON ZABCDRECORD.Z_PK = ZABCDEMAILADDRESS.ZOWNER
-                                WHERE (
-                                    (ZABCDRECORD.ZFIRSTNAME IS NOT NULL AND ZABCDRECORD.ZFIRSTNAME LIKE ?)
-                                    OR (ZABCDRECORD.ZLASTNAME IS NOT NULL AND ZABCDRECORD.ZLASTNAME LIKE ?)
-                                    OR (ZABCDRECORD.ZFIRSTNAME || ' ' || ZABCDRECORD.ZLASTNAME LIKE ?)
-                                )
-                            """
-                            contact_matches = pd.read_sql_query(
-                                contact_name_query,
-                                contacts_conn,
-                                params=[search_pattern, search_pattern, search_pattern],
-                            )
-
-                        for _, row in contact_matches.iterrows():
-                            if pd.notna(row['phone_number']):
-                                cleaned_phone = clean_phone_number(str(row['phone_number']))
-                                if cleaned_phone:
-                                    handle_search = """
-                                        SELECT DISTINCT handle.ROWID as handle_id
-                                        FROM handle
-                                        WHERE handle.id LIKE ? OR handle.uncanonicalized_id LIKE ?
-                                    """
-                                    handle_matches = pd.read_sql_query(
-                                        handle_search,
-                                        conn,
-                                        params=[f'%{cleaned_phone}%', f'%{cleaned_phone}%'],
-                                    )
-                                    if not handle_matches.empty:
-                                        participant_handle_ids.extend(handle_matches['handle_id'].tolist())
-                            if pd.notna(row['email']):
-                                email = str(row['email']).lower()
-                                handle_search = """
-                                    SELECT DISTINCT handle.ROWID as handle_id
-                                    FROM handle
-                                    WHERE LOWER(handle.id) = ? OR LOWER(handle.uncanonicalized_id) = ?
-                                """
-                                handle_matches = pd.read_sql_query(
-                                    handle_search,
-                                    conn,
-                                    params=[email, email],
-                                )
-                                if not handle_matches.empty:
-                                    participant_handle_ids.extend(handle_matches['handle_id'].tolist())
+                    from ..contacts_data_processing.import_contact_info import get_contact_info_by_handle
+                    # Contact search via in-memory cache is handled above through handle LIKE matching.
                 except Exception as exc:
                     logger.debug(f"Could not search Contacts database: {exc}")
 

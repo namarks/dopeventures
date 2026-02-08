@@ -133,13 +133,13 @@ def populate_fts_database(
         
         source_conn = sqlite3.connect(source_db_path)
         fts_conn = sqlite3.connect(fts_db_path)
-        
+
         # Get already indexed message IDs (unless force rebuild)
         indexed_ids = set() if force_rebuild else get_indexed_message_ids(fts_db_path)
-        
+
         # Get all messages that need indexing
         query = """
-            SELECT 
+            SELECT
                 message.ROWID as message_id,
                 message.text,
                 message.attributedBody,
@@ -153,9 +153,11 @@ def populate_fts_database(
             AND (message.associated_message_type IS NULL OR message.associated_message_type = 0)
             ORDER BY message.date
         """
-        
-        df = pd.read_sql_query(query, source_conn)
-        source_conn.close()
+
+        try:
+            df = pd.read_sql_query(query, source_conn)
+        finally:
+            source_conn.close()
         
         # Filter out already indexed messages
         if indexed_ids:
@@ -166,9 +168,10 @@ def populate_fts_database(
         
         if total_messages == 0:
             logger.info("No new messages to index")
+            fts_conn.close()
             stats['duration'] = time.time() - start_time
             return stats
-        
+
         # Process in batches
         fts_cursor = fts_conn.cursor()
         
@@ -245,15 +248,20 @@ def populate_fts_database(
             int(time.time())
         ))
         fts_conn.commit()
-        
         fts_conn.close()
-        
+
         stats['duration'] = time.time() - start_time
         logger.info(f"FTS indexing complete! Indexed {stats['total_indexed']} messages in {stats['duration']:.2f}s")
-        
+
     except Exception as e:
         logger.error(f"Failed to populate FTS database: {e}", exc_info=True)
         stats['errors'] += 1
+        # Ensure connections are closed on error
+        for conn_ref in ('source_conn', 'fts_conn'):
+            try:
+                locals().get(conn_ref, None) and locals()[conn_ref].close()
+            except Exception:
+                pass
     
     return stats
 
@@ -286,15 +294,16 @@ def search_fts(
     
     try:
         conn = sqlite3.connect(fts_db_path)
-        
-        # Build FTS query - escape special characters
-        # FTS5 uses a different syntax, so we need to quote the search term
+
+        # Use parameterized query for FTS MATCH to prevent injection.
+        # FTS5 MATCH accepts a single string; we quote the term and escape
+        # internal double-quotes so FTS operators cannot be injected.
         escaped_term = search_term.replace('"', '""')
-        fts_query = f'extracted_text MATCH "{escaped_term}" OR original_text MATCH "{escaped_term}"'
-        params = []
-        
-        query = f"""
-            SELECT 
+        match_value = f'"{escaped_term}"'
+        params = [match_value, match_value]
+
+        query = """
+            SELECT
                 m.message_id,
                 m.chat_id,
                 m.date,
@@ -305,30 +314,31 @@ def search_fts(
                 fts.rank
             FROM message_text_fts fts
             JOIN message_metadata m ON fts.rowid = m.rowid
-            WHERE {fts_query}
+            WHERE fts.extracted_text MATCH ? OR fts.original_text MATCH ?
         """
-        
+
         # Add filters
         conditions = []
         if chat_ids:
             placeholders = ','.join(['?'] * len(chat_ids))
             conditions.append(f"m.chat_id IN ({placeholders})")
             params.extend(chat_ids)
-        
+
         if start_date:
             start_ts = convert_to_apple_timestamp(start_date)
             conditions.append("m.date >= ?")
             params.append(start_ts)
-        
+
         if end_date:
             conditions.append("m.date <= ?")
             params.append(end_date)
-        
+
         if conditions:
             query += " AND " + " AND ".join(conditions)
-        
-        query += f" ORDER BY fts.rank, m.date DESC LIMIT {limit}"
-        
+
+        query += " ORDER BY fts.rank, m.date DESC LIMIT ?"
+        params.append(limit)
+
         df = pd.read_sql_query(query, conn, params=params)
         conn.close()
         

@@ -6,7 +6,7 @@ import os
 import sys
 
 # Add the packages directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'packages'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'packages'))
 
 from packages.dopetracks.database.connection import get_db_session
 from packages.dopetracks.database.models import User
