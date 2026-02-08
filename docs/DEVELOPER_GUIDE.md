@@ -105,7 +105,7 @@ For bundled/production runs (used by the Swift app):
 python3 scripts/launch/app_launcher.py
 ```
 
-See [LAUNCHER_GUIDE.md](./LAUNCHER_GUIDE.md) for more details.
+See [TESTING.md](./TESTING.md) for the testing guide.
 
 ### API Documentation
 
@@ -128,13 +128,9 @@ Once running, access:
 2. **Swift App Testing**: Run the app in Xcode and test UI interactions
 3. **Integration Testing**: Test full workflow (chat search → playlist creation)
 
-### Testing via Swagger UI
+### Testing
 
-See **[TESTING_VIA_SWAGGER.md](./TESTING_VIA_SWAGGER.md)** for step-by-step guide.
-
-### Manual Testing Checklist
-
-See **[TESTING_GUIDE.md](./TESTING_GUIDE.md)** for complete testing workflow.
+See **[TESTING.md](./TESTING.md)** for the full testing guide (Swagger UI, curl examples, pytest).
 
 ### Future: Adding Automated Tests
 

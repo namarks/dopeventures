@@ -5,6 +5,10 @@ Comprehensive review of the Dopetracks codebase — a local-first macOS app that
 **Stack:** Python FastAPI backend + Swift/SwiftUI macOS frontend
 **Date:** 2026-02-08
 
+### Fix Status
+
+Issues marked **[FIXED]** have been addressed. Remaining items are tracked for future work.
+
 ---
 
 ## Table of Contents
@@ -23,7 +27,7 @@ Comprehensive review of the Dopetracks codebase — a local-first macOS app that
 
 ## 1. Critical Issues
 
-### 1.1 FTS Query Injection
+### 1.1 FTS Query Injection [FIXED]
 
 **File:** `packages/dopetracks/processing/imessage_data_processing/fts_indexer.py:292-308`
 
@@ -37,7 +41,7 @@ fts_query = f'extracted_text MATCH "{escaped_term}" OR original_text MATCH "{esc
 
 **Fix:** Use parameterized queries with `?` placeholders for the MATCH value.
 
-### 1.2 Missing Functions — Silent Feature Failure
+### 1.2 Missing Functions — Silent Feature Failure [FIXED]
 
 **File:** `packages/dopetracks/processing/imessage_data_processing/optimized_queries.py:826-827`
 
@@ -54,7 +58,7 @@ The project has exactly **3 tests** across ~20 source modules. Zero tests for:
 
 See [Section 6](#6-test-coverage--devops) for full details.
 
-### 1.4 Backend Killed on Window Focus Loss (macOS)
+### 1.4 Backend Killed on Window Focus Loss (macOS) [FIXED]
 
 **File:** `DopetracksApp/App/DopetracksApp.swift:34-38`
 
@@ -68,7 +72,7 @@ See [Section 6](#6-test-coverage--devops) for full details.
 
 On macOS, `.inactive` triggers when the window loses focus (e.g., user switches to another app). The backend is terminated every time the user clicks away, then must be restarted when they return. Only `.background` (or app termination) should trigger `stopBackend`.
 
-### 1.5 `URLSession` Leak in Health Check Loop
+### 1.5 `URLSession` Leak in Health Check Loop [FIXED]
 
 **File:** `DopetracksApp/App/Services/BackendManager.swift:326-330`
 
@@ -80,7 +84,7 @@ A new `URLSession` is created on every call to `checkBackendHealth()`. This runs
 
 ## 2. Security Vulnerabilities
 
-### 2.1 SQL Injection via `order_by` Parameter
+### 2.1 SQL Injection via `order_by` Parameter [FIXED]
 
 **File:** `packages/dopetracks/processing/imessage_data_processing/query_builders.py:77`
 
@@ -90,7 +94,7 @@ ORDER BY {order_by}
 
 The `order_by` parameter is interpolated directly into SQL via f-string. Current callers pass hardcoded values, but there is no validation at this boundary.
 
-### 2.2 Default Secret Key in Production
+### 2.2 Default Secret Key in Production [FIXED — removed]
 
 **File:** `packages/dopetracks/config.py:40-41`
 
@@ -100,7 +104,7 @@ SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
 While there is a validation check for production mode, the default key is committed to the repository. The validation only logs a warning (via `validate_required_settings`) and does not prevent startup.
 
-### 2.3 XSS in OAuth Error Page
+### 2.3 XSS in OAuth Error Page [FIXED]
 
 **File:** `packages/dopetracks/app.py:548-560`
 
@@ -114,13 +118,13 @@ html_content = f"""
 
 The `error` query parameter from Spotify's OAuth callback is interpolated directly into HTML without escaping. An attacker could craft a URL with malicious JavaScript in the `error` parameter.
 
-### 2.4 `HTMLResponse` Not Imported
+### 2.4 `HTMLResponse` Not Imported [FIXED]
 
 **File:** `packages/dopetracks/app.py:561`
 
 `HTMLResponse` is used in the callback endpoint but is not imported at the top of the file. This will raise a `NameError` at runtime when the error path is hit.
 
-### 2.5 `resolve_short_url()` Has No Timeout or Error Handling
+### 2.5 `resolve_short_url()` Has No Timeout or Error Handling [FIXED]
 
 **File:** `packages/dopetracks/utils/utility_functions.py:44-46`
 
@@ -144,7 +148,7 @@ The main application file contains all route handlers, helper functions, HTML te
 - `routes/contacts.py` — Contact photo, debug
 - `routes/fts.py` — FTS indexing and status
 
-### 3.2 Connection Leak in FTS Indexer
+### 3.2 Connection Leak in FTS Indexer [FIXED]
 
 **File:** `packages/dopetracks/processing/imessage_data_processing/fts_indexer.py:134-135`
 
@@ -190,13 +194,13 @@ REDIRECT_URI=os.getenv('SPOTIFY_REDIRECT_URI')
 
 Evaluated at import time, before `.env` loading. Load order dependent — values may be `None`.
 
-### 3.8 `create_spotify_playlist.py` `__main__` Block Broken
+### 3.8 `create_spotify_playlist.py` `__main__` Block Broken [FIXED]
 
 **File:** `processing/spotify_interaction/create_spotify_playlist.py:253`
 
 `main()` requires two positional arguments but is called with none. Will always raise `TypeError`.
 
-### 3.9 Duplicate Spotify API Calls
+### 3.9 Duplicate Spotify API Calls [FIXED]
 
 **File:** `processing/spotify_interaction/create_spotify_playlist.py:233-246`
 
@@ -206,7 +210,7 @@ Evaluated at import time, before `.env` loading. Load order dependent — values
 
 ## 4. Frontend Issues (Swift)
 
-### 4.1 `BackendManager` Not `@MainActor`
+### 4.1 `BackendManager` Not `@MainActor` [FIXED]
 
 **File:** `DopetracksApp/App/Services/BackendManager.swift`
 
@@ -214,7 +218,7 @@ Evaluated at import time, before `.env` loading. Load order dependent — values
 
 **Fix:** Annotate `BackendManager` with `@MainActor`.
 
-### 4.2 `@StateObject` Wrapping Externally-Created Object
+### 4.2 `@StateObject` Wrapping Externally-Created Object [FIXED]
 
 **File:** `DopetracksApp/App/ContentView.swift:13,17-19`
 
@@ -236,7 +240,7 @@ Every `URL(string:)!` will crash if the string is malformed. Same issue in views
 - `DopetracksApp/App/Views/ChatDetailView.swift:211`
 - `DopetracksApp/App/Views/SettingsView.swift:115`
 
-### 4.4 `DateFormatter` Created Per Decode Call
+### 4.4 `DateFormatter` Created Per Decode Call [FIXED]
 
 **Files:** `DopetracksApp/App/Models/Chat.swift:43-46`, `Message.swift:73-76,121-124`
 
@@ -244,7 +248,7 @@ Every `URL(string:)!` will crash if the string is malformed. Same issue in views
 
 **Fix:** Use `static let` constant formatters.
 
-### 4.5 `Message.id` Collision Risk
+### 4.5 `Message.id` Collision Risk [FIXED]
 
 **File:** `DopetracksApp/App/Models/Message.swift:68`
 
@@ -273,7 +277,7 @@ Three independent `Task` blocks are launched. The third reads `chats.first` befo
 
 `#file` resolves at compile time. In distributed builds, the source path won't exist. Should use `Bundle.main.resourceURL`.
 
-### 4.9 Redundant `MainActor.run` in `@MainActor` Classes
+### 4.9 Redundant `MainActor.run` in `@MainActor` Classes [FIXED]
 
 **Files:** `ChatDetailViewModel.swift:31-37,43-49,64-70,72-78,82-86`, `ChatListViewModel.swift:105-108,128-133`
 
@@ -336,24 +340,21 @@ Each URL triggers a separate DB connection and query. For hundreds of URLs, a si
 
 No `conftest.py`, no shared fixtures, no pytest configuration in `pyproject.toml`.
 
-### 6.2 Deployment Configuration
+### 6.2 Deployment Configuration [FIXED — removed]
 
-- **Procfile** missing `PYTHONPATH` setup — `from dopetracks.app import app` will fail on Heroku
-- Single uvicorn worker, no gunicorn — cannot utilize multiple cores
-- No `release` process for database migrations (Alembic is in requirements)
-- No `gunicorn` in `requirements.txt`
+Web deployment files (Procfile, runtime.txt) removed. This is a desktop app.
 
-### 6.3 `dev_server.py` Contradictions
+### 6.3 `dev_server.py` Contradictions [FIXED]
 
 Line 5 docstring says "Starts uvicorn with auto-reload" but line 106 has `reload=False`.
 
-### 6.4 Debug Scripts — Wrong `.env` Path
+### 6.4 Debug Scripts — Wrong `.env` Path [FIXED]
 
 All 5 Spotify debug scripts look for `.env` at `Path(__file__).parent / ".env"` (resolves to `scripts/debug/.env`). The actual `.env` is at the project root.
 
-### 6.5 Broken Import Paths in Utility Scripts
+### 6.5 Broken Import Paths in Utility Scripts [FIXED — removed]
 
-`scripts/utils/promote_admin.py` and `scripts/utils/reset_password.py` add incorrect paths to `sys.path` and will crash with `ModuleNotFoundError`.
+Dead scripts (`promote_admin.py`, `reset_password.py`, `migrate_password_reset.py`, `migrate_roles.py`) deleted — they referenced a non-existent `users` table.
 
 ### 6.6 Hardcoded Developer Paths
 
@@ -394,21 +395,13 @@ All 5 Spotify debug scripts look for `.env` at `Path(__file__).parent / ".env"` 
 
 ## 8. Dependency Concerns
 
-### 8.1 Unmaintained/Vulnerable
+### 8.1 Unmaintained/Vulnerable [FIXED — removed]
 
-| Package | Last Release | Concern |
-|---------|-------------|---------|
-| `python-jose` | 2021 | Known JWT vulnerabilities. Replace with `PyJWT`. |
-| `passlib` | 2020 | No security patches. Use `bcrypt` directly. |
+`python-jose`, `passlib`, and other unused dependencies removed from `requirements.txt`.
 
-### 8.2 Unnecessary Dependencies
+### 8.2 Unnecessary Dependencies [FIXED — removed]
 
-| Package | Reason |
-|---------|--------|
-| `flask`, `flask-session` | Project uses FastAPI, not Flask |
-| `dj-database-url` | Django utility, project uses SQLAlchemy |
-| `boto3` | Listed as "optional" but always installed (~80MB) |
-| `requests` + `httpx` | Redundant — `httpx` can replace `requests` |
+`flask`, `flask-session`, `dj-database-url`, `boto3`, `bcrypt`, `email-validator`, `psycopg2-binary`, `alembic`, `redis`, `ipython` all removed.
 
 ### 8.3 No Lockfile
 
@@ -418,31 +411,41 @@ All dependencies use `>=` with no upper bound. No `requirements.lock`, `poetry.l
 
 ## 9. Summary & Recommendations
 
-### Priority 1 — Fix Immediately
+### Completed Fixes
 
-1. **FTS query injection** — Use parameterized queries for MATCH values
-2. **XSS in OAuth error page** — HTML-escape the `error` parameter
-3. **Import `HTMLResponse`** — Add the missing import
-4. **Backend killed on `.inactive`** — Change to only trigger on app termination
-5. **`URLSession` leak** — Create once and reuse
-6. **`BackendManager` thread safety** — Add `@MainActor` annotation
+1. ~~FTS query injection~~ — Parameterized queries for MATCH values
+2. ~~XSS in OAuth error page~~ — HTML-escaped `error` parameter
+3. ~~Import `HTMLResponse`~~ — Added missing import
+4. ~~Backend killed on `.inactive`~~ — Now only triggers on `.background`
+5. ~~`URLSession` leak~~ — Reusable session created once
+6. ~~`BackendManager` thread safety~~ — Added `@MainActor`
+7. ~~Dead code (`get_contacts_db_path`, `clean_phone_number`)~~ — Removed
+8. ~~Connection leaks in `fts_indexer.py`~~ — Added `try/finally`
+9. ~~`python-jose`, `passlib`, Flask, etc.~~ — Removed from dependencies
+10. ~~`@StateObject` misuse~~ — Changed to `@ObservedObject`
+11. ~~Procfile~~ — Removed (desktop app, no deployment)
+12. ~~Debug scripts `.env` path~~ — Fixed to project root
+13. ~~`DateFormatter` per decode~~ — Static `let` constants
+14. ~~`Message.id` collision~~ — Hash-based ID
+15. ~~Redundant `MainActor.run`~~ — Removed
+16. ~~Broken `__main__` in `create_spotify_playlist.py`~~ — Fixed
+17. ~~Duplicate Spotify API calls~~ — Deduplicated
+18. ~~`resolve_short_url` no timeout~~ — Added 10s timeout
+19. ~~`dev_server.py` reload=False~~ — Changed to `reload=True`
+20. ~~`order_by` SQL injection~~ — Added allowlist validation
+21. ~~Dead utility scripts~~ — Deleted
+22. ~~Web deployment files~~ — Deleted (Procfile, runtime.txt)
+23. ~~Unused dependencies~~ — Stripped requirements.txt
 
-### Priority 2 — Fix Soon
+### Remaining — Address in Future Refactoring
 
-7. **Add missing functions** (`get_contacts_db_path`, `clean_phone_number`) or remove dead code
-8. **Connection leaks** in `fts_indexer.py` — use context managers
-9. **Replace `python-jose`** with `PyJWT`
-10. **Fix `@StateObject` misuse** in `ContentView` — use `@ObservedObject`
-11. **Add `PYTHONPATH`** to Procfile for deployment
-12. **Fix debug scripts** `.env` path resolution
-
-### Priority 3 — Address in Refactoring
-
-13. **Split `app.py`** into route modules
-14. **Eliminate code duplication** (~900+ lines of duplicated logic)
-15. **Add test infrastructure** — conftest.py, fixtures, API endpoint tests
-16. **Add a dependency lockfile**
-17. **Remove unused dependencies** (Flask, dj-database-url)
-18. **N+1 query optimization** in `get_chat_list()`
-19. **Memory optimization** in FTS indexer
-20. **Move view business logic to ViewModels** (SettingsView, PlaylistCreationView)
+1. **Split `app.py`** into route modules (currently 1,999 lines)
+2. **Eliminate code duplication** (~900+ lines of duplicated logic)
+3. **Add test infrastructure** — conftest.py, fixtures, API endpoint tests
+4. **Add a dependency lockfile**
+5. **N+1 query optimization** in `get_chat_list()`
+6. **Memory optimization** in FTS indexer
+7. **Move view business logic to ViewModels** (SettingsView, PlaylistCreationView)
+8. **Force-unwrapped URLs** in APIClient and views
+9. **Race condition** in ChatListViewModel `onAppear`
+10. **`#file` path resolution** fragile in release builds
