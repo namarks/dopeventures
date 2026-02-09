@@ -1,6 +1,16 @@
 from typing import List, Optional
 
 
+def normalize_phone(value: str) -> str:
+    """Extract only digits from a phone number string."""
+    return "".join(ch for ch in value if ch.isdigit())
+
+
+def normalize_email(value: str) -> str:
+    """Normalize an email address: strip whitespace and lowercase."""
+    return value.strip().lower()
+
+
 def normalize_handle(handle: Optional[str]) -> Optional[str]:
     """
     Normalize a single handle (phone/email) to a canonical string.
@@ -11,8 +21,8 @@ def normalize_handle(handle: Optional[str]) -> Optional[str]:
         return None
     raw = str(handle).strip()
     if "@" in raw:
-        return raw.lower()
-    digits = "".join(ch for ch in raw if ch.isdigit())
+        return normalize_email(raw)
+    digits = normalize_phone(raw)
     if digits.startswith("1") and len(digits) > 10:
         digits = digits[1:]
     return digits or raw

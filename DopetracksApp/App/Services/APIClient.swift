@@ -23,7 +23,9 @@ class APIClient: ObservableObject {
     // MARK: - Health Check
     
     func checkHealth() async throws -> Bool {
-        let url = URL(string: "\(baseURL)/health")!
+        guard let url = URL(string: "\(baseURL)/health") else {
+            throw APIError.invalidURL
+        }
         let (_, response) = try await session.data(from: url)
         
         if let httpResponse = response as? HTTPURLResponse {
@@ -35,7 +37,9 @@ class APIClient: ObservableObject {
     // MARK: - Spotify OAuth
     
     func getClientID() async throws -> String {
-        let url = URL(string: "\(baseURL)/get-client-id")!
+        guard let url = URL(string: "\(baseURL)/get-client-id") else {
+            throw APIError.invalidURL
+        }
         let (data, _) = try await session.data(from: url)
         let response = try JSONDecoder().decode(ClientIDResponse.self, from: data)
         return response.clientId
@@ -44,7 +48,9 @@ class APIClient: ObservableObject {
     // MARK: - Chat Search
     
     func getAllChats() async throws -> [Chat] {
-        let url = URL(string: "\(baseURL)/chats")!
+        guard let url = URL(string: "\(baseURL)/chats") else {
+            throw APIError.invalidURL
+        }
         let (data, response) = try await session.data(from: url)
         
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -64,7 +70,9 @@ class APIClient: ObservableObject {
     }
     
     func searchChats(query: String) async throws -> [Chat] {
-        var components = URLComponents(string: "\(baseURL)/chat-search-prepared")!
+        guard var components = URLComponents(string: "\(baseURL)/chat-search-prepared") else {
+            throw APIError.invalidURL
+        }
         components.queryItems = [URLQueryItem(name: "query", value: query)]
         
         guard let url = components.url else {
@@ -88,7 +96,9 @@ class APIClient: ObservableObject {
     
     func advancedSearch(filters: SearchFilters, stream: Bool = true) async throws -> AsyncThrowingStream<Chat, Error> {
         // Use the streaming-capable endpoint so the UI can render results as they arrive.
-        var components = URLComponents(string: "\(baseURL)/chat-search-advanced")!
+        guard var components = URLComponents(string: "\(baseURL)/chat-search-advanced") else {
+            throw APIError.invalidURL
+        }
         var queryItems = filters.toQueryItems()
         queryItems.append(URLQueryItem(name: "stream", value: stream ? "true" : "false"))
         components.queryItems = queryItems
@@ -222,7 +232,9 @@ class APIClient: ObservableObject {
         order: MessageSortOrder = .newestFirst,
         search: String? = nil
     ) async throws -> [Message] {
-        var components = URLComponents(string: "\(baseURL)/chat/\(chatId)/recent-messages")!
+        guard var components = URLComponents(string: "\(baseURL)/chat/\(chatId)/recent-messages") else {
+            throw APIError.invalidURL
+        }
         var items: [URLQueryItem] = [
             URLQueryItem(name: "limit", value: "\(limit)"),
             URLQueryItem(name: "offset", value: "\(offset)"),
@@ -259,8 +271,10 @@ class APIClient: ObservableObject {
         endDate: Date?,
         playlistName: String
     ) async throws -> Playlist {
-        let url = URL(string: "\(baseURL)/create-playlist-optimized-stream")!
-        
+        guard let url = URL(string: "\(baseURL)/create-playlist-optimized-stream") else {
+            throw APIError.invalidURL
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
@@ -354,7 +368,9 @@ class APIClient: ObservableObject {
     // MARK: - User Profile
     
     func getUserProfile() async throws -> SpotifyProfile {
-        let url = URL(string: "\(baseURL)/user-profile")!
+        guard let url = URL(string: "\(baseURL)/user-profile") else {
+            throw APIError.invalidURL
+        }
         let (data, response) = try await session.data(from: url)
         
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -369,7 +385,9 @@ class APIClient: ObservableObject {
     }
     
     func openFullDiskAccess() async throws {
-        let url = URL(string: "\(baseURL)/open-full-disk-access")!
+        guard let url = URL(string: "\(baseURL)/open-full-disk-access") else {
+            throw APIError.invalidURL
+        }
         let (_, response) = try await session.data(from: url)
         
         guard let httpResponse = response as? HTTPURLResponse else {
@@ -382,7 +400,9 @@ class APIClient: ObservableObject {
     }
     
     func getUserPlaylists() async throws -> [Playlist] {
-        let url = URL(string: "\(baseURL)/user-playlists")!
+        guard let url = URL(string: "\(baseURL)/user-playlists") else {
+            throw APIError.invalidURL
+        }
         let (data, response) = try await session.data(from: url)
         
         guard let httpResponse = response as? HTTPURLResponse else {

@@ -112,7 +112,9 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                     
-                    Link("GitHub Repository", destination: URL(string: "https://github.com/namarks/dopeventures")!)
+                    if let repoURL = URL(string: "https://github.com/namarks/dopeventures") {
+                        Link("GitHub Repository", destination: repoURL)
+                    }
                 }
             }
             .navigationTitle("Settings")

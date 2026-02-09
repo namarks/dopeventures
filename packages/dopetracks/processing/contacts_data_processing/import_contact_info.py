@@ -7,16 +7,10 @@ import sqlite3
 from pathlib import Path
 from typing import Dict, Optional
 
+from ..imessage_data_processing.handle_utils import normalize_phone as _normalize_phone, normalize_email as _normalize_email
+
 _CONTACT_CACHE: Dict[str, Dict[str, Optional[str]]] = {}
 _LOAD_ATTEMPTED = False
-
-
-def _normalize_phone(value: str) -> str:
-    return "".join(ch for ch in value if ch.isdigit())
-
-
-def _normalize_email(value: str) -> str:
-    return value.strip().lower()
 
 
 def _add_contact_entry(key: str, first: Optional[str], last: Optional[str], org: Optional[str]) -> None:
