@@ -206,4 +206,4 @@ grep -c ERROR backend.log
 ## See Also
 
 - [SPOTIFY_OAUTH_SETUP.md](./SPOTIFY_OAUTH_SETUP.md) - Spotify setup guide
-- [SPOTIFY_AUTH_TROUBLESHOOTING.md](./SPOTIFY_AUTH_TROUBLESHOOTING.md) - Troubleshooting guide
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Troubleshooting guide

@@ -1,200 +1,75 @@
 # Dopetracks User Guide
 
-Complete guide for end users - from download to creating your first playlist.
-
-## Table of Contents
-
-1. [What is Dopetracks?](#what-is-dopetracks)
-2. [System Requirements](#system-requirements)
-3. [Download & Setup](#download--setup)
-4. [First-Time Configuration](#first-time-configuration)
-5. [Using the App](#using-the-app)
-6. [Troubleshooting](#troubleshooting)
-7. [Security & Privacy](#security--privacy)
-
----
-
-## What is Dopetracks?
-
-Dopetracks is an app that creates Spotify playlists from songs your friends have shared in iMessage chats.
-
-**Example**: If you have a group chat where people share Spotify songs, Dopetracks can automatically create a playlist with all those songs!
-
----
+From download to your first playlist.
 
 ## System Requirements
 
-- **macOS** (required - app needs access to Messages database)
-- **Spotify Premium account** (required for playlist creation)
-- **Internet connection** (for setup and Spotify API)
+- macOS
+- Spotify account
+- Internet connection (for Spotify API)
 
----
+## Setup
 
-## Download & Setup
+### 1. Install the App
 
-### Packaged macOS App (Recommended - Coming Soon!)
+Download `Dopetracks.dmg` from [GitHub Releases](https://github.com/namarks/dopeventures/releases/latest), open it, and drag `Dopetracks.app` to Applications.
 
-1. Download `Dopetracks.dmg` from [GitHub Releases](https://github.com/namarks/dopeventures/releases/latest)
-2. Open the DMG file
-3. Drag `Dopetracks.app` to your Applications folder
-4. Double-click to launch - setup wizard will guide you!
+### 2. Get Spotify Credentials
 
-**Note:** If no releases are available yet, developers can use the command-line setup (see [QUICK_START.md](./QUICK_START.md)).
+You need a free Spotify Developer App:
 
-### Get Spotify Credentials (2 minutes)
+1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard)
+2. Sign in and click **Create App**
+3. Fill in:
+   - **App Name**: Dopetracks
+   - **App Description**: Personal playlist creator
+   - **Redirect URI**: `http://127.0.0.1:8888/callback` (use `127.0.0.1`, not `localhost`)
+4. Save, then copy your **Client ID** and **Client Secret**
 
-> **Note:** If using the packaged app, the setup wizard will guide you through this step automatically.
+### 3. Grant macOS Permissions
 
-You need to create a free Spotify Developer App:
+The app needs Full Disk Access to read your Messages database:
 
-1. Go to: **https://developer.spotify.com/dashboard**
-2. Sign in with your Spotify account
-3. Click **"Create App"**
-4. Fill in:
-   - **App Name**: "Dopetracks" (or any name)
-   - **App Description**: "Personal playlist creator"
-   - **Redirect URI**: `http://127.0.0.1:8888/callback` ⚠️ **Important**: Use `127.0.0.1`, not `localhost`
-   - Check "I understand and agree to the Spotify Developer Terms of Service"
-5. Click **"Save"**
-6. Copy your **Client ID** and **Client Secret** (you'll need these next)
+1. Open **System Settings > Privacy & Security > Full Disk Access**
+2. Click the lock icon and authenticate
+3. Add the Dopetracks app (or Terminal if running from source)
 
+### 4. First Launch
 
----
-
-## First-Time Configuration
-
-When you first launch the packaged app, a setup wizard will guide you through:
-
-1. **Spotify Credentials** - Enter your Client ID and Secret
-2. **macOS Permissions** - Grant Full Disk Access if needed
-
-### Grant macOS Permissions
-
-To access your Messages database:
-
-1. Open **System Preferences** → **Security & Privacy** → **Privacy**
-2. Select **Full Disk Access** from the left sidebar
-3. Click the lock icon 🔒 and enter your password
-4. Click the **"+"** button
-5. Add **Terminal** (or **Python** if you have it)
-6. Make sure the checkbox is checked
-
-> **Alternative**: If you don't want to grant Full Disk Access, you can manually copy your Messages database and upload it through the web interface.
-
----
+1. Open Dopetracks from Applications
+2. The setup wizard will ask for your Spotify Client ID and Secret
+3. Click **Connect to Spotify** and authorize in your browser
 
 ## Using the App
 
-### Step 1: Launch
+### Search Chats
 
-1. **Double-click** `Dopetracks.app` in your Applications folder
-2. Your browser will open automatically to **http://127.0.0.1:8888**
-3. If it doesn't open automatically, navigate to that URL manually
+Use the search bar to find chats by name or participant. Select one or more chats to include.
 
-### Step 2: Authorize Spotify (One-Time)
+If you see duplicate chat names, these are separate conversation threads in the Messages database. Check message counts and dates to pick the right one. See [docs/CHAT_SELECTION_GUIDE.md](docs/CHAT_SELECTION_GUIDE.md) for details.
 
-1. Click **"Connect to Spotify"** button
-2. You'll be redirected to Spotify to authorize the app
-3. Click **"Agree"** to grant permissions
-4. You'll be redirected back to the app
+### Create a Playlist
 
-### Step 3: Search for Chats
-
-1. Use the search box to find chats by:
-   - Chat name
-   - Participant name
-   - Phone number or email
-2. Select the chats you want to include by checking the boxes
-
-### Step 4: Create Your Playlist
-
-1. **Choose date range**: Select start and end dates for messages to include
-2. **Enter playlist name**: Give your playlist a name
-3. **Click "Create Playlist"**: Watch the progress as tracks are added!
-4. **Open on Spotify**: Click the link to view your new playlist
-
----
+1. Select chats to include
+2. Optionally set a date range to filter messages
+3. Enter a playlist name
+4. Click **Create Playlist** and watch the progress
+5. Open the link to view your playlist on Spotify
 
 ## Troubleshooting
 
+**Server won't start**: Port 8888 may be in use. Kill it: `pkill -f uvicorn`
 
-### "Server won't start"
+**Permission denied for Messages**: Grant Full Disk Access (see step 3 above).
 
-- Port 8888 might be in use by another app
-- Close other apps using that port
-- Or manually kill: `pkill -f uvicorn`
-- Or restart your computer
+**Spotify authorization fails**: Make sure your redirect URI is exactly `http://127.0.0.1:8888/callback` (not `localhost`).
 
-### "Permission denied" for Messages Database
-
-- Grant Full Disk Access (see First-Time Configuration section)
-- Or use the file upload alternative:
-  1. Copy your Messages database: `cp ~/Library/Messages/chat.db ./my_messages.db`
-  2. Use the file upload feature in the web interface
-
-### "Spotify authorization fails"
-
-- Check your `.env` file has correct credentials
-- Ensure redirect URI in Spotify app matches exactly: `http://127.0.0.1:8888/callback`
-- ⚠️ **Important**: Use `127.0.0.1`, not `localhost` (Spotify requirement)
-- Make sure you saved the `.env` file after editing
-
-
-### Browser doesn't open automatically
-
-- Manually open: **http://127.0.0.1:8888**
-- Check the launcher log for errors
-- Make sure the server started successfully
-
----
+For more help, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Security & Privacy
 
-### Is It Safe?
-
-- ✅ **All data stays on your computer** - Nothing is uploaded to external servers
-- ✅ **Open source** - You can see all the code on GitHub
-- ✅ **No tracking** - The app doesn't collect any analytics or user data
-- ✅ **Local only** - Runs entirely on your Mac
-
-### What Gets Stored?
-
-- **Spotify tokens**: Stored locally in `~/.dopetracks/local.db` (encrypted)
-- **Configuration**: Your `.env` file contains Spotify credentials (keep it private!)
-- **Cache**: Spotify metadata cache at `~/.spotify_cache/spotify_cache.db`
-
-### Best Practices
-
-- **Never commit `.env` file** - It contains sensitive credentials
-- **Keep your Messages database private** - It contains personal conversations
-- **Use strong passwords** - If you set up user accounts (future feature)
-
----
-
-## Next Steps
-
-After you've created your first playlist:
-
-- Try creating playlists from different date ranges
-- Experiment with combining multiple chats
-- Check out the track details to see who shared what
-
-## Need More Help?
-
-- See **[QUICK_START.md](./QUICK_START.md)** for quick reference
-- See **[README.md](./README.md)** for overview and links
-- See **[docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md)** for detailed troubleshooting
-- Open an issue on [GitHub](https://github.com/namarks/dopeventures) if you encounter problems
-
----
-
-## Summary
-
-**To use Dopetracks:**
-1. Download `Dopetracks.dmg` from [GitHub Releases](https://github.com/namarks/dopeventures/releases/latest)
-2. Install the app to Applications
-3. Launch and follow the setup wizard
-4. Create playlists!
-
-**That's it!** No coding required, no complex setup - just download, install, and use.
-
+- All data stays on your Mac -- nothing is uploaded
+- Your Messages database is read-only
+- Spotify tokens are stored locally in `~/.dopetracks/local.db`
+- No analytics, no telemetry
+- Keep your `.env` file private -- it contains your Spotify credentials

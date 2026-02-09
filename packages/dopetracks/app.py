@@ -14,7 +14,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timezone, timedelta
@@ -539,6 +539,8 @@ async def spotify_callback(
     # Check for OAuth errors from Spotify
     if error:
         logger.error(f"Spotify OAuth error: {error}")
+        import html as html_mod
+        safe_error = html_mod.escape(error)
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -551,8 +553,8 @@ async def spotify_callback(
         </head>
         <body>
             <div class="error">
-                <h1>❌ Spotify Authorization Failed</h1>
-                <p>Error: {error}</p>
+                <h1>Spotify Authorization Failed</h1>
+                <p>Error: {safe_error}</p>
                 <p><a href="/">Return to app</a></p>
             </div>
         </body>
@@ -596,8 +598,6 @@ async def spotify_callback(
             raise HTTPException(status_code=502, detail=f"Failed to connect to Spotify: {str(e)}")
     
     # Store tokens locally (no user association)
-    from datetime import datetime, timezone, timedelta
-    
     expires_at = None
     if tokens.get("expires_in"):
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=tokens["expires_in"])

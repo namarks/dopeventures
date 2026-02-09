@@ -219,7 +219,6 @@ end
 
 ## See Also
 
-- [Packaging Strategy](./PACKAGING_STRATEGY.md) - Detailed implementation plan
 - [PyInstaller Documentation](https://pyinstaller.org/)
 - [Apple Code Signing Guide](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution)
 

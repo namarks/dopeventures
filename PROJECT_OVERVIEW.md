@@ -300,35 +300,18 @@ Local cache for processed data.
    - Display chat statistics (members, messages, Spotify links)
    - Filter by date ranges
 
-### Known Issues & Limitations ⚠️
+### Known Issues & Limitations
 
 1. **User Message Counting**
    - Currently uses `is_from_me` column or username matching
    - TODO: Map `handle_id` to username for better accuracy
-   - Issue: Numeric handle IDs don't directly map to usernames
 
-2. **Cloud Storage**
-   - Local file storage implemented
-   - TODO: S3/GCS integration for production
-   - Currently stores files in `user_uploads/` directory
-
-3. **Chat Search Optimization**
+2. **Chat Search Optimization**
    - Basic search implemented
-   - TODO: Optimize for large datasets
-   - Could benefit from full-text search indexing
+   - FTS indexing available but could be optimized for large datasets
 
-4. **Session Storage**
-   - In-memory session storage (temporary)
-   - Database persistence for long-term
-   - TODO: Redis integration for production scaling
-
-### Pending TODOs 📋
-
-1. **Map handle_id to username** for accurate user message counting
-2. **Cloud storage support** (S3/GCS) for file uploads
-3. **Optimized chat search** implementation
-4. **Redis integration** for session storage in production
-5. **Email service** for password reset (currently logs to console)
+3. **Test Coverage**
+   - ~5% coverage (3 tests). See `CODE_REVIEW.md` for details.
 
 ---
 
@@ -338,50 +321,24 @@ Local cache for processed data.
 
 #### Required
 ```bash
-# Spotify API (required)
 SPOTIFY_CLIENT_ID=your_client_id
 SPOTIFY_CLIENT_SECRET=your_client_secret
-SPOTIFY_REDIRECT_URI=http://localhost:8888/callback
-
-# Security (required in production)
-SECRET_KEY=your-secret-key-minimum-32-chars
-```
-
-#### Database
-```bash
-# Development (SQLite - default)
-DATABASE_URL=sqlite:///./local.db
-
-# Production (PostgreSQL - recommended)
-DATABASE_URL=postgresql://user:pass@host:port/dbname
+SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
 ```
 
 #### Optional
 ```bash
-# Environment
-ENVIRONMENT=development  # or 'production'
+DATABASE_URL=sqlite:///~/.dopetracks/local.db   # default
 DEBUG=True
 LOG_LEVEL=INFO
-
-# Sessions
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-SESSION_EXPIRE_HOURS=24
-
-# File Storage
-STORAGE_TYPE=local  # or 's3', 'gcs'
-MAX_FILE_SIZE_MB=100
-
-# CORS (comma-separated or JSON array)
-CORS_ORIGINS=["http://localhost:8889", "http://localhost:3000"]
 ```
 
 ### Configuration Loading
 **Location**: `config.py`
 
-- Loads from `.env` file (development)
-- Validates required settings on import
-- Provides defaults for optional settings
-- Environment-aware (development vs production)
+- Loads from `.env` file in project root
+- Validates Spotify credentials on import
+- Provides sensible defaults for all optional settings
 
 ---
 
@@ -497,18 +454,11 @@ tail -f backend.log
 
 ## Additional Resources
 
-- **Deployment Guide**: See `docs/DEPLOYMENT.md`
 - **Main README**: See `README.md` for setup instructions
-- **API Documentation**: Available at `/docs` when running
+- **Packaging Guide**: See `docs/PACKAGING.md` for building the macOS app
+- **API Documentation**: Available at `/docs` when the backend is running
 - **Environment Template**: See `.env.example`
-
-### Documentation Files
-
-Additional documentation is in the `docs/` folder:
-- **EFFICIENCY_ANALYSIS.md** - Refactor analysis and optimization details
-- **REFACTOR_MIGRATION_GUIDE.md** - Migration guide for new endpoints
-- **CLEANUP_SUMMARY.md** - Files removed during cleanup
-- **STRUCTURE_REORGANIZATION.md** - Package structure changes
+- **Documentation Index**: See `docs/INDEX.md` for all docs
 
 ---
 
@@ -517,9 +467,4 @@ Additional documentation is in the `docs/` folder:
 - **Application Version**: 2.0.0
 - **Python Version**: 3.11+
 - **FastAPI**: Latest stable
-- **Database**: SQLite (dev) / PostgreSQL (prod)
-
----
-
-*Last Updated: Based on current codebase state*
-*For questions or issues, refer to the codebase or create an issue in the repository.*
+- **Database**: SQLite (local only)

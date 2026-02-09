@@ -28,7 +28,15 @@ struct Message: Identifiable, Decodable {
     let hasSpotifyLink: Bool
     let spotifyUrl: String?
     let reactions: [Reaction]
-    
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+        return formatter
+    }()
+
     // Computed for UI
     var displaySender: String {
         if isFromMe { return "You" }
@@ -61,20 +69,16 @@ struct Message: Identifiable, Decodable {
     
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        
-        // Generate a unique ID from text and date
+
         let textValue = try container.decode(String.self, forKey: .text)
         let dateString = try container.decode(String.self, forKey: .date)
-        self.id = "\(textValue.prefix(20))_\(dateString)"
-        
+        // Use a hash of the full text + date for a collision-resistant id
+        let hashValue = abs("\(textValue)_\(dateString)".hashValue)
+        self.id = "\(dateString)_\(hashValue)"
+
         self.text = textValue
-        
-        // Parse date - API returns "YYYY-MM-DD HH:MM:SS" format in local timezone
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone.current // Explicitly use local timezone
-        guard let parsedDate = formatter.date(from: dateString) else {
+
+        guard let parsedDate = Message.dateFormatter.date(from: dateString) else {
             throw DecodingError.dataCorruptedError(forKey: .date, in: container, debugDescription: "Invalid date format: \(dateString)")
         }
         self.date = parsedDate
@@ -117,17 +121,12 @@ struct Reaction: Identifiable, Decodable {
         self.sender = try container.decode(String.self, forKey: .sender)
         self.isFromMe = (try? container.decode(Bool.self, forKey: .isFromMe)) ?? false
         let dateString = try container.decode(String.self, forKey: .date)
-        
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone.current
-        guard let parsedDate = formatter.date(from: dateString) else {
+
+        guard let parsedDate = Message.dateFormatter.date(from: dateString) else {
             throw DecodingError.dataCorruptedError(forKey: .date, in: container, debugDescription: "Invalid date format: \(dateString)")
         }
         self.date = parsedDate
-        
-        // Build stable-ish id
+
         self.id = "\(type)_\(sender)_\(dateString)"
     }
 }

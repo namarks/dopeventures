@@ -1,6 +1,6 @@
-# Core web framework
+# Core local server
 fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
+uvicorn>=0.24.0
 
 # Data processing
 pandas>=2.0.0
@@ -13,8 +13,8 @@ spotipy>=2.22.0
 python-dotenv>=1.0.0
 
 # HTTP requests
-requests>=2.31.0
 httpx>=0.25.0
+requests>=2.31.0
 
 # Apple data parsing (for iMessage binary data)
 pytypedstream>=0.1.0
@@ -22,36 +22,11 @@ pytypedstream>=0.1.0
 # Progress bars
 tqdm>=4.65.0
 
-# Development/testing (optional)
-pytest>=7.4.0
-ipython>=8.0.0
-
-# File upload handling
-python-multipart>=0.0.6
-
-# For Flask support (if using the alternative backend)
-flask>=2.3.0
-flask-session>=0.5.0
-
-# Database and authentication dependencies
+# Database
 sqlalchemy>=2.0.0
-alembic>=1.12.0
-psycopg2-binary>=2.9.0
-bcrypt>=4.0.0
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.0
-
-# Session management & caching
-redis>=5.0.0
-
-# Cloud storage (optional)
-boto3>=1.28.0
-
-# Database URL parsing
-dj-database-url>=2.1.0
-
-# Email validation
-email-validator>=2.0.0
 
 # Native window for bundled app
-pywebview>=4.4.0 
+pywebview>=4.4.0
+
+# Development/testing
+pytest>=7.4.0

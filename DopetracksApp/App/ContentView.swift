@@ -10,13 +10,9 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var backendManager: BackendManager
     @EnvironmentObject var apiClient: APIClient
-    @StateObject private var chatListViewModel: ChatListViewModel
+    @ObservedObject var chatListViewModel: ChatListViewModel
     @State private var selectedTab = 0
     @State private var startupComplete = false
-    
-    init(chatListViewModel: ChatListViewModel) {
-        _chatListViewModel = StateObject(wrappedValue: chatListViewModel)
-    }
     
     var body: some View {
         Group {

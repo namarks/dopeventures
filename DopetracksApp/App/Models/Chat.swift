@@ -14,7 +14,14 @@ struct Chat: Identifiable, Decodable, Hashable {
     let messageCount: Int
     let lastMessageDate: Date?
     let hasSpotifyLinks: Bool
-    
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+
     enum CodingKeys: String, CodingKey {
         case chatId = "chat_id"
         case name
@@ -41,10 +48,7 @@ struct Chat: Identifiable, Decodable, Hashable {
         
         // Handle optional date - backend uses format "YYYY-MM-DD HH:MM:SS"
         if let dateString = try? container.decode(String.self, forKey: .lastMessageDate) {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            lastMessageDate = formatter.date(from: dateString)
+            lastMessageDate = Chat.dateFormatter.date(from: dateString)
         } else {
             lastMessageDate = nil
         }

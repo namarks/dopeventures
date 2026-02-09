@@ -1,130 +1,71 @@
-# Quick Start Guide
+# Quick Start (Developer Setup)
 
-Get Dopetracks running in 5 minutes!
+Get Dopetracks running from source in 5 minutes.
 
-> **For end users**: Use the packaged macOS app (see [USER_GUIDE.md](./USER_GUIDE.md))  
-> **For developers**: Follow this guide to set up from source code
+> **End users**: Download the packaged app instead -- see [USER_GUIDE.md](USER_GUIDE.md)
 
 ## Prerequisites
 
-- **macOS** (required for Messages database access)
-- **Python 3.11+**
-- **Spotify Premium account**
-- **Spotify Developer App** (free, takes 2 minutes to create)
+- macOS, Python 3.11+, Xcode 15+
+- Spotify account + [Developer App](docs/SPOTIFY_OAUTH_SETUP.md)
 
-## Step 1: Clone and Setup (2 minutes)
+## 1. Clone and Install
 
 ```bash
-# Clone the repository
 git clone https://github.com/namarks/dopeventures.git
 cd dopeventures
-
-# Run the setup script
-./setup.sh
+./setup.sh   # creates venv, installs deps, creates .env template
 ```
 
-The setup script will:
-- ✅ Create a virtual environment
-- ✅ Install all dependencies
-- ✅ Create a `.env` file template
-- ✅ Configure Spotify credentials in `.env`
+## 2. Configure Spotify
 
-## Step 2: Get Spotify Credentials (2 minutes)
+Edit `.env` with your credentials:
 
-1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
-2. Click **"Create App"**
-3. Fill in:
-   - **App Name**: "Dopetracks" (or any name)
-   - **App Description**: "Personal playlist creator"
-   - **Redirect URI**: `http://127.0.0.1:8888/callback`
-   - Check the Terms of Service box
-4. Click **"Save"**
-5. Copy your **Client ID** and **Client Secret**
-
-## Step 3: Configure (1 minute)
-
-Edit the `.env` file and add your credentials:
-
-```bash
-# Open .env in your editor
-nano .env  # or use your preferred editor
 ```
-
-Replace the placeholder values:
-```
-SPOTIFY_CLIENT_ID=your_actual_client_id_here
-SPOTIFY_CLIENT_SECRET=your_actual_client_secret_here
+SPOTIFY_CLIENT_ID=your_client_id
+SPOTIFY_CLIENT_SECRET=your_client_secret
 SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
 ```
 
-## Step 4: Grant macOS Permissions (1 minute)
+Get these from [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) -- see [docs/SPOTIFY_OAUTH_SETUP.md](docs/SPOTIFY_OAUTH_SETUP.md) for details.
 
-To access your Messages database:
+## 3. Grant Full Disk Access
 
-1. Open **System Preferences** → **Security & Privacy** → **Privacy**
-2. Select **Full Disk Access** from the left sidebar
-3. Click the lock icon 🔒 and enter your password
-4. Click the **"+"** button
-5. Add **Terminal** (or **Python** if you have it)
-6. Make sure the checkbox is checked
+System Settings > Privacy & Security > Full Disk Access -- add Terminal (or your Python binary).
 
-> **Alternative**: If you don't want to grant Full Disk Access, you can manually copy your Messages database and upload it through the web interface.
-
-## Step 5: Run the App
+## 4. Run the Backend
 
 ```bash
-# Activate virtual environment
 source venv/bin/activate
-
-# Start the app
 python3 dev_server.py
 ```
 
 You should see:
 ```
-🚀 Starting Dopetracks Application...
-📍 Health check: http://127.0.0.1:8888/health
-🌐 Application: http://127.0.0.1:8888
+Starting Dopetracks Application...
+Health check: http://127.0.0.1:8888/health
+Application: http://127.0.0.1:8888
 ```
 
-## Step 6: Use the App
+API docs available at http://127.0.0.1:8888/docs
 
-1. **Open the Swift app**: Open `DopetracksApp/DopetracksApp.xcodeproj` in Xcode and run
-2. **Authorize Spotify**: Click "Connect to Spotify" and complete OAuth
-3. **Verify System Access**: The app will auto-detect your Messages database
-4. **Search Chats**: Search for chat names or participant names
-5. **Create Playlist**: Select chats, choose dates, and create your playlist!
+## 5. Run the Swift Frontend
+
+Open `DopetracksApp/DopetracksApp.xcodeproj` in Xcode and run. The Swift app will connect to the backend automatically.
+
+## 6. Use the App
+
+1. Authorize Spotify (one-time OAuth flow)
+2. Search for chats by name or participant
+3. Select chats, set a date range, create your playlist
 
 ## Troubleshooting
 
-### "No module named 'packages'"
-- Make sure you're in the project root directory
-- Activate the virtual environment: `source venv/bin/activate`
+| Problem | Fix |
+|---------|-----|
+| `ModuleNotFoundError` | Activate venv: `source venv/bin/activate` |
+| Permission denied for Messages | Grant Full Disk Access (step 3) |
+| Spotify auth fails | Redirect URI must use `127.0.0.1`, not `localhost` |
+| Port 8888 in use | `pkill -f uvicorn` or set `DOPETRACKS_KILL_PORT=1` |
 
-### "Permission denied" for Messages
-- Grant Full Disk Access (see Step 4)
-- Or upload your database file manually through the web interface
-
-### "Spotify authorization fails"
-- Check your `.env` file has correct credentials
-- Make sure redirect URI is exactly: `http://127.0.0.1:8888/callback`
-- Don't use `localhost` - use `127.0.0.1`
-
-### Port already in use
-```bash
-# Kill the process using port 8888
-lsof -ti:8888 | xargs kill -9
-```
-
-## What's Next?
-
-- See [README.md](./README.md) for detailed documentation
-- See [docs/TESTING_LOCAL_APP.md](./docs/TESTING_LOCAL_APP.md) for testing guide
-- Check the `/health` endpoint to verify everything is working
-
-## Need Help?
-
-- Check the [README.md](./README.md) for detailed instructions
-- Review [docs/TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) for common issues
-- Open an issue on GitHub if you encounter problems
-
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for more.

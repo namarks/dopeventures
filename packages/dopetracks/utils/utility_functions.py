@@ -42,7 +42,7 @@ def get_project_root():
 
 
 def resolve_short_url(short_url):
-        response = requests.head(short_url, allow_redirects=True)
+        response = requests.head(short_url, allow_redirects=True, timeout=10)
         return response.url
 
 

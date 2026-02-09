@@ -45,6 +45,18 @@ def messages_with_body_query(chat_placeholders: str) -> str:
     """
 
 
+_ALLOWED_ORDER_BY = {
+    "last_message_date DESC",
+    "last_message_date ASC",
+    "message_count DESC",
+    "message_count ASC",
+    "member_count DESC",
+    "member_count ASC",
+    "chat_id ASC",
+    "chat_id DESC",
+}
+
+
 def chat_stats_query(
     chat_placeholders: str,
     order_by: str = "last_message_date DESC",
@@ -54,6 +66,10 @@ def chat_stats_query(
     Shared stats query for chat aggregates (message counts, member counts, last message date).
     Caller provides params: chat_ids list.
     """
+    if order_by not in _ALLOWED_ORDER_BY:
+        order_by = "last_message_date DESC"
+    if limit is not None:
+        limit = int(limit)
     limit_clause = f" LIMIT {limit}" if limit is not None else ""
     return f"""
         SELECT 
