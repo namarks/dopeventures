@@ -320,7 +320,7 @@ class APIClient: ObservableObject {
             
             do {
                 let event = try JSONDecoder().decode(PlaylistStreamEvent.self, from: jsonData)
-                
+
                 if let status = event.status?.lowercased() {
                     if status == "error" {
                         throw APIError.httpErrorWithMessage(
@@ -328,11 +328,14 @@ class APIClient: ObservableObject {
                             event.message ?? "Unknown error creating playlist"
                         )
                     }
-                    
+
                     if status == "complete" {
                         finalEvent = event
                     }
                 }
+            } catch let apiError as APIError {
+                // Re-throw API errors so they surface to the user
+                throw apiError
             } catch {
                 // Log and continue on non-critical decode issues so we can keep consuming the stream
                 print("⚠️ Failed to decode playlist event: \(error)")
