@@ -1,5 +1,13 @@
 from typing import Optional
 
+# Shared SQL expression to convert Apple's nanosecond-epoch timestamp to a
+# human-readable local datetime string.  Use inside SELECT clauses, e.g.:
+#   f"{APPLE_DATE_SQL} as date_utc"
+#   f"MAX({APPLE_DATE_SQL}) as last_message_date"
+APPLE_DATE_SQL = (
+    'datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")'
+)
+
 
 def build_placeholders(count: int) -> str:
     """Return a comma-separated placeholder string for parametrized queries."""
@@ -25,7 +33,7 @@ def messages_with_body_query(chat_placeholders: str) -> str:
             handle.id as sender_contact,
             chat.display_name as chat_name,
             chat.ROWID as chat_id,
-            datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime") as date_utc
+            {APPLE_DATE_SQL} as date_utc
         FROM message
         JOIN chat_message_join ON message.ROWID = chat_message_join.message_id
         JOIN chat ON chat_message_join.chat_id = chat.ROWID
@@ -82,7 +90,7 @@ def chat_stats_query(
               + CASE WHEN SUM(CASE WHEN message.is_from_me = 1 THEN 1 ELSE 0 END) > 0 THEN 1 ELSE 0 END
             ) as member_count,
             COUNT(DISTINCT CASE WHEN message.is_from_me = 1 THEN message.ROWID END) as user_message_count,
-            MAX(datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime")) as last_message_date
+            MAX({APPLE_DATE_SQL}) as last_message_date
         FROM chat
         LEFT JOIN chat_message_join ON chat.ROWID = chat_message_join.chat_id
         LEFT JOIN message ON chat_message_join.message_id = message.ROWID

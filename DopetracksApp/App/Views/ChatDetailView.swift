@@ -204,11 +204,12 @@ struct MessageRow: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
-                if message.hasSpotifyLink, let spotifyUrl = message.spotifyUrl {
+                if message.hasSpotifyLink, let spotifyUrl = message.spotifyUrl,
+                   let spotifyURL = URL(string: spotifyUrl) {
                     HStack(spacing: 6) {
                         Image(systemName: "music.note")
                             .foregroundColor(.green)
-                        Link("Open in Spotify", destination: URL(string: spotifyUrl)!)
+                        Link("Open in Spotify", destination: spotifyURL)
                             .font(.caption)
                     }
                 }

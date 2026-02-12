@@ -6,12 +6,6 @@ from urllib.parse import urlparse
 
 from . import data_enrichment as de
 
-try:
-    # Optional dependency; only present in some environments
-    from ...utils import dictionaries  # type: ignore
-except Exception:
-    dictionaries = None
-
 
 class MessageBodyCache:
     """Simple LRU cache for parsed attributedBody payloads keyed by message id."""
@@ -36,10 +30,11 @@ def detect_reaction(associated_message_type: Any) -> str:
     """
     Translate iMessage associated_message_type to a human readable reaction type.
     Falls back to 'no-reaction' when unknown or reactions dict unavailable.
+
+    Delegates to data_enrichment.detect_reaction to avoid duplicating the
+    reaction-dict lookup logic.
     """
-    if dictionaries and hasattr(dictionaries, "reaction_dict"):
-        return dictionaries.reaction_dict.get(associated_message_type, "no-reaction")
-    return "no-reaction"
+    return de.detect_reaction(associated_message_type)
 
 
 def parse_attributed_body(data: Any) -> Dict[str, Any]:
@@ -73,6 +68,13 @@ def extract_spotify_urls(text: str) -> List[str]:
     return [match.group(0) for match in re.finditer(pattern, text)]
 
 
+def domain_matches(domain_value: str, pattern: str) -> bool:
+    """Check if a domain matches a target pattern, ignoring 'www.' prefix."""
+    domain_clean = domain_value.replace('www.', '')
+    pattern_clean = pattern.replace('www.', '')
+    return domain_clean == pattern_clean or domain_clean.endswith('.' + pattern_clean)
+
+
 def extract_all_urls(text: str) -> List[Dict[str, str]]:
     """
     Extract all URLs from text and categorize them by type.
@@ -91,11 +93,6 @@ def extract_all_urls(text: str) -> List[Dict[str, str]]:
         try:
             parsed = urlparse(url)
             domain = parsed.netloc.lower()
-
-            def domain_matches(domain_value: str, pattern: str) -> bool:
-                domain_clean = domain_value.replace('www.', '')
-                pattern_clean = pattern.replace('www.', '')
-                return domain_clean == pattern_clean or domain_clean.endswith('.' + pattern_clean)
 
             url_type = "other"
             if domain_matches(domain, 'spotify.com') or domain_matches(domain, 'spotify.link'):
@@ -153,11 +150,6 @@ def extract_urls_by_type(text: str) -> Dict[str, List[str]]:
     matches = list(re.finditer(url_pattern, text))
 
     categorized: Dict[str, List[str]] = {"spotify": [], "youtube": [], "other": []}
-
-    def domain_matches(domain: str, target: str) -> bool:
-        domain_clean = domain.replace("www.", "")
-        target_clean = target.replace("www.", "")
-        return domain_clean == target_clean or domain_clean.endswith("." + target_clean)
 
     for match in matches:
         url = match.group(0).rstrip(".,;!?)")

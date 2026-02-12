@@ -15,7 +15,7 @@ from contextlib import nullcontext
 from . import parsing_utils as pu
 from . import prepared_messages as pm
 from . import query_builders as qb
-from .handle_utils import normalize_handle
+from .handle_utils import normalize_handle, normalize_handle_variants
 from .imessage_db import convert_to_apple_timestamp, db_connection, get_user_db_path
 from ..contacts_data_processing.import_contact_info import get_contact_info_by_handle
 
@@ -507,28 +507,6 @@ def get_chat_list(db_path: str, prepared_db_path: Optional[str] = None) -> List[
         except Exception:
             participant_handles = []
 
-        def candidate_handles(handle: str) -> List[str]:
-            """Generate normalized variants for phone lookups."""
-            if not handle:
-                return []
-            raw = str(handle)
-            digits = "".join(ch for ch in raw if ch.isdigit())
-            variants = [raw]
-            if digits:
-                variants.append(digits)
-                if len(digits) == 10:
-                    variants.append("+1" + digits)
-                if len(digits) > 10:
-                    variants.append(digits[-10:])
-            # Deduplicate preserving order
-            seen = set()
-            out = []
-            for v in variants:
-                if v not in seen:
-                    seen.add(v)
-                    out.append(v)
-            return out
-
         def prepared_lookup(name_handle: str) -> Optional[str]:
             """Try both raw and digits-only against contacts.display_name."""
             if not prepared_conn:
@@ -553,7 +531,7 @@ def get_chat_list(db_path: str, prepared_db_path: Optional[str] = None) -> List[
         def resolve_name(handle: str) -> str:
             if not handle:
                 return ""
-            for h in candidate_handles(handle):
+            for h in normalize_handle_variants(handle):
                 disp = prepared_lookup(h)
                 if disp:
                     return disp
@@ -568,7 +546,7 @@ def get_chat_list(db_path: str, prepared_db_path: Optional[str] = None) -> List[
         def resolve_first_name(handle: str) -> str:
             if not handle:
                 return ""
-            for h in candidate_handles(handle):
+            for h in normalize_handle_variants(handle):
                 disp = prepared_lookup(h)
                 if disp:
                     disp = disp.strip()

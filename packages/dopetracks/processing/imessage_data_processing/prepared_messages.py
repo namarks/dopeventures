@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple, Iterable
 
 from . import parsing_utils as pu
+from .handle_utils import normalize_phone, normalize_email
+from .query_builders import APPLE_DATE_SQL
 
 PREPARED_DB_NAME = "prepared_messages.db"
 PREPARED_DB_VERSION = 3
@@ -15,8 +17,8 @@ def _normalize_contact_handle(handle: Optional[str]) -> Optional[str]:
         return handle
     h = str(handle).strip()
     if "@" in h:
-        return h.lower()
-    digits = "".join(ch for ch in h if ch.isdigit())
+        return normalize_email(h)
+    digits = normalize_phone(h)
     return digits or h
 
 # Meta keys tracked inside the prepared store
@@ -693,7 +695,7 @@ def load_new_messages_into_prepared_db(
                     message.is_from_me,
                     message.handle_id,
                     handle.id as sender_contact,
-                    datetime(message.date/1000000000 + strftime("%s", "2001-01-01"), "unixepoch", "localtime") as date_utc,
+                    {APPLE_DATE_SQL} as date_utc,
                     message.associated_message_type,
                     message.associated_message_guid,
                     message.guid

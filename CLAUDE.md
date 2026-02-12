@@ -13,7 +13,7 @@ Local-first macOS desktop app. Creates Spotify playlists from songs shared in iM
 
 | What | Where |
 |------|-------|
-| Backend entry point | `packages/dopetracks/app.py` |
+| Backend entry point | `packages/dopetracks/app.py` (thin shell — routes in `routes/`) |
 | Config | `packages/dopetracks/config.py` (loads `.env`) |
 | Database models | `packages/dopetracks/database/models.py` |
 | iMessage processing | `packages/dopetracks/processing/imessage_data_processing/` |
@@ -48,8 +48,6 @@ Swift frontend: open `DopetracksApp/DopetracksApp.xcodeproj` in Xcode.
 
 ## Known Technical Debt
 
-- `app.py` is monolithic (~2000 lines) — should be split into route modules
-- ~900 lines of duplicated logic across processing modules
-- ~5% test coverage (3 tests total)
-- Force-unwrapped `URL(string:)!` throughout Swift APIClient
-- No dependency lockfile
+- 3 pre-existing ingestion tests fail (need macOS Messages DB schema in test fixture)
+- `app.py` route split is complete but `routes/helpers.py` is 386 lines — could be further decomposed
+- Some code duplication remains in processing modules (timestamp conversion, DB connection patterns)

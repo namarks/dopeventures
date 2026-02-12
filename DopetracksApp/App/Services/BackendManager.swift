@@ -314,7 +314,9 @@ class BackendManager: ObservableObject {
     
     private nonisolated func checkBackendHealth() async -> Bool {
         do {
-            let url = URL(string: "http://127.0.0.1:8888/health")!
+            guard let url = URL(string: "http://127.0.0.1:8888/health") else {
+                return false
+            }
             var request = URLRequest(url: url)
             request.timeoutInterval = 10.0
             request.cachePolicy = .reloadIgnoringLocalCacheData

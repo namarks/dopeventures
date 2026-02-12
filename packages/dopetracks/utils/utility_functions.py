@@ -30,6 +30,10 @@ def get_messages_db_path():
     """
     Get the path to the Messages database dynamically based on the user's home directory.
 
+    Returns the raw path without validating accessibility.
+    For a validated path, use ``imessage_db.get_user_db_path()`` or
+    ``helpers.get_db_path()`` instead.
+
     Returns:
         str: Full path to the Messages database.
     """

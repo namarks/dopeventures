@@ -295,12 +295,17 @@ def search_fts(
     try:
         conn = sqlite3.connect(fts_db_path)
 
-        # Use parameterized query for FTS MATCH to prevent injection.
-        # FTS5 MATCH accepts a single string; we quote the term and escape
-        # internal double-quotes so FTS operators cannot be injected.
+        # Escape the search term to prevent FTS5 operator injection.
+        # Double-quote wrapping makes FTS5 treat it as a phrase query;
+        # internal double-quotes are escaped so injection is impossible.
         escaped_term = search_term.replace('"', '""')
         match_value = f'"{escaped_term}"'
-        params = [match_value, match_value]
+
+        # FTS5 contentless tables require MATCH in a subquery — using MATCH
+        # directly in a JOIN's WHERE clause raises "unable to use function
+        # MATCH in the requested context".  We run the MATCH in a subquery,
+        # then JOIN the metadata for additional filtering.
+        params: list = [match_value]
 
         query = """
             SELECT
@@ -309,40 +314,44 @@ def search_fts(
                 m.date,
                 m.is_from_me,
                 m.handle_id,
-                fts.extracted_text,
-                fts.original_text,
-                fts.rank
-            FROM message_text_fts fts
-            JOIN message_metadata m ON fts.rowid = m.rowid
-            WHERE fts.extracted_text MATCH ? OR fts.original_text MATCH ?
+                fts_match.extracted_text,
+                fts_match.original_text,
+                fts_match.rank
+            FROM (
+                SELECT rowid, message_id, chat_id, date,
+                       extracted_text, original_text, rank
+                FROM message_text_fts
+                WHERE message_text_fts MATCH ?
+            ) fts_match
+            JOIN message_metadata m ON fts_match.rowid = m.rowid
+            WHERE 1=1
         """
 
-        # Add filters
-        conditions = []
+        # Add filters on the metadata columns
         if chat_ids:
             placeholders = ','.join(['?'] * len(chat_ids))
-            conditions.append(f"m.chat_id IN ({placeholders})")
+            query += f" AND m.chat_id IN ({placeholders})"
             params.extend(chat_ids)
 
         if start_date:
             start_ts = convert_to_apple_timestamp(start_date)
-            conditions.append("m.date >= ?")
+            query += " AND m.date >= ?"
             params.append(start_ts)
 
         if end_date:
-            conditions.append("m.date <= ?")
+            query += " AND m.date <= ?"
             params.append(end_date)
 
-        if conditions:
-            query += " AND " + " AND ".join(conditions)
-
-        query += " ORDER BY fts.rank, m.date DESC LIMIT ?"
+        query += " ORDER BY fts_match.rank, m.date DESC LIMIT ?"
         params.append(limit)
 
-        df = pd.read_sql_query(query, conn, params=params)
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        columns = [desc[0] for desc in cursor.description] if cursor.description else []
+        rows = cursor.fetchall()
         conn.close()
-        
-        return df
+
+        return pd.DataFrame(rows, columns=columns) if rows else pd.DataFrame()
         
     except Exception as e:
         logger.error(f"FTS search error: {e}", exc_info=True)
