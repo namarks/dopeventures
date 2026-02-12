@@ -179,6 +179,9 @@ async def get_user_spotify_profile(db: Session = Depends(get_db)):
     if not token_entry:
         raise HTTPException(status_code=401, detail="Spotify not authorized")
 
+    # Refresh token if expired before making the API call
+    token_entry = await _refresh_token_if_needed(db, token_entry)
+
     headers = {"Authorization": f"Bearer {token_entry.access_token}"}
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
