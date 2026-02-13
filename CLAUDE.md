@@ -51,3 +51,13 @@ Swift frontend: open `DopetracksApp/DopetracksApp.xcodeproj` in Xcode.
 - 3 pre-existing ingestion tests fail (need macOS Messages DB schema in test fixture)
 - `app.py` route split is complete but `routes/helpers.py` is 386 lines — could be further decomposed
 - Some code duplication remains in processing modules (timestamp conversion, DB connection patterns)
+
+## Planning & Context
+
+Planning docs, braindumps, and research live in the Second Brain:
+`~/Documents/SecondBrain/04-projects/imessage-spotify-app/`
+
+Check there for:
+- Feature ideas and braindumps (`braindumps/`)
+- Competitive analysis (`competitive/`)
+- Architecture decisions and specs (`planning/`)
