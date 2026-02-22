@@ -1,7 +1,10 @@
 """
 Spotify OAuth and profile endpoints.
 """
+import base64
+import hashlib
 import logging
+import secrets
 from datetime import datetime, timezone, timedelta
 
 import httpx
@@ -18,10 +21,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["spotify"])
 
+# In-memory store for pending OAuth flow (single-user local app).
+# Holds state token and PKCE code_verifier between /get-client-id and /callback.
+_pending_oauth: dict = {}
+
 
 @router.get("/get-client-id")
 async def get_client_id():
-    """Get Spotify client ID and redirect URI for OAuth."""
+    """Get Spotify client ID, redirect URI, state token, and PKCE challenge for OAuth."""
     if not settings.SPOTIFY_CLIENT_ID:
         raise HTTPException(status_code=500, detail="Spotify client ID not configured")
 
@@ -38,9 +45,28 @@ async def get_client_id():
             detail="Server configuration error: Redirect URI contains 'localhost'. Spotify requires '127.0.0.1'."
         )
 
+    # Generate CSRF state token
+    state = secrets.token_urlsafe(32)
+
+    # Generate PKCE code verifier and challenge (RFC 7636)
+    code_verifier = secrets.token_urlsafe(64)  # 43-128 chars
+    code_challenge = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    code_challenge_b64 = (
+        base64.urlsafe_b64encode(code_challenge)
+        .rstrip(b"=")
+        .decode("ascii")
+    )
+
+    # Store for validation in /callback
+    _pending_oauth["state"] = state
+    _pending_oauth["code_verifier"] = code_verifier
+
     return {
         "client_id": settings.SPOTIFY_CLIENT_ID,
-        "redirect_uri": redirect_uri
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "code_challenge": code_challenge_b64,
+        "code_challenge_method": "S256",
     }
 
 
@@ -49,6 +75,7 @@ async def spotify_callback(
     request: Request,
     code: str = None,
     error: str = None,
+    state: str = None,
     db: Session = Depends(get_db)
 ):
     """Handle Spotify OAuth callback."""
@@ -83,6 +110,16 @@ async def spotify_callback(
     if not code:
         raise HTTPException(status_code=400, detail="Authorization code not provided")
 
+    # Validate OAuth state parameter (CSRF protection)
+    expected_state = _pending_oauth.get("state")
+    if not expected_state or not state or not secrets.compare_digest(state, expected_state):
+        logger.error("OAuth state mismatch — possible CSRF attempt")
+        raise HTTPException(status_code=400, detail="Invalid OAuth state parameter")
+
+    # Retrieve PKCE code_verifier for token exchange
+    code_verifier = _pending_oauth.pop("code_verifier", None)
+    _pending_oauth.pop("state", None)
+
     # Exchange code for tokens
     token_url = "https://accounts.spotify.com/api/token"
     payload = {
@@ -92,6 +129,8 @@ async def spotify_callback(
         "client_id": settings.SPOTIFY_CLIENT_ID,
         "client_secret": settings.SPOTIFY_CLIENT_SECRET,
     }
+    if code_verifier:
+        payload["code_verifier"] = code_verifier
 
     logger.info("Exchanging Spotify authorization code for tokens")
     async with httpx.AsyncClient(timeout=30.0) as client:

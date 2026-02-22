@@ -168,6 +168,103 @@ class TestGetClientIdEndpoint:
             Settings.SPOTIFY_CLIENT_ID = original_id
             Settings.SPOTIFY_REDIRECT_URI = original_uri
 
+    def test_returns_oauth_state_token(self, client):
+        """Response should include a state token for CSRF protection."""
+        from dopetracks.config import Settings
+
+        original_id = Settings.SPOTIFY_CLIENT_ID
+        original_uri = Settings.SPOTIFY_REDIRECT_URI
+        try:
+            Settings.SPOTIFY_CLIENT_ID = "test_id"
+            Settings.SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8888/callback"
+            response = client.get("/get-client-id")
+            data = response.json()
+            assert "state" in data
+            assert len(data["state"]) > 20  # cryptographic token, not trivial
+        finally:
+            Settings.SPOTIFY_CLIENT_ID = original_id
+            Settings.SPOTIFY_REDIRECT_URI = original_uri
+
+    def test_returns_pkce_challenge(self, client):
+        """Response should include PKCE code_challenge and method."""
+        from dopetracks.config import Settings
+
+        original_id = Settings.SPOTIFY_CLIENT_ID
+        original_uri = Settings.SPOTIFY_REDIRECT_URI
+        try:
+            Settings.SPOTIFY_CLIENT_ID = "test_id"
+            Settings.SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8888/callback"
+            response = client.get("/get-client-id")
+            data = response.json()
+            assert "code_challenge" in data
+            assert data["code_challenge_method"] == "S256"
+        finally:
+            Settings.SPOTIFY_CLIENT_ID = original_id
+            Settings.SPOTIFY_REDIRECT_URI = original_uri
+
+
+# ---------------------------------------------------------------------------
+# OAuth callback state validation
+# ---------------------------------------------------------------------------
+
+
+class TestOAuthCallbackValidation:
+    """Tests for CSRF state validation on GET /callback."""
+
+    def test_callback_rejects_missing_state(self, client):
+        """Callback should reject requests with no state parameter."""
+        response = client.get("/callback", params={"code": "test_code"})
+        assert response.status_code == 400
+        assert "state" in response.json().get("detail", "").lower()
+
+    def test_callback_rejects_wrong_state(self, client):
+        """Callback should reject requests with mismatched state."""
+        from dopetracks.config import Settings
+
+        original_id = Settings.SPOTIFY_CLIENT_ID
+        original_uri = Settings.SPOTIFY_REDIRECT_URI
+        try:
+            Settings.SPOTIFY_CLIENT_ID = "test_id"
+            Settings.SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8888/callback"
+            # First, get a valid state token
+            client.get("/get-client-id")
+            # Then try callback with wrong state
+            response = client.get("/callback", params={"code": "test_code", "state": "wrong_state"})
+            assert response.status_code == 400
+            assert "state" in response.json().get("detail", "").lower()
+        finally:
+            Settings.SPOTIFY_CLIENT_ID = original_id
+            Settings.SPOTIFY_REDIRECT_URI = original_uri
+
+
+# ---------------------------------------------------------------------------
+# Validate username endpoint (path traversal protection)
+# ---------------------------------------------------------------------------
+
+
+class TestValidateUsernameEndpoint:
+    """Tests for GET /validate-username path traversal protection."""
+
+    def test_rejects_path_traversal(self, client):
+        """Should reject usernames containing path traversal characters."""
+        response = client.get("/validate-username", params={"username": "../../../etc/passwd"})
+        assert response.status_code == 400
+
+    def test_rejects_slashes(self, client):
+        """Should reject usernames containing slashes."""
+        response = client.get("/validate-username", params={"username": "foo/bar"})
+        assert response.status_code == 400
+
+    def test_rejects_dots(self, client):
+        """Should reject usernames containing dots."""
+        response = client.get("/validate-username", params={"username": "foo.bar"})
+        assert response.status_code == 400
+
+    def test_accepts_valid_username(self, client):
+        """Should accept valid alphanumeric usernames with hyphens/underscores."""
+        response = client.get("/validate-username", params={"username": "valid-user_name123"})
+        assert response.status_code == 200
+
 
 # ---------------------------------------------------------------------------
 # Prepared status endpoint

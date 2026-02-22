@@ -5,15 +5,17 @@ from sqlalchemy import Column, Integer, String, Text, DateTime
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
 
+from .encryption import EncryptedText
+
 Base = declarative_base()
 
 class SpotifyToken(Base):
-    """Spotify OAuth tokens."""
+    """Spotify OAuth tokens (encrypted at rest)."""
     __tablename__ = "spotify_tokens"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    access_token = Column(Text, nullable=False)
-    refresh_token = Column(Text)
+    access_token = Column(EncryptedText, nullable=False)
+    refresh_token = Column(EncryptedText)
     token_type = Column(String(50), default="Bearer")
     expires_at = Column(DateTime)
     scope = Column(String(500))

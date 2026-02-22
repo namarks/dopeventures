@@ -27,7 +27,27 @@ print("TEST AUTHORIZATION URL")
 print("="*60)
 
 scope = "playlist-modify-public playlist-modify-private"
-auth_url = f"https://accounts.spotify.com/authorize?response_type=code&client_id={client_id}&scope={scope}&redirect_uri={redirect_uri}"
+
+# Fetch state and PKCE params from the backend (if running)
+import requests
+try:
+    resp = requests.get("http://127.0.0.1:8888/get-client-id", timeout=3).json()
+    state = resp.get("state", "")
+    code_challenge = resp.get("code_challenge", "")
+    code_challenge_method = resp.get("code_challenge_method", "S256")
+    print(f"   State token: {state[:16]}...")
+    print(f"   PKCE challenge: {code_challenge[:16]}...")
+except Exception:
+    state = ""
+    code_challenge = ""
+    code_challenge_method = ""
+    print("   (Backend not running — state/PKCE params unavailable)")
+
+auth_url = (
+    f"https://accounts.spotify.com/authorize?response_type=code&client_id={client_id}"
+    f"&scope={scope}&redirect_uri={redirect_uri}"
+    f"&state={state}&code_challenge={code_challenge}&code_challenge_method={code_challenge_method}"
+)
 
 print(f"\nFull Authorization URL:")
 print(auth_url)

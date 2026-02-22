@@ -2,6 +2,7 @@
 Health, debug, and system endpoints.
 """
 import logging
+import re
 import sqlite3
 from pathlib import Path
 
@@ -59,6 +60,10 @@ async def prepared_status():
 @router.get("/validate-username")
 async def validate_username(username: str):
     """Validate Messages database path for a username."""
+    # Strict validation: only allow alphanumeric, hyphens, underscores (prevent path traversal)
+    if not re.match(r'^[a-zA-Z0-9_-]+$', username):
+        raise HTTPException(status_code=400, detail="Invalid username: only alphanumeric characters, hyphens, and underscores are allowed")
+
     db_path = f"/Users/{username}/Library/Messages/chat.db"
 
     if validate_db_path(db_path):

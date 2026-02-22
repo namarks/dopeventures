@@ -36,13 +36,12 @@ class APIClient: ObservableObject {
     
     // MARK: - Spotify OAuth
     
-    func getClientID() async throws -> String {
+    func getSpotifyOAuthParams() async throws -> ClientIDResponse {
         guard let url = URL(string: "\(baseURL)/get-client-id") else {
             throw APIError.invalidURL
         }
         let (data, _) = try await session.data(from: url)
-        let response = try JSONDecoder().decode(ClientIDResponse.self, from: data)
-        return response.clientId
+        return try JSONDecoder().decode(ClientIDResponse.self, from: data)
     }
     
     // MARK: - Chat Search
@@ -447,9 +446,17 @@ enum APIError: LocalizedError {
 
 struct ClientIDResponse: Codable {
     let clientId: String
-    
+    let redirectUri: String
+    let state: String
+    let codeChallenge: String
+    let codeChallengeMethod: String
+
     enum CodingKeys: String, CodingKey {
         case clientId = "client_id"
+        case redirectUri = "redirect_uri"
+        case state
+        case codeChallenge = "code_challenge"
+        case codeChallengeMethod = "code_challenge_method"
     }
 }
 

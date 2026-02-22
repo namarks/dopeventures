@@ -19,6 +19,7 @@ setup(
         "typedstream>=0.3.0",
         "tqdm>=4.65.0",
         "python-multipart>=0.0.6",
+        "cryptography>=41.0.0",
     ],
     extras_require={
         "dev": [

@@ -26,6 +26,9 @@ tqdm>=4.65.0
 # Database
 sqlalchemy>=2.0.0
 
+# Encryption (token-at-rest protection)
+cryptography>=41.0.0
+
 # Native window for bundled app
 pywebview>=4.4.0
 

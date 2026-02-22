@@ -180,6 +180,15 @@ class BackendManager: ObservableObject {
         var environment = ProcessInfo.processInfo.environment
         environment["PYTHONUNBUFFERED"] = "1"
         environment["SWIFT_APP_MODE"] = "1" // Signal to launcher to skip browser opening
+
+        // Inject Spotify credentials from Keychain into the backend process environment
+        if let spotifyClientId = KeychainHelper.read(key: "SPOTIFY_CLIENT_ID") {
+            environment["SPOTIFY_CLIENT_ID"] = spotifyClientId
+        }
+        if let spotifyClientSecret = KeychainHelper.read(key: "SPOTIFY_CLIENT_SECRET") {
+            environment["SPOTIFY_CLIENT_SECRET"] = spotifyClientSecret
+        }
+
         process.environment = environment
         
         // Set up output pipes (optional, for debugging)

@@ -16,7 +16,7 @@ struct SettingsView: View {
     @State private var isLoading = false
     @State private var error: Error?
     
-    // Spotify credentials (stored in ~/.d dopetracks/.env for bundled; same path used here)
+    // Spotify credentials (stored in macOS Keychain; redirect URI in .env)
     @State private var clientId: String = ""
     @State private var clientSecret: String = ""
     @State private var isSaving = false
@@ -148,13 +148,20 @@ struct SettingsView: View {
     }
     
     private func loadEnvCredentials() {
-        let url = envFileURL
-        guard let content = try? String(contentsOf: url, encoding: .utf8) else {
-            return
+        // Load secrets from Keychain (preferred)
+        clientId = KeychainHelper.read(key: "SPOTIFY_CLIENT_ID") ?? ""
+        clientSecret = KeychainHelper.read(key: "SPOTIFY_CLIENT_SECRET") ?? ""
+
+        // Fall back to .env for migration from plaintext storage
+        if clientId.isEmpty || clientSecret.isEmpty {
+            let url = envFileURL
+            guard let content = try? String(contentsOf: url, encoding: .utf8) else {
+                return
+            }
+            let parsed = parseEnv(content)
+            if clientId.isEmpty { clientId = parsed["SPOTIFY_CLIENT_ID"] ?? "" }
+            if clientSecret.isEmpty { clientSecret = parsed["SPOTIFY_CLIENT_SECRET"] ?? "" }
         }
-        let parsed = parseEnv(content)
-        clientId = parsed["SPOTIFY_CLIENT_ID"] ?? ""
-        clientSecret = parsed["SPOTIFY_CLIENT_SECRET"] ?? ""
     }
     
     private func parseEnv(_ content: String) -> [String: String] {
@@ -181,10 +188,28 @@ struct SettingsView: View {
         }
         // Ensure directory exists
         try FileManager.default.createDirectory(at: envFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        
+
         let lines = existing.map { "\($0.key)=\($0.value)" }.sorted()
         let body = lines.joined(separator: "\n") + "\n"
         try body.write(to: envFileURL, atomically: true, encoding: .utf8)
+    }
+
+    /// Remove specified keys from the .env file (used to clean up secrets after Keychain migration).
+    private func removeKeysFromEnv(_ keys: [String]) {
+        guard let content = try? String(contentsOf: envFileURL, encoding: .utf8) else { return }
+        let keysSet = Set(keys)
+        let filtered = content
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if let eq = trimmed.firstIndex(of: "=") {
+                    let key = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
+                    return !keysSet.contains(key)
+                }
+                return true
+            }
+            .joined(separator: "\n")
+        try? filtered.write(to: envFileURL, atomically: true, encoding: .utf8)
     }
     
     private func saveCredentialsAndRestartBackend() async {
@@ -206,16 +231,22 @@ struct SettingsView: View {
         }
         
         do {
+            // Store secrets in macOS Keychain instead of plaintext .env
+            try KeychainHelper.save(key: "SPOTIFY_CLIENT_ID", value: trimmedId)
+            try KeychainHelper.save(key: "SPOTIFY_CLIENT_SECRET", value: trimmedSecret)
+
+            // Only write non-secret config to .env
             try saveEnv([
-                "SPOTIFY_CLIENT_ID": trimmedId,
-                "SPOTIFY_CLIENT_SECRET": trimmedSecret,
                 "SPOTIFY_REDIRECT_URI": "http://127.0.0.1:8888/callback"
             ])
-            
+
+            // Remove secrets from .env if they were there (migration cleanup)
+            removeKeysFromEnv(["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"])
+
             // Restart backend so new env vars take effect
             backendManager.stopBackend()
             await backendManager.startBackend()
-            
+
             await MainActor.run {
                 isSaving = false
                 saveMessage = "Saved. Backend restarted."
