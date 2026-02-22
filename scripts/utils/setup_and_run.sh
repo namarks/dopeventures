@@ -5,9 +5,9 @@
 echo "🔍 Activating virtual environment..."
 
 # Check for external venv (your setup)
-if [ -d "/Users/nmarks/root_code_repo/venvs/dopetracks_env" ]; then
+if [ -d "/Users/nmarks/projects/venvs/dopetracks_env" ]; then
     echo "✅ Found external virtual environment"
-    VENV_PATH="/Users/nmarks/root_code_repo/venvs/dopetracks_env"
+    VENV_PATH="/Users/nmarks/projects/venvs/dopetracks_env"
 # Check for local venv
 elif [ -d "venv" ]; then
     echo "✅ Found local virtual environment"

@@ -34,7 +34,7 @@ You need to create an Xcode project to build and run the app:
 4. **Product Name**: `DopetracksApp`
 5. **Interface**: SwiftUI
 6. **Language**: Swift
-7. **Save location**: `/Users/nmarks/root_code_repo/dopeventures/DopetracksApp/`
+7. **Save location**: `/Users/nmarks/projects/dopeventures/DopetracksApp/`
 
 8. **Add existing files**:
    - Drag all files from `DopetracksApp/App/` into the Xcode project

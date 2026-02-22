@@ -37,7 +37,7 @@ tail -f backend.log
 
 **Location:**
 ```
-/Users/nmarks/root_code_repo/dopeventures/backend.log
+/Users/nmarks/projects/dopeventures/backend.log
 ```
 
 ## What to Look For
