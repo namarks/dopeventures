@@ -51,9 +51,22 @@ class PermissionManager {
     
     /// Open System Settings to Full Disk Access
     func openFullDiskAccessSettings() {
-        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
-            NSWorkspace.shared.open(url)
+        // Try the modern Settings deep links first; fall back to the pane if needed.
+        let candidates = [
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",        // macOS 13/14/15
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_FullDiskAccess",  // older variants
+            "x-apple.systempreferences:com.apple.preference.security"                          // generic Security & Privacy
+        ]
+        
+        for candidate in candidates {
+            if let url = URL(string: candidate), NSWorkspace.shared.open(url) {
+                return
+            }
         }
+        
+        // Last resort: open the Security pref pane directly
+        let prefPane = URL(fileURLWithPath: "/System/Library/PreferencePanes/Security.prefPane")
+        NSWorkspace.shared.open(prefPane)
     }
 }
 

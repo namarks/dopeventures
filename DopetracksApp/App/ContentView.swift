@@ -19,6 +19,9 @@ struct ContentView: View {
             if startupComplete {
                 TabView(selection: $selectedTab) {
                     ChatListView(viewModel: chatListViewModel)
+                        .onAppear {
+                            UIEventLogger.shared.log("sidebar_native_toggle_available")
+                        }
                         .tabItem {
                             Label("Chats", systemImage: "message.fill")
                         }
@@ -35,6 +38,9 @@ struct ContentView: View {
                             Label("Settings", systemImage: "gear")
                         }
                         .tag(2)
+                }
+                .onChange(of: selectedTab) { newValue in
+                    UIEventLogger.shared.log("tab_selected", metadata: ["tab": "\(newValue)"])
                 }
             } else {
                 StartupView(

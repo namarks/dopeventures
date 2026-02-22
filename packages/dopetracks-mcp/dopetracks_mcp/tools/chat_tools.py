@@ -64,6 +64,7 @@ def get_messages(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     search: Optional[str] = None,
+    sender: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Get messages from a specific chat.
@@ -74,12 +75,14 @@ def get_messages(
         start_date: Start of date range (ISO format, e.g., "2024-01-01")
         end_date: End of date range (ISO format, e.g., "2024-12-31")
         search: Filter messages containing this text
+        sender: Filter messages by sender name (case-insensitive partial match)
 
     Returns:
         Dictionary with 'messages' list and metadata
 
     Example:
         get_messages(chat_id=123, start_date="2024-12-01", end_date="2024-12-31")
+        get_messages(chat_id=123, sender="Chet")
     """
     try:
         messages = imessage.get_messages(
@@ -88,6 +91,7 @@ def get_messages(
             start_date=start_date,
             end_date=end_date,
             search=search,
+            sender=sender,
         )
 
         return {
@@ -98,6 +102,7 @@ def get_messages(
                 "start_date": start_date,
                 "end_date": end_date,
                 "search": search,
+                "sender": sender,
             },
         }
 

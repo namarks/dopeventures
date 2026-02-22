@@ -44,10 +44,12 @@ struct StartupView: View {
                         .multilineTextAlignment(.center)
                     HStack(spacing: 12) {
                         Button("Open System Settings") {
+                            UIEventLogger.shared.log("startup_open_full_disk_access")
                             PermissionManager.shared.openFullDiskAccessSettings()
                         }
                         .buttonStyle(.borderedProminent)
                         Button("Check Again") {
+                            UIEventLogger.shared.log("startup_check_full_disk_access")
                             Task { await verifyPermissionAndStartIfAllowed() }
                         }
                         .buttonStyle(.bordered)
@@ -77,6 +79,7 @@ struct StartupView: View {
                 
                 if case .error = backendState {
                     Button("Retry backend") {
+                        UIEventLogger.shared.log("startup_retry_backend")
                         Task { await runStartup() }
                     }
                     .buttonStyle(.borderedProminent)
@@ -89,6 +92,7 @@ struct StartupView: View {
                             .padding(.horizontal)
                     }
                     Button("Retry loading chats") {
+                        UIEventLogger.shared.log("startup_retry_load_chats")
                         Task { await runStartup() }
                     }
                     .buttonStyle(.borderedProminent)

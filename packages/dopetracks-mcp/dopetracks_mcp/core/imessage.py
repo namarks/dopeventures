@@ -97,6 +97,7 @@ def get_messages(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     search: Optional[str] = None,
+    sender: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get messages from a chat with optional date filtering.
@@ -108,15 +109,16 @@ def get_messages(
         start_date: ISO date string for start of range
         end_date: ISO date string for end of range
         search: Optional text search filter
+        sender: Optional sender name filter (case-insensitive partial match)
 
     Returns list of message dicts with: text, sender_name, date, is_from_me
     """
     db_path = get_db_path()
 
-    # If date filtering is requested, we need to use SQL directly
-    if start_date or end_date:
+    # If date filtering or sender filtering is requested, we need to use SQL directly
+    if start_date or end_date or sender:
         return _get_messages_with_date_filter(
-            db_path, chat_id, limit, offset, start_date, end_date, search
+            db_path, chat_id, limit, offset, start_date, end_date, search, sender
         )
 
     # Simple case: use existing function
@@ -143,9 +145,13 @@ def _get_messages_with_date_filter(
     start_date: Optional[str],
     end_date: Optional[str],
     search: Optional[str],
+    sender: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """Get messages with date filtering using direct SQL."""
+    """Get messages with date and sender filtering using direct SQL."""
     import pandas as pd
+    from dopetracks.processing.contacts_data_processing.import_contact_info import (
+        get_contact_info_by_handle,
+    )
 
     conditions = ["chat_message_join.chat_id = ?"]
     params: List[Any] = [chat_id]
@@ -178,7 +184,7 @@ def _get_messages_with_date_filter(
         ORDER BY message.date DESC
         LIMIT ? OFFSET ?
     """
-    params.extend([limit + 200, offset])  # Fetch extra for search filtering
+    params.extend([limit + 500, offset])  # Fetch extra for filtering
 
     with db_connection(db_path) as conn:
         df = pd.read_sql_query(query, conn, params=params)
@@ -192,6 +198,25 @@ def _get_messages_with_date_filter(
         lambda row: finalize_text(row["text"], row["parsed_body"]),
         axis=1,
     )
+
+    # Build sender_name column with contact resolution
+    def resolve_sender(row):
+        if row["is_from_me"]:
+            return "You"
+        sender_contact = row["sender_contact"]
+        if sender_contact:
+            contact_info = get_contact_info_by_handle(str(sender_contact))
+            if contact_info and contact_info.get("full_name"):
+                return contact_info["full_name"]
+            return str(sender_contact)
+        return "Unknown"
+
+    df["sender_name"] = df.apply(resolve_sender, axis=1)
+
+    # Apply sender filter (case-insensitive partial match)
+    if sender:
+        sender_lower = sender.lower()
+        df = df[df["sender_name"].str.lower().str.contains(sender_lower, na=False)]
 
     # Apply search filter
     if search:
@@ -207,11 +232,9 @@ def _get_messages_with_date_filter(
         if not text:
             continue
 
-        sender_name = "You" if row["is_from_me"] else (row["sender_contact"] or "Unknown")
-
         messages.append({
             "text": text,
-            "sender_name": sender_name,
+            "sender_name": row["sender_name"],
             "date": row["date_utc"],
             "is_from_me": bool(row["is_from_me"]),
         })

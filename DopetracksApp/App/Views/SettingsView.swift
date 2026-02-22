@@ -7,10 +7,12 @@
 
 import SwiftUI
 import Foundation
+import AppKit
 
 struct SettingsView: View {
     @EnvironmentObject var apiClient: APIClient
     @EnvironmentObject var backendManager: BackendManager
+    @StateObject private var bugReporter = BugReportCollector()
     
     @State private var profile: SpotifyProfile?
     @State private var isLoading = false
@@ -67,6 +69,7 @@ struct SettingsView: View {
                     }
                     
                     Button("Refresh Profile") {
+                        UIEventLogger.shared.log("settings_refresh_profile")
                         Task {
                             await loadProfile()
                         }
@@ -88,6 +91,7 @@ struct SettingsView: View {
                     }
                     
                     Button {
+                        UIEventLogger.shared.log("settings_save_credentials_and_restart")
                         Task {
                             await saveCredentialsAndRestartBackend()
                         }
@@ -114,6 +118,57 @@ struct SettingsView: View {
                     
                     if let repoURL = URL(string: "https://github.com/namarks/dopeventures") {
                         Link("GitHub Repository", destination: repoURL)
+                    }
+                }
+                
+                Section("Support") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button {
+                            UIEventLogger.shared.log("settings_collect_bug_report")
+                            Task { await bugReporter.collect() }
+                        } label: {
+                            if bugReporter.isCollecting {
+                                HStack {
+                                    ProgressView()
+                                    Text("Collecting…")
+                                }
+                            } else {
+                                Text("Collect Bug Report (last 10 min logs)")
+                            }
+                        }
+                        .disabled(bugReporter.isCollecting)
+                        
+                        if let status = bugReporter.status {
+                            Text(status)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        if let error = bugReporter.errorMessage {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        
+                        if let zipURL = bugReporter.zipURL {
+                            Text("Saved to: \(zipURL.path)")
+                                .font(.caption2)
+                                .textSelection(.enabled)
+                            
+                            HStack {
+                                Button("Reveal in Finder") {
+                                    UIEventLogger.shared.log("settings_bug_report_reveal")
+                                    NSWorkspace.shared.activateFileViewerSelecting([zipURL])
+                                }
+                                Button("Copy Path") {
+                                    UIEventLogger.shared.log("settings_bug_report_copy_path")
+                                    let pb = NSPasteboard.general
+                                    pb.clearContents()
+                                    pb.setString(zipURL.path, forType: .string)
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
                 }
             }

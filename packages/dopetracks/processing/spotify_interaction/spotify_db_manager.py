@@ -110,16 +110,33 @@ def drop_spotify_url_cache_table(db_path: str) -> None:
         logging.error("Traceback:\n" + traceback.format_exc())
 
 
+def _safe_log(log_fn, msg: str, *args, **kwargs) -> None:
+    """Log but swallow BrokenPipeError from stream handlers."""
+    try:
+        log_fn(msg, *args, **kwargs)
+    except BrokenPipeError:
+        # Logging to a closed stdout/stderr can raise BrokenPipeError; ignore to keep processing.
+        pass
+
+
+def _safe_debug(msg: str, *args) -> None:
+    _safe_log(logging.debug, msg, *args)
+
+
+def _safe_warning(msg: str, *args) -> None:
+    _safe_log(logging.warning, msg, *args)
+
+
 def normalize_and_extract_id(url: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Given a Spotify URL (including possibly a shortened URL),
     return a 3-tuple of (normalized_url, spotify_id, entity_type).
     """
-    print(f"[DEBUG] Normalizing URL: {url}")
+    _safe_debug("Normalizing URL: %s", url)
     if "spotify.link" in url:
         resolved_url = uf.resolve_short_url(url)
         if not resolved_url:
-            logging.warning(f"Failed to resolve shortened URL: {url}")
+            _safe_warning("Failed to resolve shortened URL: %s", url)
             return None, None, None
         url = resolved_url
 
@@ -130,7 +147,12 @@ def normalize_and_extract_id(url: str) -> Tuple[Optional[str], Optional[str], Op
     entity_type = match.group(1) if match else None
     spotify_id = match.group(2) if match else None
 
-    print(f"[DEBUG] Result: normalized_url={normalized_url}, spotify_id={spotify_id}, entity_type={entity_type}")
+    _safe_debug(
+        "Result: normalized_url=%s, spotify_id=%s, entity_type=%s",
+        normalized_url,
+        spotify_id,
+        entity_type,
+    )
     return normalized_url, spotify_id, entity_type
 
 

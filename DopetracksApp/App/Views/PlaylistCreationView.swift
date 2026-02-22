@@ -77,6 +77,7 @@ struct PlaylistCreationView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        UIEventLogger.shared.log("playlist_creation_cancel")
                         dismiss()
                     }
                 }
@@ -86,6 +87,9 @@ struct PlaylistCreationView: View {
                         ProgressView().accessibilityLabel("Creating playlist")
                     } else {
                         Button("Create") {
+                            UIEventLogger.shared.log("playlist_creation_create_tap", metadata: [
+                                "chat_count": "\(selectedChatIds.count)"
+                            ])
                             Task { await createPlaylist() }
                         }
                         .disabled(playlistName.isEmpty || isDateRangeInvalid)

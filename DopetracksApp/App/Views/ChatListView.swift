@@ -11,11 +11,11 @@ import AppKit
 struct ChatListView: View {
     @ObservedObject var viewModel: ChatListViewModel
     @State private var showingPlaylistCreation = false
-    @State private var selectedChatId: Chat.ID?
+    @State private var detailChatId: Chat.ID?
     
     private var selectedChat: Chat? {
-        guard let selectedChatId else { return nil }
-        return viewModel.chats.first { $0.id == selectedChatId }
+        guard let detailChatId else { return nil }
+        return viewModel.chats.first { $0.id == detailChatId }
     }
     
     var body: some View {
@@ -192,9 +192,14 @@ struct ChatListView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List(selection: $selectedChatId) {
+                    List {
                         ForEach(viewModel.chats) { chat in
-                            ChatRow(chat: chat, isSelected: viewModel.selectedChats.contains(chat.id))
+                            ChatRow(
+                                chat: chat,
+                                isSelected: viewModel.selectedChats.contains(chat.id),
+                                toggleSelection: { toggleChatSelection(chat.id) },
+                                selectForDetail: { selectChatForDetail(chat.id) }
+                            )
                             .tag(chat.id)
                         }
                     }
@@ -205,6 +210,7 @@ struct ChatListView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button("Create Playlist") {
+                        UIEventLogger.shared.log("chatlist_create_playlist_tap", metadata: ["selected_chats": "\(viewModel.selectedChats.count)"])
                         showingPlaylistCreation = true
                     }
                     .disabled(viewModel.selectedChats.isEmpty)
@@ -215,23 +221,17 @@ struct ChatListView: View {
             }
             .task {
                 viewModel.onAppear()
-                selectedChatId = viewModel.selectedChatId
+                detailChatId = viewModel.selectedChats.first ?? viewModel.chats.first?.id
             }
-            .onChange(of: selectedChatId) { newValue in
-                // Defer to avoid publishing during view updates
-                DispatchQueue.main.async {
-                    viewModel.selectedChatId = newValue
-                    // Clear selection state for bulk playlist selection when switching single chat focus
-                    viewModel.selectedChats = newValue.map { [$0] } ?? []
+            .onChange(of: viewModel.selectedChats) { newSelection in
+                // Update detail focus to the first selected chat (if any)
+                if detailChatId == nil {
+                    detailChatId = newSelection.first
                 }
             }
-            .onChange(of: viewModel.selectedChatId) { newValue in
-                selectedChatId = newValue
-            }
             .onChange(of: viewModel.chats) { chats in
-                if let current = selectedChatId, !chats.contains(where: { $0.id == current }) {
-                    selectedChatId = nil
-                    viewModel.selectedChatId = nil
+                if let current = detailChatId, !chats.contains(where: { $0.id == current }) {
+                    detailChatId = viewModel.selectedChats.first
                 }
             }
         } detail: {
@@ -256,14 +256,39 @@ struct ChatListView: View {
             }
         }
     }
+
+    // MARK: - Selection helpers
+    private func toggleChatSelection(_ id: Chat.ID) {
+        var updated = viewModel.selectedChats
+        if updated.contains(id) {
+            updated.remove(id)
+        } else {
+            updated.insert(id)
+        }
+        viewModel.selectedChats = updated
+    }
+    
+    private func selectChatForDetail(_ id: Chat.ID) {
+        detailChatId = id
+        UIEventLogger.shared.log("chat_selected", metadata: ["chat_id": "\(id)"])
+    }
 }
 
 struct ChatRow: View {
     let chat: Chat
     let isSelected: Bool
+    let toggleSelection: () -> Void
+    let selectForDetail: () -> Void
     
     var body: some View {
         HStack(spacing: 12) {
+            Button(action: toggleSelection) {
+                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                    .font(.title3)
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 4)
+            
             VStack(alignment: .leading, spacing: 6) {
             Text(chat.displayName)
                 .font(.headline)
@@ -291,18 +316,15 @@ struct ChatRow: View {
                     .foregroundColor(.secondary)
             }
         }
-            
+        
             Spacer()
-            
-            if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.accentColor)
-                    .font(.caption)
-            }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 4)
         .contentShape(Rectangle())
+        .onTapGesture {
+            selectForDetail()
+        }
     }
 }
 

@@ -83,7 +83,7 @@ async def list_tools() -> List[Tool]:
         Tool(
             name="get_messages",
             description=(
-                "Get messages from a specific chat. Supports date filtering and text search."
+                "Get messages from a specific chat. Supports date filtering, text search, and sender filtering."
             ),
             inputSchema={
                 "type": "object",
@@ -108,6 +108,10 @@ async def list_tools() -> List[Tool]:
                     "search": {
                         "type": "string",
                         "description": "Filter messages containing this text",
+                    },
+                    "sender": {
+                        "type": "string",
+                        "description": "Filter messages by sender name (case-insensitive partial match)",
                     },
                 },
                 "required": ["chat_id"],
@@ -242,6 +246,7 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> CallToolResult:
                 start_date=arguments.get("start_date"),
                 end_date=arguments.get("end_date"),
                 search=arguments.get("search"),
+                sender=arguments.get("sender"),
             )
             return _json_result(result)
 

@@ -61,3 +61,21 @@ Check there for:
 - Feature ideas and braindumps (`braindumps/`)
 - Competitive analysis (`competitive/`)
 - Architecture decisions and specs (`planning/`)
+
+## PARA Integration
+
+This project is linked to the PARA knowledge system in Nick's Second Brain.
+
+### Session Start
+At the beginning of each session, automatically load project context:
+1. **Read PROJECT-OVERVIEW.md**: `~/Documents/SecondBrain/04-projects/imessage-spotify-app/PROJECT-OVERVIEW.md`
+   - Contains project status, current phase, and next steps
+2. **Check recent braindumps**: `~/Documents/SecondBrain/04-projects/imessage-spotify-app/braindumps/`
+   - Look for recent `.md` files (within last 7 days) for latest thinking and context
+
+### After Significant Work
+When completing substantial work (new features, bug fixes, architecture changes):
+1. **Update or create a braindump** in `~/Documents/SecondBrain/04-projects/imessage-spotify-app/braindumps/`
+   - Use format: `YYYY-MM-DD-topic.md`
+   - Document what was done, decisions made, and any follow-up items
+2. **Update PROJECT-OVERVIEW.md** if project status or next steps have changed
