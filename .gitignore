@@ -76,3 +76,4 @@ cookies.txt
 # Spotify cache (user-specific, not in repo)
 .spotify_cache/
 backend.log
+.DS_Store
