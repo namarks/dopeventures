@@ -77,3 +77,4 @@ cookies.txt
 .spotify_cache/
 backend.log
 .DS_Store
+.claude/
